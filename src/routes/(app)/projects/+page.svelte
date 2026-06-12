@@ -1,0 +1,132 @@
+<script lang="ts">
+	import { enhance } from '$app/forms';
+	import { fly } from 'svelte/transition';
+
+	let { data, form } = $props();
+	let showCreate = $state(false);
+</script>
+
+<svelte:head><title>Projects — Baskets</title></svelte:head>
+
+<div class="u-between" style="margin-bottom: var(--sp-4); flex-wrap: wrap;">
+	<h2>Projects</h2>
+	<button class="btn btn--primary" onclick={() => (showCreate = !showCreate)}>
+		{showCreate ? 'Cancel' : '+ New project'}
+	</button>
+</div>
+
+{#if form?.message}
+	<div class="alert alert--error" role="alert">{form.message}</div>
+{/if}
+
+{#if showCreate}
+	<div class="card" style="margin-bottom: var(--sp-4);" transition:fly={{ y: -8, duration: 150 }}>
+		<form method="POST" action="?/create" use:enhance>
+			<div class="field">
+				<label class="label" for="name">Name</label>
+				<input id="name" name="name" class="input" required maxlength="120" />
+			</div>
+			<div class="field">
+				<label class="label" for="description">Description</label>
+				<textarea id="description" name="description" class="textarea" rows="2"></textarea>
+			</div>
+			<button class="btn btn--primary" type="submit">Create project</button>
+		</form>
+	</div>
+{/if}
+
+{#if data.projects.length === 0}
+	<div class="card" style="text-align: center; padding: var(--sp-6);">
+		<h3 style="margin-bottom: var(--sp-2);">Nothing here</h3>
+		<p class="u-muted">Create your first project to get started.</p>
+	</div>
+{:else}
+	<div class="grid">
+		{#each data.projects as p, i (p.id)}
+			<a
+				href="/projects/{p.id}"
+				class="project-card"
+				transition:fly={{ y: 10, duration: 150, delay: i * 30 }}
+			>
+				<h4 class="project-name">{p.name}</h4>
+				{#if p.description}
+					<p class="u-small u-muted desc">{p.description}</p>
+				{/if}
+				<div class="meta">
+					<span class="badge">{p.taskCount} tasks</span>
+					{#if p.taskCount > 0}
+						<span class="badge" class:badge--success={p.doneCount === p.taskCount}>
+							{p.doneCount}/{p.taskCount} done
+						</span>
+					{/if}
+				</div>
+				{#if p.taskCount > 0}
+					<div class="progress" aria-hidden="true">
+						<div class="progress-fill" style="width: {(p.doneCount / p.taskCount) * 100}%"></div>
+					</div>
+				{/if}
+			</a>
+		{/each}
+	</div>
+{/if}
+
+<style>
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+		gap: var(--sp-3);
+	}
+
+	.project-card {
+		display: block;
+		border: var(--border-width) solid var(--color-fg);
+		padding: var(--sp-3);
+		color: var(--color-fg);
+		text-decoration: none;
+		transition: transform 0.08s ease;
+		background: var(--color-bg);
+	}
+
+	.project-card:hover {
+		transform: translate(-3px, -3px);
+		box-shadow: 6px 6px 0 0 var(--color-fg);
+	}
+
+	.project-card:active {
+		transform: translate(0, 0);
+		box-shadow: none;
+	}
+
+	.project-name {
+		margin-bottom: var(--sp-1);
+		overflow-wrap: anywhere;
+	}
+
+	.desc {
+		margin-bottom: var(--sp-2);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+
+	.meta {
+		display: flex;
+		gap: var(--sp-2);
+		flex-wrap: wrap;
+		margin-top: var(--sp-2);
+	}
+
+	.progress {
+		margin-top: var(--sp-2);
+		height: 10px;
+		border: 2px solid var(--color-fg);
+	}
+
+	.progress-fill {
+		height: 100%;
+		background: var(--color-fg);
+		transition: width 0.3s ease;
+	}
+</style>

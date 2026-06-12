@@ -1,0 +1,341 @@
+@import '@fontsource/archivo-black';
+@import '@fontsource/work-sans/400.css';
+@import '@fontsource/work-sans/500.css';
+@import '@fontsource/work-sans/600.css';
+@import '@fontsource/space-mono';
+
+/* ==================================================================
+   THEME SYSTEM
+   Each theme defines the full token set under [data-theme="..."].
+   Add new themes by adding a new block — components only use tokens.
+   ================================================================== */
+
+[data-theme='rawblock'] {
+	/* color */
+	--color-bg: #ffffff;
+	--color-fg: #000000;
+	--color-bg-inverted: #000000;
+	--color-fg-inverted: #ffffff;
+	--color-link: #0000ff;
+	--color-success: #008000;
+	--color-warning: #ffa500;
+	--color-error: #ff0000;
+	--color-info: #0000ff;
+	--color-muted: #757575;
+	--color-disabled-border: #bdbdbd;
+	--color-disabled-fill: #eeeeee;
+
+	/* type */
+	--font-headline: 'Archivo Black', system-ui, sans-serif;
+	--font-body: 'Work Sans', system-ui, sans-serif;
+	--font-mono: 'Space Mono', ui-monospace, monospace;
+
+	/* structure */
+	--border-width: 3px;
+	--border-width-heavy: 5px;
+	--radius: 0px; /* sharp edges are non-negotiable */
+	--shadow: none; /* borders replace shadows entirely */
+
+	/* spacing (8px base, intentionally irregular usage) */
+	--sp-1: 4px;
+	--sp-2: 8px;
+	--sp-3: 16px;
+	--sp-4: 24px;
+	--sp-5: 40px;
+	--sp-6: 64px;
+	--sp-7: 80px;
+}
+
+/* Example of how a future theme slots in:
+[data-theme='softclay'] { --color-bg: #faf6f0; --radius: 12px; ... } */
+
+/* ============================== RESET ============================= */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	background: var(--color-bg);
+	color: var(--color-fg);
+	font-family: var(--font-body);
+	font-size: 16px;
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+	font-family: var(--font-headline);
+	font-weight: 400;
+	text-transform: uppercase;
+}
+
+h1 {
+	font-size: clamp(36px, 6vw, 64px);
+	line-height: 1;
+}
+h2 {
+	font-size: clamp(28px, 4.5vw, 48px);
+	line-height: 1.05;
+}
+h3 {
+	font-size: clamp(22px, 3vw, 32px);
+	line-height: 1.1;
+}
+h4 {
+	font-family: var(--font-body);
+	font-size: 22px;
+	font-weight: 600;
+	line-height: 1.2;
+}
+
+a {
+	color: var(--color-link);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+code,
+.mono {
+	font-family: var(--font-mono);
+	font-size: 15px;
+}
+
+::selection {
+	background: var(--color-fg);
+	color: var(--color-bg);
+}
+
+:focus-visible {
+	outline: var(--border-width) solid var(--color-fg);
+	outline-offset: 2px;
+}
+
+/* ============================ PRIMITIVES ========================== */
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sp-2);
+	padding: 10px 20px;
+	border: var(--border-width) solid var(--color-fg);
+	border-radius: var(--radius);
+	background: var(--color-bg);
+	color: var(--color-fg);
+	font-family: var(--font-body);
+	font-size: 14px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	text-decoration: none;
+	cursor: pointer;
+	transition:
+		background 0.12s steps(2, end),
+		color 0.12s steps(2, end),
+		transform 0.08s ease;
+	user-select: none;
+}
+
+.btn:hover {
+	background: var(--color-fg);
+	color: var(--color-bg);
+}
+
+.btn:active {
+	transform: translate(2px, 2px);
+}
+
+.btn--primary {
+	background: var(--color-fg);
+	color: var(--color-bg);
+}
+
+.btn--primary:hover {
+	background: var(--color-bg);
+	color: var(--color-fg);
+}
+
+.btn--danger:hover {
+	background: var(--color-error);
+	border-color: var(--color-error);
+	color: #fff;
+}
+
+.btn--sm {
+	padding: 4px 10px;
+	font-size: 12px;
+	border-width: 2px;
+}
+
+.btn:disabled {
+	border-color: var(--color-disabled-border);
+	background: var(--color-disabled-fill);
+	color: var(--color-muted);
+	cursor: not-allowed;
+	transform: none;
+}
+
+.input,
+.select,
+.textarea {
+	width: 100%;
+	padding: 10px 12px;
+	border: var(--border-width) solid var(--color-fg);
+	border-radius: var(--radius);
+	background: var(--color-bg);
+	color: var(--color-fg);
+	font-family: var(--font-body);
+	font-size: 16px;
+}
+
+.textarea {
+	resize: vertical;
+	min-height: 80px;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+	outline: none;
+	background: #f5f5f5;
+}
+
+.input--error {
+	border-color: var(--color-error);
+}
+
+.label {
+	display: block;
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	margin-bottom: var(--sp-1);
+}
+
+.field {
+	margin-bottom: var(--sp-3);
+}
+
+.field .hint {
+	font-size: 12px;
+	color: var(--color-muted);
+	margin-top: var(--sp-1);
+}
+
+.field .error {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--color-error);
+	margin-top: var(--sp-1);
+}
+
+.card {
+	border: var(--border-width) solid var(--color-fg);
+	border-radius: var(--radius);
+	background: var(--color-bg);
+	padding: var(--sp-4);
+}
+
+.badge {
+	display: inline-block;
+	padding: 1px 8px;
+	border: 2px solid var(--color-fg);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	white-space: nowrap;
+}
+
+.badge--inverted {
+	background: var(--color-fg);
+	color: var(--color-bg);
+}
+
+.badge--success {
+	border-color: var(--color-success);
+	color: var(--color-success);
+}
+
+.badge--warning {
+	border-color: var(--color-warning);
+	color: #9a6400;
+}
+
+.badge--error {
+	border-color: var(--color-error);
+	color: var(--color-error);
+}
+
+.badge--info {
+	border-color: var(--color-info);
+	color: var(--color-info);
+}
+
+.alert {
+	border: var(--border-width) solid var(--color-fg);
+	padding: var(--sp-3);
+	font-size: 14px;
+	margin-bottom: var(--sp-3);
+}
+
+.alert--error {
+	border-color: var(--color-error);
+	color: var(--color-error);
+	font-weight: 600;
+}
+
+.alert--success {
+	border-color: var(--color-success);
+	color: var(--color-success);
+	font-weight: 600;
+}
+
+/* ============================ UTILITIES =========================== */
+
+.u-flex {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+}
+
+.u-between {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sp-2);
+}
+
+.u-muted {
+	color: var(--color-muted);
+}
+
+.u-small {
+	font-size: 14px;
+}
+
+.u-tiny {
+	font-size: 12px;
+}
+
+/* Reduced motion: kill transitions */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}
