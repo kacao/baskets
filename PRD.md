@@ -27,12 +27,12 @@ Single tenant: reads and task work are open to all signed-in users. Structure (p
 - Labels (shared label pool), dependencies on other projects (cycle-checked), per-project eligible statuses, milestones.
 
 ### Views
-- Each project has 1+ views; types: **table**, **board**, **dashboard**, **map** (Notion-style tabs). Default view is Table, created automatically; the last view cannot be deleted.
+- Each project has 1+ views; types: **table**, **board**, **list**, **dashboard**, **map** (Notion-style tabs). Default view is Table, created automatically; the last view cannot be deleted.
 - Normal mode renders the view; edit mode (permitted users) renames, retypes, configures (table: visible columns + status filter), or deletes it.
-- Board groups by status; dashboard shows progress/status/milestone stats; map plots tasks with a `lat, lng` location on OpenStreetMap.
+- Board groups by status with drag-and-drop; list shows all tasks ranked by their `order` field (unranked last) with expandable sub-task rows; dashboard shows progress/status/milestone stats; map plots tasks with a `lat, lng` location on OpenStreetMap.
 
 ### Tasks
-- Belong to a project; fields: title (≤240), description, status (from the project's eligible statuses), priority (`none | low | medium | high | urgent`), assignee, milestone (same project), labels, due date, location, position.
+- Belong to a project; fields: title (≤240), description, status (from the project's eligible statuses), priority (`none | low | medium | high | urgent`), assignee, milestone (same project), labels, due date, location, position, and an optional `order` rank (null = unranked) used by list views.
 - One level of nesting: a task may have sub-tasks; sub-tasks cannot have children (enforced server-side).
 - Completing a parent task (status with category `done`) completes its sub-tasks.
 - Dependencies: task→task within a project, sub-task→sibling sub-task; cycle-checked; shown as "blocked by" (informational).

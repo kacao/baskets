@@ -265,6 +265,7 @@ export const task = sqliteTable('task', {
 	assigneeId: text('assignee_id').references(() => user.id),
 	milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
 	location: text('location'), // "lat, lng" — plotted by map views
+	order: integer('task_order'), // user-assigned rank for list views; null = unranked
 	position: integer('position').notNull().default(0),
 	dueDate: integer('due_date', { mode: 'timestamp' }),
 	createdBy: text('created_by')

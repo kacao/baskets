@@ -14,6 +14,7 @@
 		assigneeId: string | null;
 		milestoneId: string | null;
 		location: string | null;
+		order: number | null;
 		dueDate: Date | string | null;
 	};
 	type Status = { id: string; name: string; category: string };
@@ -126,6 +127,17 @@
 				<div class="field">
 					<span class="label">Due date</span>
 					<input name="dueDate" type="date" class="input" value={fmtDate(task.dueDate) ?? ''} />
+				</div>
+				<div class="field">
+					<span class="label">Order</span>
+					<input
+						name="order"
+						type="number"
+						step="1"
+						class="input"
+						placeholder="—"
+						value={task.order ?? ''}
+					/>
 				</div>
 				<div class="field" style="grid-column: 1 / -1;">
 					<span class="label">Location (lat, lng)</span>

@@ -4,6 +4,7 @@
 	import { slide } from 'svelte/transition';
 	import TableView from '$lib/components/views/TableView.svelte';
 	import BoardView from '$lib/components/views/BoardView.svelte';
+	import ListView from '$lib/components/views/ListView.svelte';
 	import DashboardView from '$lib/components/views/DashboardView.svelte';
 	import MapView from '$lib/components/views/MapView.svelte';
 
@@ -315,6 +316,7 @@
 		<select name="type" class="select" style="width: auto;">
 			<option value="table">Table</option>
 			<option value="board">Board</option>
+			<option value="list">List</option>
 			<option value="dashboard">Dashboard</option>
 			<option value="map">Map</option>
 		</select>
@@ -345,6 +347,7 @@
 					<select id="vtype" name="type" class="select" value={activeView.type}>
 						<option value="table">Table</option>
 						<option value="board">Board</option>
+			<option value="list">List</option>
 						<option value="dashboard">Dashboard</option>
 						<option value="map">Map</option>
 					</select>
@@ -394,7 +397,7 @@
 {/if}
 
 <!-- Add task (table + board) -->
-{#if activeView && (activeView.type === 'table' || activeView.type === 'board')}
+{#if activeView && ['table', 'board', 'list'].includes(activeView.type)}
 	<form method="POST" action="?/createTask" use:enhance class="add-task">
 		<input
 			name="title"
@@ -430,6 +433,17 @@
 	/>
 {:else if activeView?.type === 'board'}
 	<BoardView
+		tasks={data.tasks}
+		statuses={data.statuses}
+		users={data.users}
+		labels={data.labels}
+		taskLabels={data.taskLabels}
+		taskDeps={data.taskDeps}
+		milestones={data.milestones}
+		{canEditTask}
+	/>
+{:else if activeView?.type === 'list'}
+	<ListView
 		tasks={data.tasks}
 		statuses={data.statuses}
 		users={data.users}

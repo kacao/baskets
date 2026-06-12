@@ -101,6 +101,16 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 			typeof body.location === 'string' && body.location.trim() ? body.location.trim() : null;
 	}
 
+	if (body.order !== undefined) {
+		if (body.order === null) {
+			updates.order = null;
+		} else if (typeof body.order === 'number' && Number.isInteger(body.order)) {
+			updates.order = body.order;
+		} else {
+			return apiError(400, 'order must be an integer or null');
+		}
+	}
+
 	if (body.dueDate !== undefined) {
 		if (body.dueDate === null || body.dueDate === '') {
 			updates.dueDate = null;

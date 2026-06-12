@@ -16,6 +16,7 @@
 		assigneeId: string | null;
 		milestoneId: string | null;
 		location: string | null;
+		order: number | null;
 		position: number;
 		dueDate: Date | string | null;
 	};

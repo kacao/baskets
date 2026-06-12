@@ -95,6 +95,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (isNaN(dueDate.getTime())) return apiError(400, 'dueDate must be a valid date');
 	}
 
+	let order: number | null = null;
+	if (body.order !== undefined && body.order !== null) {
+		if (typeof body.order !== 'number' || !Number.isInteger(body.order))
+			return apiError(400, 'order must be an integer or null');
+		order = body.order;
+	}
+
 	const now = new Date();
 	const [created] = await db
 		.insert(task)
@@ -108,6 +115,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			statusId,
 			milestoneId: typeof body.milestoneId === 'string' ? body.milestoneId : null,
 			location: typeof body.location === 'string' ? body.location.trim() || null : null,
+			order,
 			dueDate,
 			createdBy: locals.user.id,
 			position: now.getTime(),

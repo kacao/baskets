@@ -146,7 +146,7 @@ Architecture decision records. One section per decision; status reflects current
 
 **Consequences:** New view types = new component + enum entry; config migrations are unnecessary because readers treat config as optional hints.
 
-**Update (2026-06-12):** Board gained Linear-style drag-and-drop (native HTML5 DnD, no library): cards move between/within columns through a `moveTask` action that orders by `beforeId` with midpoint positioning and a full-column renumber when gaps run out. Also per-column quick-add, category-glyph headers with counts, priority icons, assignee initials, and card click → table-view deep link (`?task=`).
+**Update (2026-06-12):** Board gained Linear-style drag-and-drop (native HTML5 DnD, no library): cards move between/within columns through a `moveTask` action that orders by `beforeId` with midpoint positioning and a full-column renumber when gaps run out. Also per-column quick-add, category-glyph headers with counts, priority icons, assignee initials, and card click → split task panel (`?task=` deep link). A fifth view type `list` ranks all tasks by the nullable `task.order` field (unranked last, board position as tiebreaker) with expandable sub-task rows.
 
 ---
 

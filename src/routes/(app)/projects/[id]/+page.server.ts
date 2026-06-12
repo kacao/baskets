@@ -348,6 +348,18 @@ export const actions: Actions = {
 
 		const dueDate = dueDateRaw ? new Date(dueDateRaw + 'T00:00:00') : null;
 
+		// order only updates when the form includes it (older forms don't)
+		let order: number | null | undefined = undefined;
+		if (form.has('order')) {
+			const orderRaw = String(form.get('order') ?? '').trim();
+			if (orderRaw === '') {
+				order = null;
+			} else {
+				order = Number(orderRaw);
+				if (!Number.isInteger(order)) return fail(400, { message: 'Order must be a whole number' });
+			}
+		}
+
 		await db
 			.update(task)
 			.set({
@@ -357,6 +369,7 @@ export const actions: Actions = {
 				assigneeId,
 				milestoneId,
 				location,
+				...(order !== undefined ? { order } : {}),
 				dueDate,
 				updatedAt: new Date()
 			})

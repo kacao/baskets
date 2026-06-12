@@ -2,7 +2,7 @@ import { db } from './db';
 import { permission, project, projectStatus, view } from './db/schema';
 import { listStatuses } from './statuses';
 
-export const VIEW_TYPES = ['dashboard', 'table', 'board', 'map'] as const;
+export const VIEW_TYPES = ['dashboard', 'table', 'board', 'list', 'map'] as const;
 export type ViewType = (typeof VIEW_TYPES)[number];
 
 /**
