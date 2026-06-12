@@ -27,14 +27,21 @@ Without seeding, register at `/register` — the first user must then be promote
 
 ## Features
 
-- Email/password auth + optional TOTP 2FA (Google Authenticator etc.) with backup codes — enable in Settings
-- Projects with progress bars; tasks with status (todo / in progress / done), priority, assignee, due date; one level of sub-tasks (completing a parent completes its subs)
+- Email/password auth + optional TOTP 2FA with backup codes; per-user API keys (`bsk_…`) for the REST API
+- Projects with multiple views — table, board (Linear-style drag-and-drop, split task panel), list (ranked by an `order` field, expandable sub-tasks), dashboard, map (Leaflet/OSM via a task `lat, lng` location). Only Table is enabled by default; "+" enables the rest (one view per type)
+- Tasks: table-driven statuses with behavior categories (app-wide pool + project-scoped statuses), priority, assignee, milestone, labels (optional groups), due date, dependencies (cycle-checked; sub-tasks only on siblings), one level of sub-tasks (done-category parent completes subs)
+- Per-project settings pane (`/projects/:id/settings`): general, statuses, labels, dependencies, milestones, edit grants, delete
+- Permissions: reads and task editing open to all members; structure edits (project/views/statuses/milestones) need admin or a project/view grant
+- REST API under `/api/{projects,tasks}` (session cookie or `Authorization: Bearer bsk_…`); Slack integration (incoming webhook) for project/task events
+- i18n (English, Vietnamese) — switch in Settings; whole UI translated, user content untouched
 - Admin → Users: create users, toggle admin role, ban/unban, remove
-- Responsive (mobile sidebar), animated transitions, reduced-motion safe
+- Responsive (mobile sidebar), ≤200ms transitions, reduced-motion safe
+
+See `PRD.md` for product scope and `ADR.md` for architecture decisions.
 
 ## Theming
 
-All visual tokens live in `src/app.css` under `[data-theme='rawblock']`. To add a theme, define a new `[data-theme='...']` block and switch the `data-theme` attribute in `src/app.html` (or set it dynamically). Components only consume tokens.
+All visual tokens live in `src/app.css` under `[data-theme='studioblank']`. To add a theme, define a new `[data-theme='...']` block and switch the `data-theme` attribute in `src/app.html`. Components only consume tokens.
 
 ## Production
 
