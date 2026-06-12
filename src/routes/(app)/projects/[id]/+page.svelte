@@ -445,7 +445,8 @@
 		users={data.users}
 		labels={data.labels}
 		taskLabels={data.taskLabels}
-		tableViewId={data.views.find((v) => v.type === 'table')?.id ?? null}
+		taskDeps={data.taskDeps}
+		milestones={data.milestones}
 		{canEditTask}
 	/>
 {:else if activeView?.type === 'dashboard'}

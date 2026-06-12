@@ -1,17 +1,21 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
+	import TaskPanel from '$lib/components/TaskPanel.svelte';
 
 	type Task = {
 		id: string;
 		parentId: string | null;
 		title: string;
+		description: string | null;
 		statusId: string;
 		priority: string;
 		assigneeId: string | null;
+		milestoneId: string | null;
+		location: string | null;
 		position: number;
 		dueDate: Date | string | null;
 	};
@@ -23,16 +27,18 @@
 		users,
 		labels,
 		taskLabels,
-		canEditTask,
-		tableViewId = null
+		taskDeps,
+		milestones,
+		canEditTask
 	}: {
 		tasks: Task[];
 		statuses: Status[];
 		users: { id: string; name: string }[];
 		labels: { id: string; name: string }[];
 		taskLabels: { taskId: string; labelId: string }[];
-		canEditTask: (t: Task) => boolean;
-		tableViewId?: string | null;
+		taskDeps: { taskId: string; dependsOnId: string }[];
+		milestones: { id: string; name: string }[];
+		canEditTask: (t: { id: string; parentId: string | null }) => boolean;
 	} = $props();
 
 	let dragId = $state<string | null>(null);
@@ -40,6 +46,9 @@
 	let addingTo = $state<string | null>(null);
 	let addInput = $state<HTMLInputElement | null>(null);
 	let justDragged = $state(false);
+	// split pane: ?task= deep-links a task open
+	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
+	const selected = $derived(tasks.find((t) => t.id === selectedId && !t.parentId) ?? null);
 
 	const glyph: Record<string, string> = { todo: '○', active: '◐', done: '●', canceled: '⊘' };
 
@@ -131,11 +140,11 @@
 	}
 
 	function openDetail(t: Task) {
-		if (!tableViewId) return;
-		goto(`${page.url.pathname}?view=${tableViewId}&task=${t.id}`);
+		selectedId = selectedId === t.id ? null : t.id;
 	}
 </script>
 
+<div class="board-wrap">
 <div class="board">
 	{#each statuses as s (s.id)}
 		{@const col = inColumn(s.id)}
@@ -168,7 +177,8 @@
 					<div
 						class="bcard"
 						class:dragging={dragId === t.id}
-						class:clickable={Boolean(tableViewId)}
+						class:clickable={true}
+						class:selected={selectedId === t.id}
 						role="button"
 						tabindex="0"
 						aria-label={t.title}
@@ -239,12 +249,43 @@
 	{/each}
 </div>
 
+{#if selected}
+	<TaskPanel
+		task={selected}
+		{tasks}
+		{users}
+		{statuses}
+		{milestones}
+		{labels}
+		{taskLabels}
+		{taskDeps}
+		{canEditTask}
+		onClose={() => (selectedId = null)}
+	/>
+{/if}
+</div>
+
 <style>
+	.board-wrap {
+		display: flex;
+		gap: var(--sp-3);
+		align-items: flex-start;
+	}
+
 	.board {
+		flex: 1;
+		min-width: 0;
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 		gap: var(--sp-2);
 		align-items: start;
+	}
+
+	@media (max-width: 900px) {
+		.board-wrap {
+			flex-direction: column;
+			align-items: stretch;
+		}
 	}
 
 	.column {
@@ -323,6 +364,10 @@
 	}
 
 	.bcard.clickable:hover {
+		border-color: var(--color-fg);
+	}
+
+	.bcard.selected {
 		border-color: var(--color-fg);
 	}
 
