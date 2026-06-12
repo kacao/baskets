@@ -66,8 +66,21 @@ await db
 	.where(eq(schema.user.id, adminId));
 await db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.id, demoId));
 
-console.log('Creating sample projects…');
+console.log('Creating default statuses…');
 const now = new Date();
+const statuses = [
+	{ id: 'status-backlog', name: 'Backlog', category: 'todo' },
+	{ id: 'status-planned', name: 'Planned', category: 'todo' },
+	{ id: 'status-in-progress', name: 'In progress', category: 'active' },
+	{ id: 'status-completed', name: 'Completed', category: 'done' },
+	{ id: 'status-canceled', name: 'Canceled', category: 'canceled' }
+];
+await db
+	.insert(schema.status)
+	.values(statuses.map((s, i) => ({ ...s, position: i * 10, builtIn: true, createdAt: now })))
+	.onConflictDoNothing();
+
+console.log('Creating sample projects…');
 const pid = (n: number) => `seed-project-${n}`;
 const tid = (n: number) => `seed-task-${n}`;
 
@@ -90,6 +103,60 @@ await db.insert(schema.project).values([
 	}
 ]);
 
+console.log('Creating views, statuses, milestones, labels…');
+await db.insert(schema.projectStatus).values(
+	[pid(1), pid(2)].flatMap((projectId) =>
+		statuses.map((s) => ({ projectId, statusId: s.id }))
+	)
+);
+
+await db.insert(schema.view).values(
+	[pid(1), pid(2)].map((projectId, i) => ({
+		id: `seed-view-${i + 1}`,
+		projectId,
+		name: 'Table',
+		type: 'table',
+		config: '{}',
+		position: 0,
+		isDefault: true,
+		createdBy: adminId,
+		createdAt: now,
+		updatedAt: now
+	}))
+);
+
+await db.insert(schema.milestone).values({
+	id: 'seed-milestone-1',
+	projectId: pid(1),
+	name: 'Launch',
+	targetDate: new Date(now.getTime() + 30 * 86400_000),
+	position: 0,
+	createdAt: now,
+	updatedAt: now
+});
+
+await db.insert(schema.labelGroup).values({
+	id: 'seed-label-group-1',
+	name: 'Area',
+	position: 0,
+	createdAt: now
+});
+await db.insert(schema.label).values([
+	{ id: 'seed-label-1', name: 'design', groupId: 'seed-label-group-1', position: 0, createdAt: now },
+	{ id: 'seed-label-2', name: 'engineering', groupId: 'seed-label-group-1', position: 1, createdAt: now },
+	{ id: 'seed-label-3', name: 'urgent-review', groupId: null, position: 2, createdAt: now }
+]);
+
+// Demo user can edit project 1 (admins implicitly edit everything)
+await db.insert(schema.permission).values({
+	id: 'seed-perm-1',
+	userId: demoId,
+	resourceType: 'project',
+	resourceId: pid(1),
+	grantedBy: adminId,
+	createdAt: now
+});
+
 let pos = 0;
 const t = (
 	n: number,
@@ -100,7 +167,7 @@ const t = (
 	id: tid(n),
 	projectId,
 	title,
-	status: 'todo',
+	statusId: 'status-backlog',
 	priority: 'none',
 	position: pos++,
 	createdBy: adminId,
@@ -110,21 +177,38 @@ const t = (
 });
 
 await db.insert(schema.task).values([
-	t(1, pid(1), 'Draft information architecture', { status: 'done', priority: 'high' }),
-	t(2, pid(1), 'Design homepage in RawBlock style', {
-		status: 'in_progress',
+	t(1, pid(1), 'Draft information architecture', {
+		statusId: 'status-completed',
+		priority: 'high',
+		milestoneId: 'seed-milestone-1'
+	}),
+	t(2, pid(1), 'Design homepage in StudioBlank style', {
+		statusId: 'status-in-progress',
 		priority: 'urgent',
 		assigneeId: demoId,
-		description: 'Thick borders, Archivo Black, zero rounded corners.'
+		milestoneId: 'seed-milestone-1',
+		location: '52.3676, 4.9041',
+		description: 'Whitespace-first, Inter weight contrast, hairline borders.'
 	}),
-	t(3, pid(1), 'Implement CMS integration', { priority: 'medium' }),
-	t(4, pid(1), 'Hero copy', { parentId: tid(2), status: 'done' }),
+	t(3, pid(1), 'Implement CMS integration', { priority: 'medium', statusId: 'status-planned' }),
+	t(4, pid(1), 'Hero copy', { parentId: tid(2), statusId: 'status-completed' }),
 	t(5, pid(1), 'Mobile breakpoints', { parentId: tid(2), priority: 'high' }),
 	t(6, pid(1), 'Accessibility pass', { parentId: tid(2) }),
-	t(7, pid(2), 'Renew SSL certificates', { priority: 'urgent', assigneeId: adminId }),
-	t(8, pid(2), 'Vendor invoice review', { status: 'in_progress' }),
+	t(7, pid(2), 'Renew SSL certificates', {
+		priority: 'urgent',
+		assigneeId: adminId,
+		statusId: 'status-planned',
+		location: '40.7128, -74.0060'
+	}),
+	t(8, pid(2), 'Vendor invoice review', { statusId: 'status-in-progress' }),
 	t(9, pid(2), 'Archive stale documents', { priority: 'low' })
 ]);
+
+await db.insert(schema.taskLabel).values([
+	{ taskId: tid(2), labelId: 'seed-label-1' },
+	{ taskId: tid(3), labelId: 'seed-label-2' }
+]);
+await db.insert(schema.projectLabel).values([{ projectId: pid(1), labelId: 'seed-label-1' }]);
 
 console.log(`
 Seed complete.

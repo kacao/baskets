@@ -181,7 +181,7 @@
 
 <style>
 	.table-wrap {
-		border: var(--border-width) solid var(--color-fg);
+		border: var(--border-width) solid var(--color-border-subtle);
 		overflow-x: auto;
 	}
 
@@ -194,19 +194,19 @@
 	th {
 		font-family: var(--font-body);
 		font-size: 12px;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
+		font-weight: 500;
+		text-transform: var(--label-transform);
+		letter-spacing: var(--label-tracking);
 		text-align: left;
-		background: var(--color-fg);
-		color: var(--color-bg);
+		color: var(--color-muted);
+		border-bottom: 1px solid var(--color-fg);
 		padding: var(--sp-2) var(--sp-3);
 		white-space: nowrap;
 	}
 
 	td {
 		padding: var(--sp-2) var(--sp-3);
-		border-bottom: 2px solid var(--color-fg);
+		border-bottom: 1px solid var(--color-border-subtle);
 		vertical-align: middle;
 	}
 
@@ -215,7 +215,7 @@
 	}
 
 	tr.banned td {
-		background: #f5f5f5;
+		background: var(--color-surface-muted);
 		color: var(--color-muted);
 	}
 </style>

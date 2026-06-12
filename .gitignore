@@ -9,3 +9,6 @@ node_modules
 *.db
 *.db-journal
 vite.config.ts.timestamp-*
+.screenshots/
+*.db-shm
+*.db-wal

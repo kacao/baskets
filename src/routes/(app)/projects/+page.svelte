@@ -79,22 +79,16 @@
 
 	.project-card {
 		display: block;
-		border: var(--border-width) solid var(--color-fg);
+		border: var(--border-width) solid var(--color-border-subtle);
 		padding: var(--sp-3);
 		color: var(--color-fg);
 		text-decoration: none;
-		transition: transform 0.08s ease;
+		transition: border-color 0.15s ease;
 		background: var(--color-bg);
 	}
 
 	.project-card:hover {
-		transform: translate(-3px, -3px);
-		box-shadow: 6px 6px 0 0 var(--color-fg);
-	}
-
-	.project-card:active {
-		transform: translate(0, 0);
-		box-shadow: none;
+		border-color: var(--color-fg);
 	}
 
 	.project-name {
@@ -120,8 +114,8 @@
 
 	.progress {
 		margin-top: var(--sp-2);
-		height: 10px;
-		border: 2px solid var(--color-fg);
+		height: 4px;
+		background: var(--color-surface-muted);
 	}
 
 	.progress-fill {

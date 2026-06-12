@@ -1,10 +1,25 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
+	import { enhance } from '$app/forms';
 	import { slide } from 'svelte/transition';
 	import QRCode from 'qrcode';
 	import { authClient } from '$lib/auth-client';
 
-	let { data } = $props();
+	let { data, form } = $props();
+
+	let keyLoading = $state(false);
+	let copied = $state(false);
+
+	async function copyToken() {
+		if (!form?.token) return;
+		await navigator.clipboard.writeText(form.token);
+		copied = true;
+		setTimeout(() => (copied = false), 1500);
+	}
+
+	function fmtDate(d: Date | null) {
+		return d ? new Date(d).toLocaleDateString() : 'never';
+	}
 
 	let step = $state<'idle' | 'password' | 'scan' | 'disable'>('idle');
 	let password = $state('');
@@ -196,9 +211,123 @@
 	{/if}
 </div>
 
+<div class="card" style="max-width: 560px; margin-top: var(--sp-4);">
+	<h4 style="margin-bottom: var(--sp-2);">API keys</h4>
+	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
+		Use API keys to call the REST API: <span class="mono">Authorization: Bearer bsk_…</span>
+		A key acts as your user. Keys are shown once — store them safely.
+	</p>
+
+	{#if form?.message}
+		<div class="alert alert--error" role="alert">{form.message}</div>
+	{/if}
+
+	{#if form?.token}
+		<div class="token-reveal" transition:slide={{ duration: 150 }}>
+			<p class="u-small"><strong>{form.keyName}</strong> created. Copy the key now — it will not be shown again:</p>
+			<div class="u-flex" style="margin-top: var(--sp-1);">
+				<code class="mono token">{form.token}</code>
+				<button class="btn btn--sm" type="button" onclick={copyToken}>
+					{copied ? 'Copied' : 'Copy'}
+				</button>
+			</div>
+		</div>
+	{/if}
+
+	{#if data.apiKeys.length > 0}
+		<table class="keys">
+			<thead>
+				<tr><th>Name</th><th>Key</th><th>Last used</th><th></th></tr>
+			</thead>
+			<tbody>
+				{#each data.apiKeys as key (key.id)}
+					<tr>
+						<td>{key.name}</td>
+						<td class="mono">{key.prefix}…</td>
+						<td>{fmtDate(key.lastUsedAt)}</td>
+						<td>
+							<form
+								method="POST"
+								action="?/revokeKey"
+								use:enhance={() => async ({ update }) => update()}
+							>
+								<input type="hidden" name="id" value={key.id} />
+								<button class="btn btn--sm btn--danger" type="submit">Revoke</button>
+							</form>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	{/if}
+
+	<form
+		method="POST"
+		action="?/createKey"
+		use:enhance={() => {
+			keyLoading = true;
+			return async ({ update }) => {
+				keyLoading = false;
+				await update();
+			};
+		}}
+		style="margin-top: var(--sp-3);"
+	>
+		<div class="field">
+			<label class="label" for="key-name">Key name</label>
+			<input
+				id="key-name"
+				class="input"
+				name="name"
+				placeholder="e.g. CI script"
+				maxlength="60"
+				required
+			/>
+		</div>
+		<button class="btn btn--primary" type="submit" disabled={keyLoading}>
+			{keyLoading ? 'Creating…' : 'Create API key'}
+		</button>
+	</form>
+</div>
+
 <style>
+	.token-reveal {
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-surface-muted);
+		padding: var(--sp-2);
+		margin-bottom: var(--sp-3);
+	}
+
+	.token {
+		font-size: 12px;
+		word-break: break-all;
+		flex: 1;
+	}
+
+	.keys {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 13px;
+	}
+
+	.keys th {
+		text-align: left;
+		text-transform: var(--label-transform);
+		letter-spacing: var(--label-tracking);
+		font-size: 12px;
+		font-weight: 500;
+		color: var(--color-muted);
+		border-bottom: 1px solid var(--color-fg);
+		padding: var(--sp-1);
+	}
+
+	.keys td {
+		border-bottom: 1px solid var(--color-border-subtle);
+		padding: var(--sp-1);
+	}
+
 	.qr {
-		border: var(--border-width) solid var(--color-fg);
+		border: 1px solid var(--color-border-subtle);
 		display: block;
 	}
 
@@ -206,7 +335,8 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 		gap: var(--sp-1) var(--sp-2);
-		border: 2px dashed var(--color-fg);
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-surface-muted);
 		padding: var(--sp-2);
 		font-size: 13px;
 	}

@@ -1,8 +1,9 @@
-@import '@fontsource/archivo-black';
-@import '@fontsource/work-sans/400.css';
-@import '@fontsource/work-sans/500.css';
-@import '@fontsource/work-sans/600.css';
-@import '@fontsource/space-mono';
+@import '@fontsource/inter/300.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
 
 /* ==================================================================
    THEME SYSTEM
@@ -10,8 +11,64 @@
    Add new themes by adding a new block — components only use tokens.
    ================================================================== */
 
+[data-theme='studioblank'] {
+	/* color — monochrome, weight carries the contrast */
+	--color-bg: #fafafa;
+	--color-fg: #0a0a0a;
+	--color-bg-inverted: #0a0a0a;
+	--color-fg-inverted: #fafafa;
+	--color-link: #0a0a0a;
+	--color-success: #16a34a;
+	--color-warning: #ca8a04;
+	--color-error: #dc2626;
+	--color-info: #71717a;
+	--color-muted: #71717a;
+	--color-border: #0a0a0a;
+	--color-border-subtle: #d4d4d8;
+	--color-surface-muted: #f4f4f5;
+	--color-disabled-border: #d4d4d8;
+	--color-disabled-fill: #f4f4f5;
+
+	/* type — single family, weight contrast */
+	--font-headline: 'Inter', system-ui, sans-serif;
+	--font-body: 'Inter', system-ui, sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+	--h1-size: 40px;
+	--h1-weight: 700;
+	--h2-size: 28px;
+	--h2-weight: 600;
+	--h3-size: 20px;
+	--h3-weight: 600;
+	--h4-size: 16px;
+	--h4-weight: 600;
+	--heading-transform: none;
+	--heading-tracking: -0.02em;
+	--body-weight: 300;
+	--label-transform: none;
+	--label-tracking: 0;
+	--btn-transform: none;
+	--btn-tracking: 0;
+	--btn-weight: 500;
+
+	/* structure — flat geometry, hairlines */
+	--border-width: 1px;
+	--border-width-heavy: 1px;
+	--radius: 0px;
+	--shadow: none;
+
+	/* spacing — 16px base, whitespace is the design */
+	--sp-1: 4px;
+	--sp-2: 8px;
+	--sp-3: 16px;
+	--sp-4: 32px;
+	--sp-5: 48px;
+	--sp-6: 64px;
+	--sp-7: 96px;
+}
+
+/* Legacy theme, kept for reference (fonts no longer bundled — falls
+   back to system stacks). Switch via <html data-theme="rawblock">. */
 [data-theme='rawblock'] {
-	/* color */
 	--color-bg: #ffffff;
 	--color-fg: #000000;
 	--color-bg-inverted: #000000;
@@ -22,21 +79,37 @@
 	--color-error: #ff0000;
 	--color-info: #0000ff;
 	--color-muted: #757575;
+	--color-border: #000000;
+	--color-border-subtle: #000000;
+	--color-surface-muted: #f5f5f5;
 	--color-disabled-border: #bdbdbd;
 	--color-disabled-fill: #eeeeee;
 
-	/* type */
 	--font-headline: 'Archivo Black', system-ui, sans-serif;
 	--font-body: 'Work Sans', system-ui, sans-serif;
 	--font-mono: 'Space Mono', ui-monospace, monospace;
+	--h1-size: clamp(36px, 6vw, 64px);
+	--h1-weight: 400;
+	--h2-size: clamp(28px, 4.5vw, 48px);
+	--h2-weight: 400;
+	--h3-size: clamp(22px, 3vw, 32px);
+	--h3-weight: 400;
+	--h4-size: 22px;
+	--h4-weight: 600;
+	--heading-transform: uppercase;
+	--heading-tracking: 0;
+	--body-weight: 400;
+	--label-transform: uppercase;
+	--label-tracking: 0.1em;
+	--btn-transform: uppercase;
+	--btn-tracking: 0.08em;
+	--btn-weight: 600;
 
-	/* structure */
 	--border-width: 3px;
 	--border-width-heavy: 5px;
-	--radius: 0px; /* sharp edges are non-negotiable */
-	--shadow: none; /* borders replace shadows entirely */
+	--radius: 0px;
+	--shadow: none;
 
-	/* spacing (8px base, intentionally irregular usage) */
 	--sp-1: 4px;
 	--sp-2: 8px;
 	--sp-3: 16px;
@@ -45,9 +118,6 @@
 	--sp-6: 64px;
 	--sp-7: 80px;
 }
-
-/* Example of how a future theme slots in:
-[data-theme='softclay'] { --color-bg: #faf6f0; --radius: 12px; ... } */
 
 /* ============================== RESET ============================= */
 
@@ -68,47 +138,56 @@ body {
 	color: var(--color-fg);
 	font-family: var(--font-body);
 	font-size: 16px;
+	font-weight: var(--body-weight);
 	line-height: 1.6;
 	-webkit-font-smoothing: antialiased;
 }
 
 h1,
 h2,
-h3 {
+h3,
+h4 {
 	font-family: var(--font-headline);
-	font-weight: 400;
-	text-transform: uppercase;
+	text-transform: var(--heading-transform);
+	letter-spacing: var(--heading-tracking);
 }
 
 h1 {
-	font-size: clamp(36px, 6vw, 64px);
-	line-height: 1;
-}
-h2 {
-	font-size: clamp(28px, 4.5vw, 48px);
-	line-height: 1.05;
-}
-h3 {
-	font-size: clamp(22px, 3vw, 32px);
+	font-size: var(--h1-size);
+	font-weight: var(--h1-weight);
 	line-height: 1.1;
 }
-h4 {
-	font-family: var(--font-body);
-	font-size: 22px;
-	font-weight: 600;
+h2 {
+	font-size: var(--h2-size);
+	font-weight: var(--h2-weight);
+	line-height: 1.15;
+}
+h3 {
+	font-size: var(--h3-size);
+	font-weight: var(--h3-weight);
 	line-height: 1.2;
+}
+h4 {
+	font-size: var(--h4-size);
+	font-weight: var(--h4-weight);
+	line-height: 1.3;
+}
+
+strong {
+	font-weight: 600;
 }
 
 a {
 	color: var(--color-link);
 	text-decoration: underline;
-	text-underline-offset: 2px;
+	text-underline-offset: 3px;
+	text-decoration-thickness: 1px;
 }
 
 code,
 .mono {
 	font-family: var(--font-mono);
-	font-size: 15px;
+	font-size: 13px;
 }
 
 ::selection {
@@ -117,7 +196,7 @@ code,
 }
 
 :focus-visible {
-	outline: var(--border-width) solid var(--color-fg);
+	outline: 2px solid var(--color-fg);
 	outline-offset: 2px;
 }
 
@@ -129,31 +208,27 @@ code,
 	justify-content: center;
 	gap: var(--sp-2);
 	padding: 10px 20px;
-	border: var(--border-width) solid var(--color-fg);
+	border: var(--border-width) solid var(--color-border);
 	border-radius: var(--radius);
 	background: var(--color-bg);
 	color: var(--color-fg);
 	font-family: var(--font-body);
 	font-size: 14px;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
+	font-weight: var(--btn-weight);
+	text-transform: var(--btn-transform);
+	letter-spacing: var(--btn-tracking);
 	text-decoration: none;
 	cursor: pointer;
 	transition:
-		background 0.12s steps(2, end),
-		color 0.12s steps(2, end),
-		transform 0.08s ease;
+		background 0.15s ease,
+		color 0.15s ease,
+		border-color 0.15s ease;
 	user-select: none;
 }
 
 .btn:hover {
 	background: var(--color-fg);
 	color: var(--color-bg);
-}
-
-.btn:active {
-	transform: translate(2px, 2px);
 }
 
 .btn--primary {
@@ -173,9 +248,8 @@ code,
 }
 
 .btn--sm {
-	padding: 4px 10px;
-	font-size: 12px;
-	border-width: 2px;
+	padding: 4px 12px;
+	font-size: 13px;
 }
 
 .btn:disabled {
@@ -183,7 +257,6 @@ code,
 	background: var(--color-disabled-fill);
 	color: var(--color-muted);
 	cursor: not-allowed;
-	transform: none;
 }
 
 .input,
@@ -191,12 +264,14 @@ code,
 .textarea {
 	width: 100%;
 	padding: 10px 12px;
-	border: var(--border-width) solid var(--color-fg);
+	border: var(--border-width) solid var(--color-border-subtle);
 	border-radius: var(--radius);
 	background: var(--color-bg);
 	color: var(--color-fg);
 	font-family: var(--font-body);
 	font-size: 16px;
+	font-weight: 400;
+	transition: border-color 0.15s ease;
 }
 
 .textarea {
@@ -208,7 +283,7 @@ code,
 .select:focus,
 .textarea:focus {
 	outline: none;
-	background: #f5f5f5;
+	border-color: var(--color-fg);
 }
 
 .input--error {
@@ -218,9 +293,10 @@ code,
 .label {
 	display: block;
 	font-size: 12px;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	font-weight: 500;
+	color: var(--color-muted);
+	text-transform: var(--label-transform);
+	letter-spacing: var(--label-tracking);
 	margin-bottom: var(--sp-1);
 }
 
@@ -236,13 +312,13 @@ code,
 
 .field .error {
 	font-size: 12px;
-	font-weight: 600;
+	font-weight: 500;
 	color: var(--color-error);
 	margin-top: var(--sp-1);
 }
 
 .card {
-	border: var(--border-width) solid var(--color-fg);
+	border: var(--border-width) solid var(--color-border-subtle);
 	border-radius: var(--radius);
 	background: var(--color-bg);
 	padding: var(--sp-4);
@@ -250,17 +326,19 @@ code,
 
 .badge {
 	display: inline-block;
-	padding: 1px 8px;
-	border: 2px solid var(--color-fg);
+	padding: 2px 8px;
+	border: 1px solid var(--color-border-subtle);
 	font-family: var(--font-mono);
 	font-size: 11px;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
+	text-transform: var(--label-transform);
+	letter-spacing: var(--label-tracking);
+	color: var(--color-muted);
 	white-space: nowrap;
 }
 
 .badge--inverted {
 	background: var(--color-fg);
+	border-color: var(--color-fg);
 	color: var(--color-bg);
 }
 
@@ -271,7 +349,7 @@ code,
 
 .badge--warning {
 	border-color: var(--color-warning);
-	color: #9a6400;
+	color: var(--color-warning);
 }
 
 .badge--error {
@@ -285,7 +363,7 @@ code,
 }
 
 .alert {
-	border: var(--border-width) solid var(--color-fg);
+	border: var(--border-width) solid var(--color-border-subtle);
 	padding: var(--sp-3);
 	font-size: 14px;
 	margin-bottom: var(--sp-3);
@@ -294,13 +372,13 @@ code,
 .alert--error {
 	border-color: var(--color-error);
 	color: var(--color-error);
-	font-weight: 600;
+	font-weight: 500;
 }
 
 .alert--success {
 	border-color: var(--color-success);
 	color: var(--color-success);
-	font-weight: 600;
+	font-weight: 500;
 }
 
 /* ============================ UTILITIES =========================== */

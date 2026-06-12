@@ -8,6 +8,7 @@
 
 	const nav = [
 		{ href: '/projects', label: 'Projects' },
+		{ href: '/integrations', label: 'Integrations' },
 		{ href: '/settings', label: 'Settings' }
 	];
 
@@ -32,7 +33,7 @@
 			>
 				{menuOpen ? '×' : '≡'}
 			</button>
-			<a href="/projects" class="wordmark">BASKETS</a>
+			<a href="/projects" class="wordmark">Baskets</a>
 		</div>
 		<div class="u-flex">
 			{#if data.user?.role === 'admin'}
@@ -54,6 +55,40 @@
 				>
 					{item.label}
 				</a>
+				{#if item.href === '/projects' && data.projects.length > 0}
+					<div class="nav-sub">
+						{#each data.projects as p (p.id)}
+							<a
+								href="/projects/{p.id}"
+								class="nav-sublink"
+								class:active={page.url.pathname === `/projects/${p.id}`}
+								onclick={() => (menuOpen = false)}
+							>
+								{p.name}
+							</a>
+						{/each}
+					</div>
+				{/if}
+				{#if item.href === '/settings' && data.user?.role === 'admin'}
+					<div class="nav-sub">
+						<a
+							href="/settings/statuses"
+							class="nav-sublink"
+							class:active={page.url.pathname === '/settings/statuses'}
+							onclick={() => (menuOpen = false)}
+						>
+							Statuses
+						</a>
+						<a
+							href="/settings/labels"
+							class="nav-sublink"
+							class:active={page.url.pathname === '/settings/labels'}
+							onclick={() => (menuOpen = false)}
+						>
+							Labels
+						</a>
+					</div>
+				{/if}
 			{/each}
 			{#if data.user?.role === 'admin'}
 				<a
@@ -86,7 +121,7 @@
 		justify-content: space-between;
 		gap: var(--sp-2);
 		padding: var(--sp-2) var(--sp-3);
-		border-bottom: var(--border-width-heavy) solid var(--color-fg);
+		border-bottom: 1px solid var(--color-border-subtle);
 		background: var(--color-bg);
 		position: sticky;
 		top: 0;
@@ -95,17 +130,17 @@
 
 	.wordmark {
 		font-family: var(--font-headline);
-		font-size: 20px;
+		font-size: 18px;
+		font-weight: 700;
+		letter-spacing: var(--heading-tracking);
 		color: var(--color-fg);
 		text-decoration: none;
-		background: var(--color-fg);
-		color: var(--color-bg);
-		padding: 2px 10px;
+		padding: 2px 0;
 	}
 
 	.hamburger {
 		display: none;
-		border: var(--border-width) solid var(--color-fg);
+		border: 1px solid var(--color-border-subtle);
 		background: var(--color-bg);
 		font-size: 20px;
 		line-height: 1;
@@ -122,35 +157,65 @@
 
 	.sidebar {
 		width: 200px;
-		border-right: var(--border-width) solid var(--color-fg);
+		border-right: 1px solid var(--color-border-subtle);
 		padding: var(--sp-4) 0;
 		display: flex;
 		flex-direction: column;
+		gap: 2px;
 	}
 
 	.nav-link {
 		font-family: var(--font-body);
-		font-weight: 600;
+		font-weight: 400;
 		font-size: 14px;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--color-fg);
+		color: var(--color-muted);
 		text-decoration: none;
-		padding: var(--sp-2) var(--sp-3);
-		border-bottom: 2px solid var(--color-fg);
+		padding: var(--sp-1) var(--sp-3);
 		transition:
-			background 0.1s steps(2, end),
-			color 0.1s steps(2, end);
+			background 0.15s ease,
+			color 0.15s ease;
 	}
 
-	.nav-link:first-child {
-		border-top: 2px solid var(--color-fg);
+	.nav-link:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
 	}
 
-	.nav-link:hover,
 	.nav-link.active {
-		background: var(--color-fg);
-		color: var(--color-bg);
+		color: var(--color-fg);
+		font-weight: 600;
+	}
+
+	.nav-sub {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin-bottom: var(--sp-1);
+	}
+
+	.nav-sublink {
+		font-family: var(--font-body);
+		font-weight: 400;
+		font-size: 13px;
+		color: var(--color-muted);
+		text-decoration: none;
+		padding: 2px var(--sp-3) 2px var(--sp-4);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease;
+	}
+
+	.nav-sublink:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
+	}
+
+	.nav-sublink.active {
+		color: var(--color-fg);
+		font-weight: 600;
 	}
 
 	.content {
@@ -175,7 +240,7 @@
 			left: 0;
 			bottom: 0;
 			background: var(--color-bg);
-			border-right: var(--border-width-heavy) solid var(--color-fg);
+			border-right: 1px solid var(--color-border-subtle);
 			transform: translateX(-105%);
 			transition: transform 0.18s ease-out;
 			z-index: 9;
