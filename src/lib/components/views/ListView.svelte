@@ -4,6 +4,7 @@
 	import StatusSelect from '$lib/components/StatusSelect.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
+	import { t as i18n } from '$lib/i18n';
 
 	type Task = {
 		id: string;
@@ -76,7 +77,7 @@
 <div class="list-wrap" class:with-panel={Boolean(selected)}>
 	{#if ordered.length === 0}
 		<div class="card" style="text-align: center;">
-			<p class="u-muted">No tasks yet.</p>
+			<p class="u-muted">{$i18n('No tasks yet.')}</p>
 		</div>
 	{:else}
 		<ul class="rows">
@@ -89,7 +90,7 @@
 							<button
 								class="chev"
 								aria-expanded={expanded[t.id] ?? false}
-								aria-label="Toggle sub-tasks"
+								aria-label={$i18n('Toggle sub-tasks')}
 								onclick={() => (expanded[t.id] = !expanded[t.id])}
 							>
 								{expanded[t.id] ? '▾' : '▸'}

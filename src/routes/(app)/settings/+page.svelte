@@ -4,6 +4,8 @@
 	import { slide } from 'svelte/transition';
 	import QRCode from 'qrcode';
 	import { authClient } from '$lib/auth-client';
+	import LanguageCard from './LanguageCard.svelte';
+	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
 
@@ -18,7 +20,7 @@
 	}
 
 	function fmtDate(d: Date | null) {
-		return d ? new Date(d).toLocaleDateString() : 'never';
+		return d ? new Date(d).toLocaleDateString() : $t('never');
 	}
 
 	let step = $state<'idle' | 'password' | 'scan' | 'disable'>('idle');
@@ -42,7 +44,7 @@
 		password = '';
 
 		if (err || !res) {
-			error = err?.message ?? 'Could not start 2FA setup';
+			error = err?.message ?? $t('Could not start 2FA setup');
 			return;
 		}
 
@@ -64,13 +66,13 @@
 		loading = false;
 
 		if (err) {
-			error = err.message ?? 'Invalid code — try again';
+			error = err.message ?? $t('Invalid code — try again');
 			return;
 		}
 
 		step = 'idle';
 		code = '';
-		success = 'Two-factor authentication is now enabled. Store your backup codes safely.';
+		success = $t('Two-factor authentication is now enabled. Store your backup codes safely.');
 		await invalidateAll();
 	}
 
@@ -84,38 +86,37 @@
 		password = '';
 
 		if (err) {
-			error = err.message ?? 'Could not disable 2FA';
+			error = err.message ?? $t('Could not disable 2FA');
 			return;
 		}
 
 		step = 'idle';
 		backupCodes = [];
-		success = 'Two-factor authentication disabled.';
+		success = $t('Two-factor authentication disabled.');
 		await invalidateAll();
 	}
 </script>
 
-<svelte:head><title>Settings — Baskets</title></svelte:head>
+<svelte:head><title>{$t('Settings')} — Baskets</title></svelte:head>
 
-<h2 style="margin-bottom: var(--sp-4);">Settings</h2>
+<h2 style="margin-bottom: var(--sp-4);">{$t('Settings')}</h2>
 
 <div class="card" style="max-width: 560px; margin-bottom: var(--sp-4);">
-	<h4 style="margin-bottom: var(--sp-2);">Account</h4>
-	<p class="u-small"><strong>Name:</strong> {data.user?.name}</p>
-	<p class="u-small"><strong>Email:</strong> <span class="mono">{data.user?.email}</span></p>
-	<p class="u-small"><strong>Role:</strong> {data.user?.role ?? 'user'}</p>
+	<h4 style="margin-bottom: var(--sp-2);">{$t('Account')}</h4>
+	<p class="u-small"><strong>{$t('Name')}:</strong> {data.user?.name}</p>
+	<p class="u-small"><strong>{$t('Email')}:</strong> <span class="mono">{data.user?.email}</span></p>
+	<p class="u-small"><strong>{$t('Role')}:</strong> {$t(data.user?.role ?? 'user')}</p>
 </div>
 
 <div class="card" style="max-width: 560px;">
 	<div class="u-between" style="margin-bottom: var(--sp-2);">
-		<h4>Two-factor authentication</h4>
+		<h4>{$t('Two-factor authentication')}</h4>
 		<span class="badge" class:badge--success={twoFactorOn}>
-			{twoFactorOn ? 'ON' : 'OFF'}
+			{twoFactorOn ? $t('ON') : $t('OFF')}
 		</span>
 	</div>
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
-		Add a second step at sign-in using an authenticator app such as Google Authenticator, 1Password
-		or Authy.
+		{$t('Add a second step at sign-in using an authenticator app such as Google Authenticator, 1Password or Authy.')}
 	</p>
 
 	{#if error}
@@ -128,11 +129,11 @@
 	{#if step === 'idle'}
 		{#if twoFactorOn}
 			<button class="btn btn--danger" onclick={() => { step = 'disable'; success = ''; }}>
-				Disable 2FA
+				{$t('Disable 2FA')}
 			</button>
 		{:else}
 			<button class="btn btn--primary" onclick={() => { step = 'password'; success = ''; }}>
-				Enable 2FA
+				{$t('Enable 2FA')}
 			</button>
 		{/if}
 	{/if}
@@ -143,7 +144,7 @@
 			transition:slide={{ duration: 150 }}
 		>
 			<div class="field">
-				<label class="label" for="pw">Confirm your password</label>
+				<label class="label" for="pw">{$t('Confirm your password')}</label>
 				<input
 					id="pw"
 					class="input"
@@ -155,10 +156,10 @@
 			</div>
 			<div class="u-flex">
 				<button class="btn btn--primary" type="submit" disabled={loading}>
-					{loading ? 'Working…' : 'Continue'}
+					{loading ? $t('Working…') : $t('Continue')}
 				</button>
 				<button class="btn" type="button" onclick={() => { step = 'idle'; error = ''; }}>
-					Cancel
+					{$t('Cancel')}
 				</button>
 			</div>
 		</form>
@@ -167,15 +168,15 @@
 	{#if step === 'scan'}
 		<div transition:slide={{ duration: 150 }}>
 			<p class="u-small" style="margin-bottom: var(--sp-2);">
-				<strong>1.</strong> Scan this QR code with your authenticator app:
+				<strong>1.</strong> {$t('Scan this QR code with your authenticator app:')}
 			</p>
 			{#if qrDataUrl}
-				<img src={qrDataUrl} alt="TOTP QR code" class="qr" />
+				<img src={qrDataUrl} alt={$t('TOTP QR code')} class="qr" />
 			{/if}
 
 			{#if backupCodes.length > 0}
 				<p class="u-small" style="margin: var(--sp-3) 0 var(--sp-1);">
-					<strong>2.</strong> Save these one-time backup codes:
+					<strong>2.</strong> {$t('Save these one-time backup codes:')}
 				</p>
 				<div class="codes mono">
 					{#each backupCodes as bc (bc)}
@@ -187,7 +188,7 @@
 			<form onsubmit={confirmEnable} style="margin-top: var(--sp-3);">
 				<div class="field">
 					<label class="label" for="totp">
-						<strong>3.</strong> Enter the 6-digit code to confirm
+						<strong>3.</strong> {$t('Enter the 6-digit code to confirm')}
 					</label>
 					<input
 						id="totp"
@@ -200,10 +201,10 @@
 				</div>
 				<div class="u-flex">
 					<button class="btn btn--primary" type="submit" disabled={loading}>
-						{loading ? 'Verifying…' : 'Verify & enable'}
+						{loading ? $t('Verifying…') : $t('Verify & enable')}
 					</button>
 					<button class="btn" type="button" onclick={() => { step = 'idle'; error = ''; }}>
-						Cancel
+						{$t('Cancel')}
 					</button>
 				</div>
 			</form>
@@ -212,10 +213,10 @@
 </div>
 
 <div class="card" style="max-width: 560px; margin-top: var(--sp-4);">
-	<h4 style="margin-bottom: var(--sp-2);">API keys</h4>
+	<h4 style="margin-bottom: var(--sp-2);">{$t('API keys')}</h4>
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
-		Use API keys to call the REST API: <span class="mono">Authorization: Bearer bsk_…</span>
-		A key acts as your user. Keys are shown once — store them safely.
+		{$t('Use API keys to call the REST API:')} <span class="mono">Authorization: Bearer bsk_…</span>
+		{$t('A key acts as your user. Keys are shown once — store them safely.')}
 	</p>
 
 	{#if form?.message}
@@ -224,11 +225,11 @@
 
 	{#if form?.token}
 		<div class="token-reveal" transition:slide={{ duration: 150 }}>
-			<p class="u-small"><strong>{form.keyName}</strong> created. Copy the key now — it will not be shown again:</p>
+			<p class="u-small"><strong>{form.keyName}</strong> {$t('created. Copy the key now — it will not be shown again:')}</p>
 			<div class="u-flex" style="margin-top: var(--sp-1);">
 				<code class="mono token">{form.token}</code>
 				<button class="btn btn--sm" type="button" onclick={copyToken}>
-					{copied ? 'Copied' : 'Copy'}
+					{copied ? $t('Copied') : $t('Copy')}
 				</button>
 			</div>
 		</div>
@@ -237,7 +238,7 @@
 	{#if data.apiKeys.length > 0}
 		<table class="keys">
 			<thead>
-				<tr><th>Name</th><th>Key</th><th>Last used</th><th></th></tr>
+				<tr><th>{$t('Name')}</th><th>{$t('Key')}</th><th>{$t('Last used')}</th><th></th></tr>
 			</thead>
 			<tbody>
 				{#each data.apiKeys as key (key.id)}
@@ -252,7 +253,7 @@
 								use:enhance={() => async ({ update }) => update()}
 							>
 								<input type="hidden" name="id" value={key.id} />
-								<button class="btn btn--sm btn--danger" type="submit">Revoke</button>
+								<button class="btn btn--sm btn--danger" type="submit">{$t('Revoke')}</button>
 							</form>
 						</td>
 					</tr>
@@ -274,21 +275,23 @@
 		style="margin-top: var(--sp-3);"
 	>
 		<div class="field">
-			<label class="label" for="key-name">Key name</label>
+			<label class="label" for="key-name">{$t('Key name')}</label>
 			<input
 				id="key-name"
 				class="input"
 				name="name"
-				placeholder="e.g. CI script"
+				placeholder={$t('e.g. CI script')}
 				maxlength="60"
 				required
 			/>
 		</div>
 		<button class="btn btn--primary" type="submit" disabled={keyLoading}>
-			{keyLoading ? 'Creating…' : 'Create API key'}
+			{keyLoading ? $t('Creating…') : $t('Create API key')}
 		</button>
 	</form>
 </div>
+
+<LanguageCard />
 
 <style>
 	.token-reveal {

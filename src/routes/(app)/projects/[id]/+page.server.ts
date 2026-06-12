@@ -528,24 +528,30 @@ export const actions: Actions = {
 
 	/* ------------------------------ views ------------------------------ */
 
+	/** Enables a view type for the project (one view per type; Table is on by default). */
 	createView: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		const type = String(form.get('type') ?? 'table');
+		const type = String(form.get('type') ?? '');
 
-		if (!name) return fail(400, { message: 'View name is required' });
 		if (!VIEW_TYPES.includes(type as ViewType)) return fail(400, { message: 'Invalid view type' });
+
+		const existing = await db
+			.select({ id: view.id, type: view.type })
+			.from(view)
+			.where(eq(view.projectId, params.id));
+		if (existing.some((v) => v.type === type))
+			return fail(400, { message: 'That view is already enabled' });
 
 		const now = new Date();
 		const id = crypto.randomUUID();
 		await db.insert(view).values({
 			id,
 			projectId: params.id,
-			name,
+			name: type[0].toUpperCase() + type.slice(1),
 			type,
 			config: '{}',
 			position: now.getTime(),
@@ -563,7 +569,6 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = String(form.get('id') ?? '');
 		const name = String(form.get('name') ?? '').trim();
-		const type = String(form.get('type') ?? 'table');
 		const configRaw = String(form.get('config') ?? '{}');
 
 		const [v] = await db.select().from(view).where(eq(view.id, id));
@@ -572,7 +577,6 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this view' });
 
 		if (!name) return fail(400, { message: 'View name is required' });
-		if (!VIEW_TYPES.includes(type as ViewType)) return fail(400, { message: 'Invalid view type' });
 
 		let config = '{}';
 		try {
@@ -583,9 +587,10 @@ export const actions: Actions = {
 			return fail(400, { message: 'Invalid view config' });
 		}
 
+		// type is fixed at enablement — one view per type per project
 		await db
 			.update(view)
-			.set({ name, type, config, updatedAt: new Date() })
+			.set({ name, config, updatedAt: new Date() })
 			.where(eq(view.id, id));
 
 		return { success: true };

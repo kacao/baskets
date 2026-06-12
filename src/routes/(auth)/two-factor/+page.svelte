@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { authClient } from '$lib/auth-client';
+	import { t } from '$lib/i18n';
 
 	let code = $state('');
 	let useBackup = $state(false);
@@ -19,7 +20,7 @@
 		loading = false;
 
 		if (err) {
-			error = err.message ?? 'Invalid code';
+			error = err.message ?? $t('Invalid code');
 			return;
 		}
 
@@ -27,13 +28,13 @@
 	}
 </script>
 
-<svelte:head><title>Two-factor — Baskets</title></svelte:head>
+<svelte:head><title>{$t('Two-factor')} — Baskets</title></svelte:head>
 
-<h3>Two-factor</h3>
+<h3>{$t('Two-factor')}</h3>
 <p class="u-small u-muted" style="margin-bottom: var(--sp-4);">
 	{useBackup
-		? 'Enter one of your backup codes.'
-		: 'Enter the 6-digit code from your authenticator app.'}
+		? $t('Enter one of your backup codes.')
+		: $t('Enter the 6-digit code from your authenticator app.')}
 </p>
 
 {#if error}
@@ -42,7 +43,7 @@
 
 <form onsubmit={submit}>
 	<div class="field">
-		<label class="label" for="code">{useBackup ? 'Backup code' : 'Code'}</label>
+		<label class="label" for="code">{useBackup ? $t('Backup code') : $t('Code')}</label>
 		<input
 			id="code"
 			class="input mono"
@@ -55,7 +56,7 @@
 		/>
 	</div>
 	<button class="btn btn--primary" type="submit" disabled={loading} style="width: 100%;">
-		{loading ? 'Verifying…' : 'Verify'}
+		{loading ? $t('Verifying…') : $t('Verify')}
 	</button>
 </form>
 
@@ -67,5 +68,5 @@
 		error = '';
 	}}
 >
-	{useBackup ? 'Use authenticator code' : 'Use a backup code'}
+	{useBackup ? $t('Use authenticator code') : $t('Use a backup code')}
 </button>

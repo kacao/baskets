@@ -7,6 +7,7 @@
 	import ListView from '$lib/components/views/ListView.svelte';
 	import DashboardView from '$lib/components/views/DashboardView.svelte';
 	import MapView from '$lib/components/views/MapView.svelte';
+	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
 
@@ -60,11 +61,16 @@
 
 	const userName = (id: string | null) => data.users.find((u) => u.id === id)?.name ?? id;
 	const grantLabel = (g: { resourceType: string; resourceId: string }) => {
-		if (g.resourceType === 'project') return 'project';
+		if (g.resourceType === 'project') return $t('project');
 		if (g.resourceType === 'view')
-			return `view: ${data.views.find((v) => v.id === g.resourceId)?.name ?? g.resourceId}`;
-		return `task: ${data.tasks.find((t) => t.id === g.resourceId)?.title ?? g.resourceId}`;
+			return $t('view: {name}', { name: data.views.find((v) => v.id === g.resourceId)?.name ?? g.resourceId });
+		return $t('task: {name}', { name: data.tasks.find((t) => t.id === g.resourceId)?.title ?? g.resourceId });
 	};
+
+	const VIEW_TYPES = ['table', 'board', 'list', 'dashboard', 'map'] as const;
+	const disabledViewTypes = $derived(
+		VIEW_TYPES.filter((vt) => !data.views.some((v) => v.type === vt))
+	);
 
 	const projectLabels = $derived(
 		data.labels.filter((l) => data.projectLabelIds.includes(l.id))
@@ -77,7 +83,7 @@
 <svelte:head><title>{data.project.name} — Baskets</title></svelte:head>
 
 <p class="u-tiny" style="margin-bottom: var(--sp-2);">
-	<a href="/projects">← Projects</a>
+	<a href="/projects">← {$t('Projects')}</a>
 </p>
 
 {#if editingProject && data.perm.project}
@@ -92,18 +98,18 @@
 				}}
 		>
 			<div class="field">
-				<label class="label" for="pname">Name</label>
+				<label class="label" for="pname">{$t('Name')}</label>
 				<input id="pname" name="name" class="input" value={data.project.name} required />
 			</div>
 			<div class="field">
-				<label class="label" for="pdesc">Description</label>
+				<label class="label" for="pdesc">{$t('Description')}</label>
 				<textarea id="pdesc" name="description" class="textarea" rows="2"
 					>{data.project.description ?? ''}</textarea
 				>
 			</div>
 			<div class="u-flex">
-				<button class="btn btn--primary" type="submit">Save</button>
-				<button class="btn" type="button" onclick={() => (editingProject = false)}>Cancel</button>
+				<button class="btn btn--primary" type="submit">{$t('Save')}</button>
+				<button class="btn" type="button" onclick={() => (editingProject = false)}>{$t('Cancel')}</button>
 			</div>
 		</form>
 
@@ -111,7 +117,7 @@
 
 		<!-- Eligible statuses -->
 		<form method="POST" action="?/updateProjectStatuses" use:enhance>
-			<span class="label">Eligible statuses</span>
+			<span class="label">{$t('Eligible statuses')}</span>
 			<div class="chips-row">
 				{#each data.allStatuses as s (s.id)}
 					<label class="chip-check">
@@ -125,13 +131,13 @@
 					</label>
 				{/each}
 			</div>
-			<button class="btn btn--sm" type="submit">Save statuses</button>
+			<button class="btn btn--sm" type="submit">{$t('Save statuses')}</button>
 		</form>
 
 		<hr class="rule" />
 
 		<!-- Project labels -->
-		<span class="label">Labels</span>
+		<span class="label">{$t('Labels')}</span>
 		<div class="chips-row">
 			{#each data.labels as l (l.id)}
 				{@const on = data.projectLabelIds.includes(l.id)}
@@ -140,22 +146,22 @@
 					<button class="chip" class:chip--on={on} type="submit">{l.name}</button>
 				</form>
 			{:else}
-				<span class="u-tiny u-muted">No labels yet — create them in Settings → Labels.</span>
+				<span class="u-tiny u-muted">{$t('No labels yet — create them in Settings → Labels.')}</span>
 			{/each}
 		</div>
 
 		<hr class="rule" />
 
 		<!-- Project dependencies -->
-		<span class="label">Depends on projects</span>
+		<span class="label">{$t('Depends on projects')}</span>
 		<div class="chips-row">
 			{#each dependsOn as p (p.id)}
 				<form method="POST" action="?/removeProjectDep" use:enhance>
 					<input type="hidden" name="dependsOnId" value={p.id} />
-					<button class="chip chip--on" type="submit" title="Remove dependency">{p.name} ×</button>
+					<button class="chip chip--on" type="submit" title={$t('Remove dependency')}>{p.name} ×</button>
 				</form>
 			{:else}
-				<span class="u-tiny u-muted">none</span>
+				<span class="u-tiny u-muted">{$t('none')}</span>
 			{/each}
 			<form method="POST" action="?/addProjectDep" use:enhance>
 				<select
@@ -165,7 +171,7 @@
 						if (e.currentTarget.value) e.currentTarget.form?.requestSubmit();
 					}}
 				>
-					<option value="">+ add</option>
+					<option value="">{$t('+ add')}</option>
 					{#each data.allProjects.filter((p) => p.id !== data.project.id && !data.projectDependsOn.includes(p.id)) as p (p.id)}
 						<option value={p.id}>{p.name}</option>
 					{/each}
@@ -176,7 +182,7 @@
 		<hr class="rule" />
 
 		<!-- Milestones -->
-		<span class="label">Milestones</span>
+		<span class="label">{$t('Milestones')}</span>
 		{#each data.milestones as m (m.id)}
 			<div class="u-flex" style="margin-bottom: var(--sp-1);">
 				<span class="u-small">◇ {m.name}</span>
@@ -185,53 +191,53 @@
 				{/if}
 				<form method="POST" action="?/deleteMilestone" use:enhance>
 					<input type="hidden" name="id" value={m.id} />
-					<button class="x-btn" type="submit" aria-label="Delete milestone">×</button>
+					<button class="x-btn" type="submit" aria-label={$t('Delete milestone')}>×</button>
 				</form>
 			</div>
 		{/each}
 		<form method="POST" action="?/createMilestone" use:enhance class="u-flex" style="flex-wrap: wrap;">
-			<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder="New milestone…" required />
+			<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder={$t('New milestone…')} required />
 			<input name="targetDate" type="date" class="input" style="width: auto;" />
-			<button class="btn btn--sm" type="submit">Add</button>
+			<button class="btn btn--sm" type="submit">{$t('Add')}</button>
 		</form>
 
 		{#if data.perm.admin}
 			<hr class="rule" />
 
 			<!-- Permissions (admin) -->
-			<span class="label">Edit grants</span>
+			<span class="label">{$t('Edit grants')}</span>
 			{#each data.grants as g (g.id)}
 				<div class="u-flex" style="margin-bottom: var(--sp-1);">
 					<span class="u-small">{userName(g.userId)}</span>
 					<span class="badge">{grantLabel(g)}</span>
 					<form method="POST" action="?/revokePermission" use:enhance>
 						<input type="hidden" name="id" value={g.id} />
-						<button class="x-btn" type="submit" aria-label="Revoke">×</button>
+						<button class="x-btn" type="submit" aria-label={$t('Revoke')}>×</button>
 					</form>
 				</div>
 			{:else}
-				<p class="u-tiny u-muted" style="margin-bottom: var(--sp-1);">No grants yet.</p>
+				<p class="u-tiny u-muted" style="margin-bottom: var(--sp-1);">{$t('No grants yet.')}</p>
 			{/each}
 			<form method="POST" action="?/grantPermission" use:enhance class="grant-form">
 				<select class="select" name="userId" required>
-					<option value="">user…</option>
+					<option value="">{$t('user…')}</option>
 					{#each data.users as u (u.id)}
 						<option value={u.id}>{u.name}</option>
 					{/each}
 				</select>
 				<select class="select" name="resourceType" value="project">
-					<option value="project">whole project</option>
-					<option value="view">a view</option>
+					<option value="project">{$t('whole project')}</option>
+					<option value="view">{$t('a view')}</option>
 				</select>
 				<select class="select" name="resourceId">
-					<option value={data.project.id}>this project</option>
+					<option value={data.project.id}>{$t('this project')}</option>
 					{#each data.views as v (v.id)}
-						<option value={v.id}>view: {v.name}</option>
+						<option value={v.id}>{$t('view: {name}', { name: v.name })}</option>
 					{/each}
 				</select>
-				<button class="btn btn--sm" type="submit">Grant</button>
+				<button class="btn btn--sm" type="submit">{$t('Grant')}</button>
 			</form>
-			<p class="u-tiny u-muted">Pick the matching resource for the chosen scope.</p>
+			<p class="u-tiny u-muted">{$t('Pick the matching resource for the chosen scope.')}</p>
 		{/if}
 	</div>
 {:else}
@@ -239,16 +245,16 @@
 		<h2 style="overflow-wrap: anywhere;">{data.project.name}</h2>
 		{#if data.perm.project}
 			<div class="u-flex">
-				<button class="btn btn--sm" onclick={() => (editingProject = true)}>Edit</button>
+				<button class="btn btn--sm" onclick={() => (editingProject = true)}>{$t('Edit')}</button>
 				<form
 					method="POST"
 					action="?/deleteProject"
 					use:enhance
 					onsubmit={(e) => {
-						if (!confirm('Delete this project and all its tasks?')) e.preventDefault();
+						if (!confirm($t('Delete this project and all its tasks?'))) e.preventDefault();
 					}}
 				>
-					<button class="btn btn--sm btn--danger" type="submit">Delete</button>
+					<button class="btn btn--sm btn--danger" type="submit">{$t('Delete')}</button>
 				</form>
 			</div>
 		{/if}
@@ -286,43 +292,45 @@
 			{v.name}
 		</a>
 	{/each}
-	{#if data.perm.project}
-		<button class="view-tab view-tab--ghost" onclick={() => (addingView = !addingView)}>
-			+ View
-		</button>
+	{#if data.perm.project && disabledViewTypes.length > 0}
+		<div class="add-view">
+			<button
+				class="view-tab view-tab--ghost"
+				aria-expanded={addingView}
+				aria-label={$t('Enable a view')}
+				onclick={() => (addingView = !addingView)}
+			>
+				+
+			</button>
+			{#if addingView}
+				<div class="add-view-menu" transition:slide={{ duration: 120 }}>
+					{#each disabledViewTypes as vt (vt)}
+						<form
+							method="POST"
+							action="?/createView"
+							use:enhance={() =>
+								({ update }) => {
+									addingView = false;
+									update();
+								}}
+						>
+							<input type="hidden" name="type" value={vt} />
+							<button class="add-view-item" type="submit">
+								{$t(vt[0].toUpperCase() + vt.slice(1))}
+							</button>
+						</form>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	{/if}
 	{#if canEditActiveView}
 		<span style="flex: 1;"></span>
 		<button class="btn btn--sm" onclick={() => (editingView ? (editingView = false) : openViewEditor())}>
-			{editingView ? 'Done' : 'Edit view'}
+			{editingView ? $t('Done') : $t('Edit view')}
 		</button>
 	{/if}
 </div>
-
-{#if addingView}
-	<form
-		method="POST"
-		action="?/createView"
-		use:enhance={() =>
-			({ update }) => {
-				addingView = false;
-				update();
-			}}
-		class="u-flex"
-		style="margin-bottom: var(--sp-3); flex-wrap: wrap;"
-		transition:slide={{ duration: 150 }}
-	>
-		<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder="View name…" required />
-		<select name="type" class="select" style="width: auto;">
-			<option value="table">Table</option>
-			<option value="board">Board</option>
-			<option value="list">List</option>
-			<option value="dashboard">Dashboard</option>
-			<option value="map">Map</option>
-		</select>
-		<button class="btn btn--sm btn--primary" type="submit">Create</button>
-	</form>
-{/if}
 
 {#if editingView && activeView && canEditActiveView}
 	<div class="card" style="margin-bottom: var(--sp-3);" transition:slide={{ duration: 150 }}>
@@ -339,32 +347,26 @@
 			<input type="hidden" name="config" value={builtConfig} />
 			<div class="edit-grid">
 				<div class="field">
-					<label class="label" for="vname">View name</label>
+					<label class="label" for="vname">{$t('View name')}</label>
 					<input id="vname" name="name" class="input" value={activeView.name} required />
 				</div>
 				<div class="field">
-					<label class="label" for="vtype">Type</label>
-					<select id="vtype" name="type" class="select" value={activeView.type}>
-						<option value="table">Table</option>
-						<option value="board">Board</option>
-			<option value="list">List</option>
-						<option value="dashboard">Dashboard</option>
-						<option value="map">Map</option>
-					</select>
+					<span class="label">{$t('Type')}</span>
+					<span class="badge">{activeView.type}</span>
 				</div>
 			</div>
 
 			{#if activeView.type === 'table'}
-				<span class="label">Columns</span>
+				<span class="label">{$t('Columns')}</span>
 				<div class="chips-row">
 					{#each Object.keys(cfgColumns) as key (key)}
 						<label class="chip-check">
 							<input type="checkbox" bind:checked={cfgColumns[key]} />
-							{key}
+							{$t(key)}
 						</label>
 					{/each}
 				</div>
-				<span class="label">Statuses shown</span>
+				<span class="label">{$t('Statuses shown')}</span>
 				<div class="chips-row">
 					{#each data.statuses as s (s.id)}
 						<label class="chip-check">
@@ -376,7 +378,7 @@
 			{/if}
 
 			<div class="u-flex" style="margin-top: var(--sp-2);">
-				<button class="btn btn--sm btn--primary" type="submit">Save view</button>
+				<button class="btn btn--sm btn--primary" type="submit">{$t('Save view')}</button>
 			</div>
 		</form>
 		{#if data.views.length > 1}
@@ -386,11 +388,11 @@
 				use:enhance
 				style="margin-top: var(--sp-2);"
 				onsubmit={(e) => {
-					if (!confirm('Delete this view?')) e.preventDefault();
+					if (!confirm($t('Delete this view?'))) e.preventDefault();
 				}}
 			>
 				<input type="hidden" name="id" value={activeView.id} />
-				<button class="btn btn--sm btn--danger" type="submit">Delete view</button>
+				<button class="btn btn--sm btn--danger" type="submit">{$t('Delete view')}</button>
 			</form>
 		{/if}
 	</div>
@@ -402,19 +404,19 @@
 		<input
 			name="title"
 			class="input"
-			placeholder="Add a task…"
+			placeholder={$t('Add a task…')}
 			required
 			maxlength="240"
 			autocomplete="off"
 		/>
 		<select name="priority" class="select" style="width: auto;">
-			<option value="none">— priority</option>
-			<option value="low">Low</option>
-			<option value="medium">Medium</option>
-			<option value="high">High</option>
-			<option value="urgent">Urgent</option>
+			<option value="none">{$t('— priority')}</option>
+			<option value="low">{$t('Low')}</option>
+			<option value="medium">{$t('Medium')}</option>
+			<option value="high">{$t('High')}</option>
+			<option value="urgent">{$t('Urgent')}</option>
 		</select>
-		<button class="btn btn--primary" type="submit">Add</button>
+		<button class="btn btn--primary" type="submit">{$t('Add')}</button>
 	</form>
 {/if}
 
@@ -496,7 +498,39 @@
 
 	.view-tab--ghost {
 		font-family: var(--font-body);
-		font-size: 13px;
+		font-size: 15px;
+	}
+
+	.add-view {
+		position: relative;
+	}
+
+	.add-view-menu {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		z-index: 9;
+		background: var(--color-bg);
+		border: 1px solid var(--color-border-subtle);
+		min-width: 140px;
+	}
+
+	.add-view-item {
+		display: block;
+		width: 100%;
+		border: none;
+		background: none;
+		font-family: var(--font-body);
+		font-size: 14px;
+		color: var(--color-fg);
+		text-align: left;
+		padding: var(--sp-1) var(--sp-2);
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+
+	.add-view-item:hover {
+		background: var(--color-surface-muted);
 	}
 
 	.add-task {

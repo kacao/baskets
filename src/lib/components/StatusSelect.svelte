@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { t } from '$lib/i18n';
 
 	type Status = { id: string; name: string; category: string };
 
@@ -30,7 +31,7 @@
 			class="status-select"
 			name="statusId"
 			value={statusId}
-			aria-label="Status"
+			aria-label={$t('Status')}
 			onchange={(e) => e.currentTarget.form?.requestSubmit()}
 		>
 			{#each statuses as s (s.id)}

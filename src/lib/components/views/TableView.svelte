@@ -4,6 +4,7 @@
 	import { slide, fly } from 'svelte/transition';
 	import StatusSelect from '$lib/components/StatusSelect.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
+	import { t as i18n } from '$lib/i18n';
 
 	type Task = {
 		id: string;
@@ -80,7 +81,7 @@
 </script>
 
 <!-- Status filter -->
-<div class="filterbar" role="tablist" aria-label="Filter tasks">
+<div class="filterbar" role="tablist" aria-label={$i18n('Filter tasks')}>
 	<button
 		class="filter-btn"
 		class:active={filter === 'all'}
@@ -88,7 +89,7 @@
 		aria-selected={filter === 'all'}
 		onclick={() => (filter = 'all')}
 	>
-		All
+		{$i18n('All')}
 	</button>
 	{#each visibleStatuses as s (s.id)}
 		<button
@@ -105,7 +106,7 @@
 
 {#if topTasks.length === 0}
 	<div class="card" style="text-align: center;">
-		<p class="u-muted">No tasks here.</p>
+		<p class="u-muted">{$i18n('No tasks here.')}</p>
 	</div>
 {:else}
 	<ul class="task-list">
@@ -126,7 +127,7 @@
 					</button>
 					<div class="task-meta">
 						{#if deps.length > 0}
-							<span class="badge" title="Blocked by {deps.map((d) => d!.title).join(', ')}">
+							<span class="badge" title={$i18n('Blocked by {names}', { names: deps.map((d) => d!.title).join(', ') })}>
 								⛓ {deps.length}
 							</span>
 						{/if}
@@ -153,7 +154,7 @@
 						<button
 							class="expand-btn"
 							onclick={() => (expanded[t.id] = !expanded[t.id])}
-							aria-label="Toggle details"
+							aria-label={$i18n('Toggle details')}
 						>
 							{expanded[t.id] ? '−' : '+'}
 						</button>
@@ -181,44 +182,44 @@
 							>
 								<input type="hidden" name="id" value={t.id} />
 								<div class="field">
-									<label class="label" for="title-{t.id}">Title</label>
+									<label class="label" for="title-{t.id}">{$i18n('Title')}</label>
 									<input id="title-{t.id}" name="title" class="input" value={t.title} required />
 								</div>
 								<div class="field">
-									<label class="label" for="desc-{t.id}">Description</label>
+									<label class="label" for="desc-{t.id}">{$i18n('Description')}</label>
 									<textarea id="desc-{t.id}" name="description" class="textarea" rows="3"
 										>{t.description ?? ''}</textarea
 									>
 								</div>
 								<div class="edit-grid">
 									<div class="field">
-										<label class="label" for="prio-{t.id}">Priority</label>
+										<label class="label" for="prio-{t.id}">{$i18n('Priority')}</label>
 										<select id="prio-{t.id}" name="priority" class="select">
 											{#each ['none', 'low', 'medium', 'high', 'urgent'] as p (p)}
-												<option value={p} selected={t.priority === p}>{p}</option>
+												<option value={p} selected={t.priority === p}>{$i18n(p)}</option>
 											{/each}
 										</select>
 									</div>
 									<div class="field">
-										<label class="label" for="asg-{t.id}">Assignee</label>
+										<label class="label" for="asg-{t.id}">{$i18n('Assignee')}</label>
 										<select id="asg-{t.id}" name="assigneeId" class="select">
-											<option value="">— unassigned</option>
+											<option value="">{$i18n('— unassigned')}</option>
 											{#each users as u (u.id)}
 												<option value={u.id} selected={t.assigneeId === u.id}>{u.name}</option>
 											{/each}
 										</select>
 									</div>
 									<div class="field">
-										<label class="label" for="mst-{t.id}">Milestone</label>
+										<label class="label" for="mst-{t.id}">{$i18n('Milestone')}</label>
 										<select id="mst-{t.id}" name="milestoneId" class="select">
-											<option value="">— none</option>
+											<option value="">{$i18n('— none')}</option>
 											{#each milestones as m (m.id)}
 												<option value={m.id} selected={t.milestoneId === m.id}>{m.name}</option>
 											{/each}
 										</select>
 									</div>
 									<div class="field">
-										<label class="label" for="due-{t.id}">Due date</label>
+										<label class="label" for="due-{t.id}">{$i18n('Due date')}</label>
 										<input
 											id="due-{t.id}"
 											name="dueDate"
@@ -228,7 +229,7 @@
 										/>
 									</div>
 									<div class="field">
-										<label class="label" for="loc-{t.id}">Location (lat, lng)</label>
+										<label class="label" for="loc-{t.id}">{$i18n('Location (lat, lng)')}</label>
 										<input
 											id="loc-{t.id}"
 											name="location"
@@ -239,32 +240,32 @@
 									</div>
 								</div>
 								<div class="u-flex">
-									<button class="btn btn--sm btn--primary" type="submit">Save</button>
+									<button class="btn btn--sm btn--primary" type="submit">{$i18n('Save')}</button>
 									<button class="btn btn--sm" type="button" onclick={() => (editing = null)}>
-										Cancel
+										{$i18n('Cancel')}
 									</button>
 								</div>
 							</form>
 						{:else if editable}
 							<div class="u-flex" style="margin-bottom: var(--sp-3); flex-wrap: wrap;">
-								<button class="btn btn--sm" onclick={() => (editing = t.id)}>Edit</button>
+								<button class="btn btn--sm" onclick={() => (editing = t.id)}>{$i18n('Edit')}</button>
 								<form
 									method="POST"
 									action="?/deleteTask"
 									use:enhance
 									onsubmit={(e) => {
-										if (!confirm('Delete this task and its sub-tasks?')) e.preventDefault();
+										if (!confirm($i18n('Delete this task and its sub-tasks?'))) e.preventDefault();
 									}}
 								>
 									<input type="hidden" name="id" value={t.id} />
-									<button class="btn btn--sm btn--danger" type="submit">Delete</button>
+									<button class="btn btn--sm btn--danger" type="submit">{$i18n('Delete')}</button>
 								</form>
 							</div>
 						{/if}
 
 						{#if editable && labels.length > 0}
 							<div class="chips-row">
-								<span class="label" style="margin: 0;">Labels</span>
+								<span class="label" style="margin: 0;">{$i18n('Labels')}</span>
 								{#each labels as l (l.id)}
 									{@const active = labelsOf(t.id).some((x) => x!.id === l.id)}
 									<form method="POST" action="?/toggleTaskLabel" use:enhance>
@@ -278,17 +279,17 @@
 
 						<!-- Dependencies (top-level: other top-level tasks) -->
 						<div class="chips-row">
-							<span class="label" style="margin: 0;">Blocked by</span>
+							<span class="label" style="margin: 0;">{$i18n('Blocked by')}</span>
 							{#each deps as d (d!.id)}
 								<form method="POST" action="?/removeTaskDep" use:enhance>
 									<input type="hidden" name="taskId" value={t.id} />
 									<input type="hidden" name="dependsOnId" value={d!.id} />
-									<button class="chip chip--on" type="submit" title="Remove dependency">
+									<button class="chip chip--on" type="submit" title={$i18n('Remove dependency')}>
 										{d!.title} ×
 									</button>
 								</form>
 							{:else}
-								<span class="u-tiny u-muted">none</span>
+								<span class="u-tiny u-muted">{$i18n('none')}</span>
 							{/each}
 							{#if editable}
 								<form method="POST" action="?/addTaskDep" use:enhance class="u-flex">
@@ -300,7 +301,7 @@
 											if (e.currentTarget.value) e.currentTarget.form?.requestSubmit();
 										}}
 									>
-										<option value="">+ add</option>
+										<option value="">{$i18n('+ add')}</option>
 										{#each tasks.filter((x) => !x.parentId && x.id !== t.id && !deps.some((d) => d!.id === x.id)) as opt (opt.id)}
 											<option value={opt.id}>{opt.title}</option>
 										{/each}
@@ -311,7 +312,7 @@
 
 						<!-- Sub-tasks -->
 						<div class="subtasks">
-							<span class="label">Sub-tasks</span>
+							<span class="label">{$i18n('Sub-tasks')}</span>
 							{#each subs as s (s.id)}
 								{@const subDeps = depsOf(s.id)}
 								{@const subEditable = canEditTask(s)}
@@ -322,7 +323,7 @@
 										<form method="POST" action="?/removeTaskDep" use:enhance>
 											<input type="hidden" name="taskId" value={s.id} />
 											<input type="hidden" name="dependsOnId" value={d!.id} />
-											<button class="chip chip--on" type="submit" title="Remove dependency">
+											<button class="chip chip--on" type="submit" title={$i18n('Remove dependency')}>
 												⛓ {d!.title} ×
 											</button>
 										</form>
@@ -333,7 +334,7 @@
 											<select
 												class="select select--mini"
 												name="dependsOnId"
-												aria-label="Add dependency"
+												aria-label={$i18n('Add dependency')}
 												onchange={(e) => {
 													if (e.currentTarget.value) e.currentTarget.form?.requestSubmit();
 												}}
@@ -349,7 +350,7 @@
 									{#if subEditable}
 										<form method="POST" action="?/deleteTask" use:enhance>
 											<input type="hidden" name="id" value={s.id} />
-											<button class="x-btn" type="submit" aria-label="Delete sub-task">×</button>
+											<button class="x-btn" type="submit" aria-label={$i18n('Delete sub-task')}>×</button>
 										</form>
 									{/if}
 								</div>
@@ -360,12 +361,12 @@
 									<input
 										name="title"
 										class="input"
-										placeholder="Add a sub-task…"
+										placeholder={$i18n('Add a sub-task…')}
 										required
 										maxlength="240"
 										autocomplete="off"
 									/>
-									<button class="btn btn--sm" type="submit">Add</button>
+									<button class="btn btn--sm" type="submit">{$i18n('Add')}</button>
 								</form>
 							{/if}
 						</div>

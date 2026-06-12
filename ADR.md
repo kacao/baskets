@@ -148,6 +148,8 @@ Architecture decision records. One section per decision; status reflects current
 
 **Update (2026-06-12):** Board gained Linear-style drag-and-drop (native HTML5 DnD, no library): cards move between/within columns through a `moveTask` action that orders by `beforeId` with midpoint positioning and a full-column renumber when gaps run out. Also per-column quick-add, category-glyph headers with counts, priority icons, assignee initials, and card click → split task panel (`?task=` deep link). A fifth view type `list` ranks all tasks by the nullable `task.order` field (unranked last, board position as tiebreaker) with expandable sub-task rows.
 
+**Update (2026-06-12, #2):** Views are enable-style: one view per type per project, only Table enabled by default. The "+" button in the view bar lists the not-yet-enabled types; enabling creates the view, deleting disables it (last view still protected). View type is fixed at enablement; Edit view renames/configures only.
+
 ---
 
 ## ADR-013: Grant-based edit permissions, read stays open
@@ -185,3 +187,15 @@ Architecture decision records. One section per decision; status reflects current
 **Decision:** `task.location` stores raw `"lat, lng"` (validated by regex). Map view lazy-imports Leaflet client-side (`onMount`), renders OSM tiles and `circleMarker`s (no icon assets), fits bounds. No geocoding — users enter coordinates.
 
 **Consequences:** Only dependency added is `leaflet`; SSR untouched. Address-based input would need a geocoding decision later.
+
+---
+
+## ADR-016: Hand-rolled i18n, English strings as keys
+
+**Status:** Accepted
+
+**Context:** Whole-app i18n requested. svelte-i18n / Paraglide add tooling and message-catalog ceremony disproportionate to a two-locale single-tenant app.
+
+**Decision:** ~50-line module (`src/lib/i18n/`): a `locale` store plus a derived `t` store; English strings ARE the keys (`en` is passthrough), other locales map key → translation with `{param}` interpolation, missing keys fall back to English. Locale persisted in a `locale` cookie, read in the root layout `load`, set synchronously in the root layout component before render (SvelteKit SSR renders synchronously after loads, so the shared store is safe per-request). Switcher in /settings. DB-driven content (status/label/project/task/user names) is intentionally NOT translated; server-side action/API error messages remain English for now. Locales: en, vi.
+
+**Consequences:** Zero dependencies, greppable keys, no extraction step; adding a locale = one dictionary file + a LOCALES entry. Costs: no pluralization rules beyond manual phrasing, English source-string changes orphan dictionary keys (caught by fallback), and server messages need a separate decision if they must localize.

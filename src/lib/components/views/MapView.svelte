@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { t } from '$lib/i18n';
 
 	type Task = {
 		id: string;
@@ -68,7 +69,7 @@
 
 {#if points.length === 0}
 	<div class="alert" role="status">
-		No tasks have a location yet. Set “Location (lat, lng)” in a task’s edit form to plot it here.
+		{$t('No tasks have a location yet. Set “Location (lat, lng)” in a task’s edit form to plot it here.')}
 	</div>
 {/if}
 <div class="map" bind:this={el}></div>

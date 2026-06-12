@@ -5,6 +5,7 @@
 	import { tick } from 'svelte';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
+	import { t } from '$lib/i18n';
 
 	type Task = {
 		id: string;
@@ -153,7 +154,7 @@
 			class="column"
 			class:drop-target={over?.statusId === s.id}
 			role="list"
-			aria-label="{s.name} column"
+			aria-label={$t('{name} column', { name: s.name })}
 			ondragover={(e) => onColumnDragOver(e, s.id)}
 			ondrop={onDrop}
 		>
@@ -162,7 +163,7 @@
 				<span class="col-name">{s.name}</span>
 				<span class="col-count">{col.length}</span>
 				<span class="col-spacer"></span>
-				<button class="col-add" aria-label="Add task to {s.name}" onclick={() => openAdd(s.id)}>
+				<button class="col-add" aria-label={$t('Add task to {name}', { name: s.name })} onclick={() => openAdd(s.id)}>
 					+
 				</button>
 			</div>
@@ -237,7 +238,7 @@
 							bind:this={addInput}
 							name="title"
 							class="input"
-							placeholder="Task title…"
+							placeholder={$t('Task title…')}
 							required
 							maxlength="240"
 							autocomplete="off"

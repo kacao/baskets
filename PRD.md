@@ -27,7 +27,7 @@ Single tenant: reads and task work are open to all signed-in users. Structure (p
 - Labels (shared label pool), dependencies on other projects (cycle-checked), per-project eligible statuses, milestones.
 
 ### Views
-- Each project has 1+ views; types: **table**, **board**, **list**, **dashboard**, **map** (Notion-style tabs). Default view is Table, created automatically; the last view cannot be deleted.
+- Each project has 1+ views; types: **table**, **board**, **list**, **dashboard**, **map** (Notion-style tabs). Only Table is enabled by default; the "+" button enables the other types (one view per type). The last view cannot be deleted.
 - Normal mode renders the view; edit mode (permitted users) renames, retypes, configures (table: visible columns + status filter), or deletes it.
 - Board groups by status with drag-and-drop; list shows all tasks ranked by their `order` field (unranked last) with expandable sub-task rows; dashboard shows progress/status/milestone stats; map plots tasks with a `lat, lng` location on OpenStreetMap.
 
@@ -62,6 +62,9 @@ Single tenant: reads and task work are open to all signed-in users. Structure (p
 - Managed at /integrations; one configuration per integration type (single tenant).
 - **Slack** (shipped): incoming-webhook notifications on `project.created`, `task.created`, `task.completed`. Connect, pause/resume, test message, remove.
 - Dispatch is fire-and-forget: integration failures never block or fail app mutations.
+
+### Internationalization
+- Whole-app UI translation (English, Vietnamese), switched in /settings, persisted in a cookie, SSR-rendered. User content is never translated.
 
 ### Design
 - StudioBlank ultra-minimal design system (`design.md` is the visual source of truth): monochrome, Inter weight contrast, 1px hairlines, whitespace-first, no radius/shadows.

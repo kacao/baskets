@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { t } from '$lib/i18n';
+
 	type Task = {
 		id: string;
 		parentId: string | null;
@@ -47,20 +49,20 @@
 <div class="stats">
 	<div class="stat">
 		<span class="stat-num">{top.length}</span>
-		<span class="stat-label">tasks</span>
+		<span class="stat-label">{$t('tasks')}</span>
 	</div>
 	<div class="stat">
 		<span class="stat-num">{pct}%</span>
-		<span class="stat-label">complete</span>
+		<span class="stat-label">{$t('complete')}</span>
 	</div>
 	<div class="stat">
 		<span class="stat-num">{overdue}</span>
-		<span class="stat-label">overdue</span>
+		<span class="stat-label">{$t('overdue')}</span>
 	</div>
 </div>
 
 <div class="panel">
-	<h4 style="margin-bottom: var(--sp-2);">By status</h4>
+	<h4 style="margin-bottom: var(--sp-2);">{$t('By status')}</h4>
 	{#each byStatus as row (row.status.id)}
 		<div class="bar-row">
 			<span class="bar-label">{row.status.name}</span>
@@ -76,7 +78,7 @@
 </div>
 
 <div class="panel">
-	<h4 style="margin-bottom: var(--sp-2);">Milestones</h4>
+	<h4 style="margin-bottom: var(--sp-2);">{$t('Milestones')}</h4>
 	{#each byMilestone as row (row.milestone.id)}
 		<div class="bar-row">
 			<span class="bar-label">
@@ -94,7 +96,7 @@
 			<span class="bar-count mono">{row.done}/{row.total}</span>
 		</div>
 	{:else}
-		<p class="u-small u-muted">No milestones yet.</p>
+		<p class="u-small u-muted">{$t('No milestones yet.')}</p>
 	{/each}
 </div>
 

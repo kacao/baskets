@@ -1,17 +1,16 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
 	let renaming = $state<string | null>(null);
 </script>
 
-<svelte:head><title>Statuses — Baskets</title></svelte:head>
+<svelte:head><title>{$t('Statuses')} — Baskets</title></svelte:head>
 
-<h2 style="margin-bottom: var(--sp-2);">Statuses</h2>
+<h2 style="margin-bottom: var(--sp-2);">{$t('Statuses')}</h2>
 <p class="u-small u-muted" style="margin-bottom: var(--sp-4); max-width: 65ch;">
-	App-wide statuses available to projects. Each project chooses which of these are eligible for
-	its tasks (in the project’s Edit panel). The category drives behavior: “done” marks progress
-	and completes sub-tasks.
+	{$t('App-wide statuses available to projects. Each project chooses which of these are eligible for its tasks (in the project’s Edit panel). The category drives behavior: “done” marks progress and completes sub-tasks.')}
 </p>
 
 {#if form?.message}
@@ -35,23 +34,23 @@
 				>
 					<input type="hidden" name="id" value={s.id} />
 					<input name="name" class="input" value={s.name} style="flex: 1;" required maxlength="40" />
-					<button class="btn btn--sm btn--primary" type="submit">Save</button>
-					<button class="btn btn--sm" type="button" onclick={() => (renaming = null)}>Cancel</button>
+					<button class="btn btn--sm btn--primary" type="submit">{$t('Save')}</button>
+					<button class="btn btn--sm" type="button" onclick={() => (renaming = null)}>{$t('Cancel')}</button>
 				</form>
 			{:else}
 				<span class="name">{s.name}</span>
-				<span class="badge">{s.category}</span>
+				<span class="badge">{$t(s.category)}</span>
 				{#if s.builtIn}
-					<span class="badge">built-in</span>
+					<span class="badge">{$t('built-in')}</span>
 				{/if}
-				<span class="u-tiny u-muted">{s.inUse} task(s)</span>
+				<span class="u-tiny u-muted">{$t('{n} task(s)', { n: s.inUse })}</span>
 				<span style="flex: 1;"></span>
-				<button class="btn btn--sm" onclick={() => (renaming = s.id)}>Rename</button>
+				<button class="btn btn--sm" onclick={() => (renaming = s.id)}>{$t('Rename')}</button>
 				{#if !s.builtIn}
 					<form method="POST" action="?/delete" use:enhance>
 						<input type="hidden" name="id" value={s.id} />
 						<button class="btn btn--sm btn--danger" type="submit" disabled={s.inUse > 0}>
-							Delete
+							{$t('Delete')}
 						</button>
 					</form>
 				{/if}
@@ -61,15 +60,15 @@
 </div>
 
 <div class="card" style="max-width: 640px;">
-	<h4 style="margin-bottom: var(--sp-2);">New status</h4>
+	<h4 style="margin-bottom: var(--sp-2);">{$t('New status')}</h4>
 	<form method="POST" action="?/create" use:enhance class="u-flex" style="flex-wrap: wrap;">
-		<input name="name" class="input" style="flex: 1; min-width: 160px;" placeholder="Status name…" required maxlength="40" />
+		<input name="name" class="input" style="flex: 1; min-width: 160px;" placeholder={$t('Status name…')} required maxlength="40" />
 		<select name="category" class="select" style="width: auto;">
 			{#each data.categories as c (c)}
-				<option value={c}>{c}</option>
+				<option value={c}>{$t(c)}</option>
 			{/each}
 		</select>
-		<button class="btn btn--primary" type="submit">Add</button>
+		<button class="btn btn--primary" type="submit">{$t('Add')}</button>
 	</form>
 </div>
 

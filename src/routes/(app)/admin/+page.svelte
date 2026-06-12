@@ -2,6 +2,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { slide } from 'svelte/transition';
 	import { authClient } from '$lib/auth-client';
+	import { t } from '$lib/i18n';
 
 	let { data } = $props();
 
@@ -19,7 +20,7 @@
 		const { error: err } = await fn();
 		busy = '';
 		if (err) {
-			error = err.message ?? 'Action failed';
+			error = err.message ?? $t('Action failed');
 			return;
 		}
 		await invalidateAll();
@@ -47,12 +48,12 @@
 	}
 </script>
 
-<svelte:head><title>Users — Baskets</title></svelte:head>
+<svelte:head><title>{$t('Users')} — Baskets</title></svelte:head>
 
 <div class="u-between" style="margin-bottom: var(--sp-4); flex-wrap: wrap;">
-	<h2>Users</h2>
+	<h2>{$t('Users')}</h2>
 	<button class="btn btn--primary" onclick={() => (showCreate = !showCreate)}>
-		{showCreate ? 'Cancel' : '+ New user'}
+		{showCreate ? $t('Cancel') : $t('+ New user')}
 	</button>
 </div>
 
@@ -64,27 +65,27 @@
 	<div class="card" style="margin-bottom: var(--sp-4); max-width: 560px;" transition:slide={{ duration: 150 }}>
 		<form onsubmit={createUser}>
 			<div class="field">
-				<label class="label" for="n">Name</label>
+				<label class="label" for="n">{$t('Name')}</label>
 				<input id="n" class="input" required bind:value={newName} />
 			</div>
 			<div class="field">
-				<label class="label" for="e">Email</label>
+				<label class="label" for="e">{$t('Email')}</label>
 				<input id="e" class="input" type="email" required bind:value={newEmail} />
 			</div>
 			<div class="field">
-				<label class="label" for="p">Password</label>
+				<label class="label" for="p">{$t('Password')}</label>
 				<input id="p" class="input" type="text" minlength="8" required bind:value={newPassword} />
-				<div class="hint">Share it with the user; they can change it later.</div>
+				<div class="hint">{$t('Share it with the user; they can change it later.')}</div>
 			</div>
 			<div class="field">
-				<label class="label" for="r">Role</label>
+				<label class="label" for="r">{$t('Role')}</label>
 				<select id="r" class="select" bind:value={newRole}>
-					<option value="user">user</option>
-					<option value="admin">admin</option>
+					<option value="user">{$t('user')}</option>
+					<option value="admin">{$t('admin')}</option>
 				</select>
 			</div>
 			<button class="btn btn--primary" type="submit" disabled={busy === 'create'}>
-				{busy === 'create' ? 'Creating…' : 'Create user'}
+				{busy === 'create' ? $t('Creating…') : $t('Create user')}
 			</button>
 		</form>
 	</div>
@@ -94,12 +95,12 @@
 	<table>
 		<thead>
 			<tr>
-				<th>Name</th>
-				<th>Email</th>
-				<th>Role</th>
+				<th>{$t('Name')}</th>
+				<th>{$t('Email')}</th>
+				<th>{$t('Role')}</th>
 				<th>2FA</th>
-				<th>Status</th>
-				<th>Actions</th>
+				<th>{$t('Status')}</th>
+				<th>{$t('Actions')}</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -107,24 +108,24 @@
 				<tr class:banned={u.banned}>
 					<td>
 						{u.name}
-						{#if isSelf(u.id)}<span class="badge">you</span>{/if}
+						{#if isSelf(u.id)}<span class="badge">{$t('you')}</span>{/if}
 					</td>
 					<td class="mono u-small">{u.email}</td>
 					<td>
 						<span class="badge" class:badge--inverted={u.role === 'admin'}>
-							{u.role ?? 'user'}
+							{$t(u.role ?? 'user')}
 						</span>
 					</td>
 					<td>
 						<span class="badge" class:badge--success={u.twoFactorEnabled}>
-							{u.twoFactorEnabled ? 'on' : 'off'}
+							{u.twoFactorEnabled ? $t('on') : $t('off')}
 						</span>
 					</td>
 					<td>
 						{#if u.banned}
-							<span class="badge badge--error">banned</span>
+							<span class="badge badge--error">{$t('banned')}</span>
 						{:else}
-							<span class="badge badge--success">active</span>
+							<span class="badge badge--success">{$t('active')}</span>
 						{/if}
 					</td>
 					<td>
@@ -141,7 +142,7 @@
 											})
 										)}
 								>
-									{u.role === 'admin' ? 'Make user' : 'Make admin'}
+									{u.role === 'admin' ? $t('Make user') : $t('Make admin')}
 								</button>
 								{#if u.banned}
 									<button
@@ -149,7 +150,7 @@
 										disabled={busy === u.id}
 										onclick={() => run(u.id, () => authClient.admin.unbanUser({ userId: u.id }))}
 									>
-										Unban
+										{$t('Unban')}
 									</button>
 								{:else}
 									<button
@@ -157,18 +158,18 @@
 										disabled={busy === u.id}
 										onclick={() => run(u.id, () => authClient.admin.banUser({ userId: u.id }))}
 									>
-										Ban
+										{$t('Ban')}
 									</button>
 								{/if}
 								<button
 									class="btn btn--sm btn--danger"
 									disabled={busy === u.id}
 									onclick={() => {
-										if (confirm(`Permanently remove ${u.email}?`))
+										if (confirm($t('Permanently remove {email}?', { email: u.email })))
 											run(u.id, () => authClient.admin.removeUser({ userId: u.id }));
 									}}
 								>
-									Remove
+									{$t('Remove')}
 								</button>
 							</div>
 						{/if}

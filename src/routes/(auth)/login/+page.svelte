@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { authClient } from '$lib/auth-client';
+	import { t } from '$lib/i18n';
 
 	let email = $state('');
 	let password = $state('');
@@ -20,7 +21,7 @@
 		loading = false;
 
 		if (err) {
-			error = err.message ?? 'Sign in failed';
+			error = err.message ?? $t('Sign in failed');
 			return;
 		}
 
@@ -34,11 +35,11 @@
 	}
 </script>
 
-<svelte:head><title>Sign in — Baskets</title></svelte:head>
+<svelte:head><title>{$t('Sign in')} — Baskets</title></svelte:head>
 
-<h3>Sign in</h3>
+<h3>{$t('Sign in')}</h3>
 <p class="u-small u-muted" style="margin-bottom: var(--sp-4);">
-	Project management without the polish.
+	{$t('Project management without the polish.')}
 </p>
 
 {#if error}
@@ -47,7 +48,7 @@
 
 <form onsubmit={submit}>
 	<div class="field">
-		<label class="label" for="email">Email</label>
+		<label class="label" for="email">{$t('Email')}</label>
 		<input
 			id="email"
 			class="input"
@@ -58,7 +59,7 @@
 		/>
 	</div>
 	<div class="field">
-		<label class="label" for="password">Password</label>
+		<label class="label" for="password">{$t('Password')}</label>
 		<input
 			id="password"
 			class="input"
@@ -69,10 +70,10 @@
 		/>
 	</div>
 	<button class="btn btn--primary" type="submit" disabled={loading} style="width: 100%;">
-		{loading ? 'Signing in…' : 'Sign in'}
+		{loading ? $t('Signing in…') : $t('Sign in')}
 	</button>
 </form>
 
 <p class="u-small" style="margin-top: var(--sp-3);">
-	No account? <a href="/register">Register</a>
+	{$t('No account?')} <a href="/register">{$t('Register')}</a>
 </p>

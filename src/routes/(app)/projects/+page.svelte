@@ -1,17 +1,18 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { fly } from 'svelte/transition';
+	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
 	let showCreate = $state(false);
 </script>
 
-<svelte:head><title>Projects — Baskets</title></svelte:head>
+<svelte:head><title>{$t('Projects')} — Baskets</title></svelte:head>
 
 <div class="u-between" style="margin-bottom: var(--sp-4); flex-wrap: wrap;">
-	<h2>Projects</h2>
+	<h2>{$t('Projects')}</h2>
 	<button class="btn btn--primary" onclick={() => (showCreate = !showCreate)}>
-		{showCreate ? 'Cancel' : '+ New project'}
+		{showCreate ? $t('Cancel') : $t('+ New project')}
 	</button>
 </div>
 
@@ -23,22 +24,22 @@
 	<div class="card" style="margin-bottom: var(--sp-4);" transition:fly={{ y: -8, duration: 150 }}>
 		<form method="POST" action="?/create" use:enhance>
 			<div class="field">
-				<label class="label" for="name">Name</label>
+				<label class="label" for="name">{$t('Name')}</label>
 				<input id="name" name="name" class="input" required maxlength="120" />
 			</div>
 			<div class="field">
-				<label class="label" for="description">Description</label>
+				<label class="label" for="description">{$t('Description')}</label>
 				<textarea id="description" name="description" class="textarea" rows="2"></textarea>
 			</div>
-			<button class="btn btn--primary" type="submit">Create project</button>
+			<button class="btn btn--primary" type="submit">{$t('Create project')}</button>
 		</form>
 	</div>
 {/if}
 
 {#if data.projects.length === 0}
 	<div class="card" style="text-align: center; padding: var(--sp-6);">
-		<h3 style="margin-bottom: var(--sp-2);">Nothing here</h3>
-		<p class="u-muted">Create your first project to get started.</p>
+		<h3 style="margin-bottom: var(--sp-2);">{$t('Nothing here')}</h3>
+		<p class="u-muted">{$t('Create your first project to get started.')}</p>
 	</div>
 {:else}
 	<div class="grid">
@@ -53,10 +54,10 @@
 					<p class="u-small u-muted desc">{p.description}</p>
 				{/if}
 				<div class="meta">
-					<span class="badge">{p.taskCount} tasks</span>
+					<span class="badge">{$t('{n} tasks', { n: p.taskCount })}</span>
 					{#if p.taskCount > 0}
 						<span class="badge" class:badge--success={p.doneCount === p.taskCount}>
-							{p.doneCount}/{p.taskCount} done
+							{$t('{done}/{total} done', { done: p.doneCount, total: p.taskCount })}
 						</span>
 					{/if}
 				</div>

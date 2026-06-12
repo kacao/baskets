@@ -3,6 +3,7 @@
 	import { fly } from 'svelte/transition';
 	import StatusSelect from '$lib/components/StatusSelect.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
+	import { t } from '$lib/i18n';
 
 	type Task = {
 		id: string;
@@ -68,11 +69,11 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 
-<aside class="panel" transition:fly={{ x: 16, duration: 150 }} aria-label="Task details">
+<aside class="panel" transition:fly={{ x: 16, duration: 150 }} aria-label={$t('Task details')}>
 	<div class="panel-head">
 		<StatusSelect taskId={task.id} statusId={task.statusId} {statuses} canEdit={editable} />
 		<span style="flex: 1;"></span>
-		<button class="x-btn" onclick={onClose} aria-label="Close panel">×</button>
+		<button class="x-btn" onclick={onClose} aria-label={$t('Close panel')}>×</button>
 	</div>
 
 	{#if editable}
@@ -85,7 +86,7 @@
 					value={task.title}
 					required
 					maxlength="240"
-					aria-label="Title"
+					aria-label={$t('Title')}
 				/>
 			</div>
 			<div class="field">
@@ -93,43 +94,43 @@
 					name="description"
 					class="textarea"
 					rows="4"
-					placeholder="Add a description…"
-					aria-label="Description">{task.description ?? ''}</textarea
+					placeholder={$t('Add a description…')}
+					aria-label={$t('Description')}>{task.description ?? ''}</textarea
 				>
 			</div>
 			<div class="grid2">
 				<div class="field">
-					<span class="label">Priority</span>
+					<span class="label">{$t('Priority')}</span>
 					<select name="priority" class="select">
 						{#each ['none', 'low', 'medium', 'high', 'urgent'] as p (p)}
-							<option value={p} selected={task.priority === p}>{p}</option>
+							<option value={p} selected={task.priority === p}>{$t(p)}</option>
 						{/each}
 					</select>
 				</div>
 				<div class="field">
-					<span class="label">Assignee</span>
+					<span class="label">{$t('Assignee')}</span>
 					<select name="assigneeId" class="select">
-						<option value="">— unassigned</option>
+						<option value="">{$t('— unassigned')}</option>
 						{#each users as u (u.id)}
 							<option value={u.id} selected={task.assigneeId === u.id}>{u.name}</option>
 						{/each}
 					</select>
 				</div>
 				<div class="field">
-					<span class="label">Milestone</span>
+					<span class="label">{$t('Milestone')}</span>
 					<select name="milestoneId" class="select">
-						<option value="">— none</option>
+						<option value="">{$t('— none')}</option>
 						{#each milestones as m (m.id)}
 							<option value={m.id} selected={task.milestoneId === m.id}>{m.name}</option>
 						{/each}
 					</select>
 				</div>
 				<div class="field">
-					<span class="label">Due date</span>
+					<span class="label">{$t('Due date')}</span>
 					<input name="dueDate" type="date" class="input" value={fmtDate(task.dueDate) ?? ''} />
 				</div>
 				<div class="field">
-					<span class="label">Order</span>
+					<span class="label">{$t('Order')}</span>
 					<input
 						name="order"
 						type="number"
@@ -140,12 +141,12 @@
 					/>
 				</div>
 				<div class="field" style="grid-column: 1 / -1;">
-					<span class="label">Location (lat, lng)</span>
+					<span class="label">{$t('Location (lat, lng)')}</span>
 					<input name="location" class="input mono" placeholder="52.37, 4.90" value={task.location ?? ''} />
 				</div>
 			</div>
 			<div class="u-flex" style="margin-bottom: var(--sp-3);">
-				<button class="btn btn--sm btn--primary" type="submit">Save</button>
+				<button class="btn btn--sm btn--primary" type="submit">{$t('Save')}</button>
 			</div>
 		</form>
 		<form
@@ -158,11 +159,11 @@
 				}}
 			style="margin-bottom: var(--sp-3);"
 			onsubmit={(e) => {
-				if (!confirm('Delete this task and its sub-tasks?')) e.preventDefault();
+				if (!confirm($t('Delete this task and its sub-tasks?'))) e.preventDefault();
 			}}
 		>
 			<input type="hidden" name="id" value={task.id} />
-			<button class="btn btn--sm btn--danger" type="submit">Delete task</button>
+			<button class="btn btn--sm btn--danger" type="submit">{$t('Delete task')}</button>
 		</form>
 	{:else}
 		<h3 style="margin-bottom: var(--sp-2); overflow-wrap: anywhere;">{task.title}</h3>
@@ -187,7 +188,7 @@
 
 	{#if editable && labels.length > 0}
 		<div class="section">
-			<span class="label">Labels</span>
+			<span class="label">{$t('Labels')}</span>
 			<div class="chips-row">
 				{#each labels as l (l.id)}
 					{@const active = labelsOf(task.id).some((x) => x!.id === l.id)}
@@ -201,7 +202,7 @@
 		</div>
 	{:else if labelsOf(task.id).length > 0}
 		<div class="section">
-			<span class="label">Labels</span>
+			<span class="label">{$t('Labels')}</span>
 			<div class="chips-row">
 				{#each labelsOf(task.id) as l (l!.id)}
 					<span class="badge">{l!.name}</span>
@@ -211,14 +212,14 @@
 	{/if}
 
 	<div class="section">
-		<span class="label">Blocked by</span>
+		<span class="label">{$t('Blocked by')}</span>
 		<div class="chips-row">
 			{#each deps as d (d!.id)}
 				{#if editable}
 					<form method="POST" action="?/removeTaskDep" use:enhance>
 						<input type="hidden" name="taskId" value={task.id} />
 						<input type="hidden" name="dependsOnId" value={d!.id} />
-						<button class="chip chip--on" type="submit" title="Remove dependency">
+						<button class="chip chip--on" type="submit" title={$t('Remove dependency')}>
 							{d!.title} ×
 						</button>
 					</form>
@@ -226,7 +227,7 @@
 					<span class="badge">⛓ {d!.title}</span>
 				{/if}
 			{:else}
-				<span class="u-tiny u-muted">none</span>
+				<span class="u-tiny u-muted">{$t('none')}</span>
 			{/each}
 			{#if editable}
 				<form method="POST" action="?/addTaskDep" use:enhance>
@@ -234,12 +235,12 @@
 					<select
 						class="select select--mini"
 						name="dependsOnId"
-						aria-label="Add dependency"
+						aria-label={$t('Add dependency')}
 						onchange={(e) => {
 							if (e.currentTarget.value) e.currentTarget.form?.requestSubmit();
 						}}
 					>
-						<option value="">+ add</option>
+						<option value="">{$t('+ add')}</option>
 						{#each tasks.filter((x) => !x.parentId && x.id !== task.id && !deps.some((d) => d!.id === x.id)) as opt (opt.id)}
 							<option value={opt.id}>{opt.title}</option>
 						{/each}
@@ -250,7 +251,7 @@
 	</div>
 
 	<div class="section">
-		<span class="label">Sub-tasks</span>
+		<span class="label">{$t('Sub-tasks')}</span>
 		{#each subs as s (s.id)}
 			<div class="sub-row" class:is-done={cat(s.statusId) === 'done'}>
 				<StatusSelect taskId={s.id} statusId={s.statusId} {statuses} canEdit={canEditTask(s)} />
@@ -258,12 +259,12 @@
 				{#if canEditTask(s)}
 					<form method="POST" action="?/deleteTask" use:enhance>
 						<input type="hidden" name="id" value={s.id} />
-						<button class="x-btn" type="submit" aria-label="Delete sub-task">×</button>
+						<button class="x-btn" type="submit" aria-label={$t('Delete sub-task')}>×</button>
 					</form>
 				{/if}
 			</div>
 		{:else}
-			<p class="u-tiny u-muted">none</p>
+			<p class="u-tiny u-muted">{$t('none')}</p>
 		{/each}
 		{#if editable}
 			<form method="POST" action="?/createTask" use:enhance class="sub-add">
@@ -271,12 +272,12 @@
 				<input
 					name="title"
 					class="input"
-					placeholder="Add a sub-task…"
+					placeholder={$t('Add a sub-task…')}
 					required
 					maxlength="240"
 					autocomplete="off"
 				/>
-				<button class="btn btn--sm" type="submit">Add</button>
+				<button class="btn btn--sm" type="submit">{$t('Add')}</button>
 			</form>
 		{/if}
 	</div>

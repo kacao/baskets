@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authClient } from '$lib/auth-client';
+	import { t } from '$lib/i18n';
 
 	let { data, children } = $props();
 	let menuOpen = $state(false);
@@ -27,7 +28,7 @@
 		<div class="u-flex">
 			<button
 				class="hamburger"
-				aria-label="Toggle menu"
+				aria-label={$t('Toggle menu')}
 				aria-expanded={menuOpen}
 				onclick={() => (menuOpen = !menuOpen)}
 			>
@@ -37,10 +38,10 @@
 		</div>
 		<div class="u-flex">
 			{#if data.user?.role === 'admin'}
-				<span class="badge badge--inverted">admin</span>
+				<span class="badge badge--inverted">{$t('admin')}</span>
 			{/if}
 			<span class="u-small u-muted topbar-user">{data.user?.name}</span>
-			<button class="btn btn--sm" onclick={signOut}>Sign out</button>
+			<button class="btn btn--sm" onclick={signOut}>{$t('Sign out')}</button>
 		</div>
 	</header>
 
@@ -53,7 +54,7 @@
 					class:active={isActive(item.href)}
 					onclick={() => (menuOpen = false)}
 				>
-					{item.label}
+					{$t(item.label)}
 				</a>
 				{#if item.href === '/projects' && data.projects.length > 0}
 					<div class="nav-sub">
@@ -77,7 +78,7 @@
 							class:active={page.url.pathname === '/settings/statuses'}
 							onclick={() => (menuOpen = false)}
 						>
-							Statuses
+							{$t('Statuses')}
 						</a>
 						<a
 							href="/settings/labels"
@@ -85,7 +86,7 @@
 							class:active={page.url.pathname === '/settings/labels'}
 							onclick={() => (menuOpen = false)}
 						>
-							Labels
+							{$t('Labels')}
 						</a>
 					</div>
 				{/if}
@@ -97,7 +98,7 @@
 					class:active={isActive('/admin')}
 					onclick={() => (menuOpen = false)}
 				>
-					Users
+					{$t('Users')}
 				</a>
 			{/if}
 		</nav>
