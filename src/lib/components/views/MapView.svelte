@@ -40,6 +40,9 @@
 				const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
 				map.fitBounds(bounds.pad(0.4), { maxZoom: 12 });
 				for (const p of points) {
+					// bindPopup renders HTML — pass a text node so task titles can't inject markup
+					const node = document.createElement('div');
+					node.textContent = p.task.title;
 					L.circleMarker([p.lat, p.lng], {
 						radius: 7,
 						color: '#0a0a0a',
@@ -48,7 +51,7 @@
 						fillOpacity: 0.9
 					})
 						.addTo(map)
-						.bindPopup(p.task.title);
+						.bindPopup(node);
 				}
 			} else {
 				map.setView([20, 0], 2);

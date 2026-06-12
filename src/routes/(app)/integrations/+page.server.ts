@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { integration } from '$lib/server/db/schema';
 import { SLACK_WEBHOOK_HOST, sendSlackMessage, type SlackConfig } from '$lib/server/integrations/slack';
+import { isAdmin } from '$lib/server/permissions';
 import type { Actions, PageServerLoad } from './$types';
 
 async function getSlack() {
@@ -27,7 +28,7 @@ export const load: PageServerLoad = async () => {
 
 export const actions: Actions = {
 	saveSlack: async ({ request, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!locals.user || !isAdmin(locals.user)) return fail(403, { message: 'Admins only' });
 
 		const form = await request.formData();
 		const webhookUrl = String(form.get('webhookUrl') ?? '').trim();
@@ -60,7 +61,7 @@ export const actions: Actions = {
 	},
 
 	toggleSlack: async ({ locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!locals.user || !isAdmin(locals.user)) return fail(403, { message: 'Admins only' });
 
 		const existing = await getSlack();
 		if (!existing) return fail(404, { message: 'Slack is not connected' });
@@ -74,14 +75,14 @@ export const actions: Actions = {
 	},
 
 	removeSlack: async ({ locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!locals.user || !isAdmin(locals.user)) return fail(403, { message: 'Admins only' });
 
 		await db.delete(integration).where(eq(integration.type, 'slack'));
 		return { removed: true };
 	},
 
 	testSlack: async ({ locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!locals.user || !isAdmin(locals.user)) return fail(403, { message: 'Admins only' });
 
 		const existing = await getSlack();
 		if (!existing) return fail(404, { message: 'Slack is not connected' });

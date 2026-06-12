@@ -7,6 +7,7 @@
 	let loading = $state(false);
 
 	const connected = $derived(Boolean(data.slack));
+	const admin = $derived(data.user?.role === 'admin');
 
 	const submit = () => {
 		loading = true;
@@ -44,7 +45,11 @@
 		<div class="alert alert--success" role="status">Test message sent — check your channel.</div>
 	{/if}
 
-	{#if connected && !editing}
+	{#if !admin}
+		<p class="u-small u-muted">
+			{connected ? 'Connected.' : 'Not connected.'} Only admins can manage integrations.
+		</p>
+	{:else if connected && !editing}
 		<p class="u-small" style="margin-bottom: var(--sp-3);">
 			<strong>Webhook:</strong> <span class="mono">{data.slack?.webhookHint}</span>
 		</p>
