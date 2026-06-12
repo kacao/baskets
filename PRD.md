@@ -39,7 +39,10 @@ Single tenant: reads and task work are open to all signed-in users. Structure (p
 
 ### Statuses
 - App-wide pool, customizable at Settings → Statuses (admin): five built-ins (Backlog, Planned, In progress, Completed, Canceled) plus custom ones, each with a behavior category (`todo | active | done | canceled`).
-- Each project selects which statuses its tasks may use.
+- Each project selects which app-wide statuses its tasks may use, and can additionally define its own project-scoped statuses (add/edit/delete in the project settings pane; auto-eligible, deleted with the project).
+
+### Project settings pane
+- Per-project settings at /projects/:id/settings (project editors): general (name/description), statuses (eligibility + project-scoped CRUD), labels, dependencies, milestones, edit grants (admin), and project deletion.
 
 ### Labels
 - App-wide labels managed at Settings → Labels (admin); optional label groups. Attachable to projects and tasks.

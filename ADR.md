@@ -134,6 +134,8 @@ Architecture decision records. One section per decision; status reflects current
 
 **Consequences:** Renames are free; behavior keys off category only. Status management is admin-only. The REST contract changed from fixed strings to names/ids (breaking; acceptable pre-release).
 
+**Update (2026-06-12):** Statuses are now two-scope: `status.projectId` null = app-wide (managed at /settings/statuses, admin), set = owned by one project (managed in the project's settings pane by project editors; add/edit/delete, auto-eligible on creation, cascade-deleted with the project, delete blocked while tasks use it). The DB unique constraint on `name` was dropped — uniqueness is enforced in code per scope (globals unique among globals; a project status must not collide with globals or siblings). Each project also gained a dedicated settings pane at /projects/[id]/settings (general, statuses, labels, dependencies, milestones, grants, delete) replacing the inline Edit card.
+
 ---
 
 ## ADR-012: Notion-style project views, config as JSON

@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, isNull } from 'drizzle-orm';
 import { db } from './db';
 import { projectStatus, status } from './db/schema';
 
@@ -37,8 +37,22 @@ export async function ensureDefaultStatuses() {
 	ensured = true;
 }
 
+/** App-wide statuses only (project-scoped ones live with their project). */
 export async function listStatuses() {
-	return db.select().from(status).orderBy(asc(status.position), asc(status.createdAt));
+	return db
+		.select()
+		.from(status)
+		.where(isNull(status.projectId))
+		.orderBy(asc(status.position), asc(status.createdAt));
+}
+
+/** Statuses owned by one project. */
+export async function listProjectCustomStatuses(projectId: string) {
+	return db
+		.select()
+		.from(status)
+		.where(eq(status.projectId, projectId))
+		.orderBy(asc(status.position), asc(status.createdAt));
 }
 
 /** Statuses a project allows, in global order. Falls back to all if none configured. */

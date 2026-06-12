@@ -17,8 +17,8 @@ import {
 	view
 } from '$lib/server/db/schema';
 import { dispatchEvent } from '$lib/server/integrations';
-import { canEditProject, canEditTask, canEditView, isAdmin, listProjectGrants } from '$lib/server/permissions';
-import { listProjectStatuses, listStatuses } from '$lib/server/statuses';
+import { canEditProject, canEditTask, canEditView, isAdmin } from '$lib/server/permissions';
+import { listProjectStatuses } from '$lib/server/statuses';
 import { VIEW_TYPES, type ViewType } from '$lib/server/projects';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -52,7 +52,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		users,
 		views,
 		eligibleStatuses,
-		allStatuses,
 		milestones,
 		labels,
 		labelGroups,
@@ -73,7 +72,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.where(eq(view.projectId, params.id))
 			.orderBy(asc(view.position), asc(view.createdAt)),
 		listProjectStatuses(params.id),
-		listStatuses(),
 		db
 			.select()
 			.from(milestone)
@@ -109,15 +107,12 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		editableViews[v.id] = canEditProj || (await canEditView(locals.user, v.id));
 	}
 
-	const grants = admin ? await listProjectGrants(params.id) : [];
-
 	return {
 		project: proj,
 		tasks,
 		users,
 		views,
 		statuses: eligibleStatuses,
-		allStatuses,
 		milestones,
 		labels,
 		labelGroups,
@@ -126,8 +121,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		projectDependsOn: projDeps.map((d) => d.dependsOnId),
 		allProjects,
 		taskDeps,
-		perm: { admin, project: canEditProj, views: editableViews },
-		grants
+		perm: { admin, project: canEditProj, views: editableViews }
 	};
 };
 
@@ -481,51 +475,6 @@ export const actions: Actions = {
 		return { success: true };
 	},
 
-	addProjectDep: async ({ request, params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-
-		const form = await request.formData();
-		const dependsOnId = String(form.get('dependsOnId') ?? '');
-		if (!dependsOnId || dependsOnId === params.id)
-			return fail(400, { message: 'Invalid dependency' });
-
-		const [target] = await db.select().from(project).where(eq(project.id, dependsOnId));
-		if (!target) return fail(400, { message: 'Unknown project' });
-
-		const all = await db.select().from(projectDependency);
-		const edges = new Map<string, string[]>();
-		for (const e of all)
-			edges.set(e.projectId, [...(edges.get(e.projectId) ?? []), e.dependsOnId]);
-		if (createsCycle(edges, params.id, dependsOnId))
-			return fail(400, { message: 'That dependency would create a cycle' });
-
-		await db
-			.insert(projectDependency)
-			.values({ projectId: params.id, dependsOnId })
-			.onConflictDoNothing();
-		return { success: true };
-	},
-
-	removeProjectDep: async ({ request, params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-
-		const form = await request.formData();
-		const dependsOnId = String(form.get('dependsOnId') ?? '');
-		await db
-			.delete(projectDependency)
-			.where(
-				and(
-					eq(projectDependency.projectId, params.id),
-					eq(projectDependency.dependsOnId, dependsOnId)
-				)
-			);
-		return { success: true };
-	},
-
 	/* ------------------------------ views ------------------------------ */
 
 	/** Enables a view type for the project (one view per type; Table is on by default). */
@@ -615,174 +564,4 @@ export const actions: Actions = {
 		return { success: true };
 	},
 
-	/* ---------------------------- milestones ---------------------------- */
-
-	createMilestone: async ({ request, params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-
-		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		const targetDateRaw = String(form.get('targetDate') ?? '');
-
-		if (!name) return fail(400, { message: 'Milestone name is required' });
-
-		const now = new Date();
-		await db.insert(milestone).values({
-			id: crypto.randomUUID(),
-			projectId: params.id,
-			name,
-			targetDate: targetDateRaw ? new Date(targetDateRaw + 'T00:00:00') : null,
-			position: now.getTime(),
-			createdAt: now,
-			updatedAt: now
-		});
-		return { success: true };
-	},
-
-	deleteMilestone: async ({ request, params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		await db
-			.delete(milestone)
-			.where(and(eq(milestone.id, id), eq(milestone.projectId, params.id)));
-		return { success: true };
-	},
-
-	/* ------------------------- project settings ------------------------- */
-
-	updateProject: async ({ request, params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-
-		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		const description = String(form.get('description') ?? '').trim();
-
-		if (!name) return fail(400, { message: 'Project name is required' });
-
-		await db
-			.update(project)
-			.set({ name, description: description || null, updatedAt: new Date() })
-			.where(eq(project.id, params.id));
-
-		return { success: true };
-	},
-
-	updateProjectStatuses: async ({ request, params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-
-		const form = await request.formData();
-		const statusIds = form.getAll('statusIds').map(String).filter(Boolean);
-		if (statusIds.length === 0)
-			return fail(400, { message: 'A project needs at least one eligible status' });
-
-		const all = await listStatuses();
-		const valid = new Set(all.map((s) => s.id));
-		if (!statusIds.every((id) => valid.has(id)))
-			return fail(400, { message: 'Unknown status' });
-
-		// Block removing a status still used by this project's tasks
-		const inUse = await db
-			.select({ statusId: task.statusId })
-			.from(task)
-			.where(eq(task.projectId, params.id));
-		const keep = new Set(statusIds);
-		const blocked = inUse.find((t) => !keep.has(t.statusId));
-		if (blocked)
-			return fail(400, { message: 'Cannot remove a status still used by tasks in this project' });
-
-		await db.delete(projectStatus).where(eq(projectStatus.projectId, params.id));
-		await db
-			.insert(projectStatus)
-			.values(statusIds.map((statusId) => ({ projectId: params.id, statusId })));
-		return { success: true };
-	},
-
-	toggleProjectLabel: async ({ request, params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-
-		const form = await request.formData();
-		const labelId = String(form.get('labelId') ?? '');
-
-		const [has] = await db
-			.select()
-			.from(projectLabel)
-			.where(and(eq(projectLabel.projectId, params.id), eq(projectLabel.labelId, labelId)));
-		if (has) {
-			await db
-				.delete(projectLabel)
-				.where(and(eq(projectLabel.projectId, params.id), eq(projectLabel.labelId, labelId)));
-		} else {
-			const [l] = await db.select().from(label).where(eq(label.id, labelId));
-			if (!l) return fail(400, { message: 'Unknown label' });
-			await db.insert(projectLabel).values({ projectId: params.id, labelId });
-		}
-		return { success: true };
-	},
-
-	deleteProject: async ({ params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-		await db.delete(project).where(eq(project.id, params.id));
-		redirect(303, '/projects');
-	},
-
-	/* ---------------------------- permissions ---------------------------- */
-
-	grantPermission: async ({ request, params, locals }) => {
-		if (!locals.user || !isAdmin(locals.user))
-			return fail(403, { message: 'Only admins can grant permissions' });
-
-		const form = await request.formData();
-		const userId = String(form.get('userId') ?? '');
-		const resourceType = String(form.get('resourceType') ?? '');
-		const resourceId = String(form.get('resourceId') ?? '');
-
-		// Tasks are member-editable by default — grants only apply to structure
-		if (!userId || !['project', 'view'].includes(resourceType) || !resourceId)
-			return fail(400, { message: 'Invalid grant' });
-
-		// Resource must belong to this project
-		if (resourceType === 'project' && resourceId !== params.id)
-			return fail(400, { message: 'Invalid grant' });
-		if (resourceType === 'view') {
-			const [v] = await db.select().from(view).where(eq(view.id, resourceId));
-			if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
-		}
-
-		await db
-			.insert(permission)
-			.values({
-				id: crypto.randomUUID(),
-				userId,
-				resourceType,
-				resourceId,
-				grantedBy: locals.user.id,
-				createdAt: new Date()
-			})
-			.onConflictDoNothing();
-		return { success: true };
-	},
-
-	revokePermission: async ({ request, locals }) => {
-		if (!locals.user || !isAdmin(locals.user))
-			return fail(403, { message: 'Only admins can revoke permissions' });
-
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		await db.delete(permission).where(eq(permission.id, id));
-		return { success: true };
-	}
 };

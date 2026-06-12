@@ -238,5 +238,16 @@ registerDictionary('vi', {
 	Board: 'Bảng Kanban',
 	List: 'Danh sách',
 	Dashboard: 'Tổng quan',
-	Map: 'Bản đồ'
+	Map: 'Bản đồ',
+	'Project settings': 'Cài đặt dự án',
+	'General': 'Chung',
+	'Danger zone': 'Vùng nguy hiểm',
+	'Delete project': 'Xóa dự án',
+	'Project statuses': 'Trạng thái của dự án',
+	'No project statuses yet.': 'Chưa có trạng thái riêng của dự án.',
+	'New status…': 'Trạng thái mới…',
+	'Pick which app-wide statuses this project uses, and add statuses that only exist in this project.':
+		'Chọn trạng thái toàn ứng dụng mà dự án này dùng, và thêm trạng thái chỉ tồn tại trong dự án này.',
+	'view': 'khung nhìn',
+	'task': 'công việc',
 });

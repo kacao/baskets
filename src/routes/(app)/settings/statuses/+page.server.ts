@@ -61,6 +61,9 @@ export const actions: Actions = {
 		if (!id || !name) return fail(400, { message: 'Name is required' });
 		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
 
+		const [s] = await db.select().from(status).where(eq(status.id, id));
+		if (!s || s.projectId) return fail(400, { message: 'Not an app-wide status' });
+
 		await db.update(status).set({ name }).where(eq(status.id, id));
 		return { success: true };
 	},
@@ -72,7 +75,7 @@ export const actions: Actions = {
 		const id = String(form.get('id') ?? '');
 
 		const [s] = await db.select().from(status).where(eq(status.id, id));
-		if (!s) return fail(404, { message: 'Status not found' });
+		if (!s || s.projectId) return fail(404, { message: 'Status not found' });
 		if (s.builtIn) return fail(400, { message: 'Built-in statuses cannot be deleted' });
 
 		const [{ n }] = await db

@@ -114,8 +114,11 @@ export const integration = sqliteTable('integration', {
 
 export const status = sqliteTable('status', {
 	id: text('id').primaryKey(),
-	name: text('name').notNull().unique(),
+	// uniqueness enforced in code: global names unique among globals,
+	// project-scoped names unique within (project ∪ globals)
+	name: text('name').notNull(),
 	category: text('category').notNull().default('todo'), // todo | active | done | canceled
+	projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }), // null = app-wide
 	position: integer('position').notNull().default(0),
 	builtIn: integer('built_in', { mode: 'boolean' }).notNull().default(false),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
