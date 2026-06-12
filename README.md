@@ -1,6 +1,6 @@
 # Baskets
 
-Simple single-tenant project management — projects → tasks → sub-tasks. Linear/Notion-inspired, styled with the [RawBlock](https://designmd.ai/chef/rawblock) brutalist design system (see `design.md`).
+Simple single-tenant project management — projects → tasks → sub-tasks. Linear/Notion-inspired, styled with the [StudioBlank](https://designmd.ai/chef/studioblank-design-system) ultra-minimal design system (see `design.md`).
 
 ## Stack
 
