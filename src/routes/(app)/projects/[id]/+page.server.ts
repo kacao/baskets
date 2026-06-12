@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
 	label,
@@ -175,7 +175,13 @@ export const actions: Actions = {
 		}
 
 		const eligible = await listProjectStatuses(params.id);
-		const defaultStatus = eligible.find((s) => s.category === 'todo') ?? eligible[0];
+		const requestedStatusId = String(form.get('statusId') ?? '');
+		let defaultStatus = requestedStatusId
+			? eligible.find((s) => s.id === requestedStatusId)
+			: undefined;
+		if (requestedStatusId && !defaultStatus)
+			return fail(400, { message: 'Status not eligible for this project' });
+		defaultStatus ??= eligible.find((s) => s.category === 'todo') ?? eligible[0];
 		if (!defaultStatus) return fail(400, { message: 'Project has no eligible statuses' });
 
 		const now = new Date();
@@ -233,6 +239,89 @@ export const actions: Actions = {
 		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'done';
 		if (target.category === 'done' && !wasDone) {
 			const [proj] = await db.select().from(project).where(eq(project.id, existing.projectId));
+			void dispatchEvent({
+				type: 'task.completed',
+				actor: locals.user.name,
+				projectName: proj?.name ?? 'Unknown project',
+				taskTitle: existing.title
+			});
+		}
+
+		return { success: true };
+	},
+
+	/** Board drag-and-drop: move a task to a status column, ordered before `beforeId` (or end). */
+	moveTask: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const statusId = String(form.get('statusId') ?? '');
+		const beforeId = String(form.get('beforeId') ?? '') || null;
+
+		const existing = await getTask(id);
+		if (!existing || existing.projectId !== params.id || existing.parentId)
+			return fail(400, { message: 'Invalid task' });
+		if (!(await canEditTask(locals.user, existing)))
+			return fail(403, { message: 'No edit permission on this task' });
+
+		const eligible = await listProjectStatuses(params.id);
+		const target = eligible.find((s) => s.id === statusId);
+		if (!target) return fail(400, { message: 'Status not eligible for this project' });
+
+		const colTasks = (
+			await db
+				.select()
+				.from(task)
+				.where(
+					and(
+						eq(task.projectId, params.id),
+						eq(task.statusId, statusId),
+						isNull(task.parentId)
+					)
+				)
+				.orderBy(asc(task.position), asc(task.createdAt))
+		).filter((t) => t.id !== id);
+
+		let idx = beforeId ? colTasks.findIndex((t) => t.id === beforeId) : colTasks.length;
+		if (idx < 0) idx = colTasks.length;
+		const prev = colTasks[idx - 1]?.position;
+		const next = colTasks[idx]?.position;
+
+		let position: number;
+		if (prev === undefined && next === undefined) {
+			position = Date.now();
+		} else if (prev === undefined) {
+			position = next! - 1024;
+		} else if (next === undefined) {
+			position = prev + 1024;
+		} else if (next - prev > 1) {
+			position = Math.floor((prev + next) / 2);
+		} else {
+			// no gap left between neighbors — renumber the column
+			for (let i = 0; i < colTasks.length; i++) {
+				await db
+					.update(task)
+					.set({ position: (i + (i >= idx ? 1 : 0)) * 1024 })
+					.where(eq(task.id, colTasks[i].id));
+			}
+			position = idx * 1024;
+		}
+
+		await db
+			.update(task)
+			.set({ statusId, position, updatedAt: new Date() })
+			.where(eq(task.id, id));
+
+		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'done';
+		if (target.category === 'done') {
+			await db
+				.update(task)
+				.set({ statusId, updatedAt: new Date() })
+				.where(eq(task.parentId, id));
+		}
+		if (target.category === 'done' && !wasDone) {
+			const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 			void dispatchEvent({
 				type: 'task.completed',
 				actor: locals.user.name,

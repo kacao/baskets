@@ -144,7 +144,9 @@ Architecture decision records. One section per decision; status reflects current
 
 **Decision:** `view` table per project (`type`, `config` JSON, `isDefault`). Invariants: every project gets a default Table view at creation; the last view can't be deleted. Active view selected via `?view=` query param. Config is type-specific and intentionally schemaless JSON (table: visible columns + status filter); unknown keys are ignored. One Svelte component per view type under `src/lib/components/views/`.
 
-**Consequences:** New view types = new component + enum entry; config migrations are unnecessary because readers treat config as optional hints. Board has no drag-and-drop yet (status changed via inline select) — revisit if demand appears.
+**Consequences:** New view types = new component + enum entry; config migrations are unnecessary because readers treat config as optional hints.
+
+**Update (2026-06-12):** Board gained Linear-style drag-and-drop (native HTML5 DnD, no library): cards move between/within columns through a `moveTask` action that orders by `beforeId` with midpoint positioning and a full-column renumber when gaps run out. Also per-column quick-add, category-glyph headers with counts, priority icons, assignee initials, and card click → table-view deep link (`?task=`).
 
 ---
 

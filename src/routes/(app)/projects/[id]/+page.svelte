@@ -432,7 +432,15 @@
 		{canEditTask}
 	/>
 {:else if activeView?.type === 'board'}
-	<BoardView tasks={data.tasks} statuses={data.statuses} users={data.users} {canEditTask} />
+	<BoardView
+		tasks={data.tasks}
+		statuses={data.statuses}
+		users={data.users}
+		labels={data.labels}
+		taskLabels={data.taskLabels}
+		tableViewId={data.views.find((v) => v.type === 'table')?.id ?? null}
+		{canEditTask}
+	/>
 {:else if activeView?.type === 'dashboard'}
 	<DashboardView tasks={data.tasks} statuses={data.statuses} milestones={data.milestones} />
 {:else if activeView?.type === 'map'}

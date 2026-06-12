@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { page } from '$app/state';
 	import { slide, fly } from 'svelte/transition';
 	import StatusSelect from '$lib/components/StatusSelect.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
@@ -41,7 +42,9 @@
 	} = $props();
 
 	let filter = $state<string>('all');
-	let expanded = $state<Record<string, boolean>>({});
+	// ?task= deep-links a task open (used by board card clicks)
+	const linkedTask = page.url.searchParams.get('task');
+	let expanded = $state<Record<string, boolean>>(linkedTask ? { [linkedTask]: true } : {});
 	let editing = $state<string | null>(null);
 
 	const show = (key: string) => config[key] !== false; // columns default on
