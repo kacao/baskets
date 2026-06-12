@@ -46,27 +46,20 @@ export async function canEditView(user: SessionUser, viewId: string) {
 	]);
 }
 
-/** Task grant, parent-task grant (for sub-tasks), or project grant. */
+/**
+ * Task editing (create/edit/move/status) is open to every signed-in member —
+ * single-tenant team default (ADR-013 update). Project/view STRUCTURE remains
+ * grant-gated via canEditProject/canEditView.
+ */
 export async function canEditTask(
 	user: SessionUser,
-	t: { id: string; parentId: string | null; projectId: string }
+	_t: { id: string; parentId: string | null; projectId: string }
 ) {
-	if (!user) return false;
-	if (isAdmin(user)) return true;
-	const pairs = [
-		{ type: 'task', id: t.id },
-		{ type: 'project', id: t.projectId }
-	];
-	if (t.parentId) pairs.push({ type: 'task', id: t.parentId });
-	return hasGrant(user.id, pairs);
+	return Boolean(user);
 }
 
-export async function canEditTaskById(user: SessionUser, taskId: string) {
-	if (!user) return false;
-	if (isAdmin(user)) return true;
-	const [t] = await db.select().from(task).where(eq(task.id, taskId));
-	if (!t) return false;
-	return canEditTask(user, t);
+export async function canEditTaskById(user: SessionUser, _taskId: string) {
+	return Boolean(user);
 }
 
 /** Resource ids (project itself + its views + its tasks) the user holds grants on. */

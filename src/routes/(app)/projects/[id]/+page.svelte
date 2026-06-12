@@ -52,8 +52,9 @@
 		})
 	);
 
-	function canEditTask(t: { id: string; parentId: string | null }) {
-		return data.perm.project || Boolean(data.perm.tasks[t.id]);
+	// Tasks are editable by every signed-in member; grants gate structure only
+	function canEditTask(_t: { id: string; parentId: string | null }) {
+		return Boolean(data.user);
 	}
 
 	const userName = (id: string | null) => data.users.find((u) => u.id === id)?.name ?? id;
@@ -220,15 +221,11 @@
 				<select class="select" name="resourceType" value="project">
 					<option value="project">whole project</option>
 					<option value="view">a view</option>
-					<option value="task">a task</option>
 				</select>
 				<select class="select" name="resourceId">
 					<option value={data.project.id}>this project</option>
 					{#each data.views as v (v.id)}
 						<option value={v.id}>view: {v.name}</option>
-					{/each}
-					{#each data.tasks.filter((t) => !t.parentId) as t (t.id)}
-						<option value={t.id}>task: {t.title}</option>
 					{/each}
 				</select>
 				<button class="btn btn--sm" type="submit">Grant</button>
@@ -238,14 +235,7 @@
 	</div>
 {:else}
 	<div class="u-between" style="margin-bottom: var(--sp-2); flex-wrap: wrap;">
-		<div class="u-flex">
-			<h2 style="overflow-wrap: anywhere;">{data.project.name}</h2>
-			{#if !data.perm.project}
-				<span class="badge" title="You don't have an edit grant on this project — ask an admin">
-					view only
-				</span>
-			{/if}
-		</div>
+		<h2 style="overflow-wrap: anywhere;">{data.project.name}</h2>
 		{#if data.perm.project}
 			<div class="u-flex">
 				<button class="btn btn--sm" onclick={() => (editingProject = true)}>Edit</button>
@@ -404,7 +394,7 @@
 {/if}
 
 <!-- Add task (table + board) -->
-{#if data.perm.project && activeView && (activeView.type === 'table' || activeView.type === 'board')}
+{#if activeView && (activeView.type === 'table' || activeView.type === 'board')}
 	<form method="POST" action="?/createTask" use:enhance class="add-task">
 		<input
 			name="title"

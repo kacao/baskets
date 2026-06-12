@@ -160,6 +160,8 @@ Architecture decision records. One section per decision; status reflects current
 
 **Consequences:** Non-admin users are read-only by default until granted. No "viewer/commenter" levels — single `edit` level until needed. Permission checks add one indexed query per mutation.
 
+**Update (2026-06-12):** Strict default proved wrong in dogfooding (members couldn't move cards or add tasks on shared projects and reported it as broken). Decision revised with the user: **task editing (create/edit/move/status/labels/deps) is open to every signed-in member**; grants now gate STRUCTURE only — project meta/delete, views, eligible statuses, milestones, label attachment to projects. `canEditTask` returns true for any session; task-scoped grants are no longer issued (legacy rows are inert). Creator auto-grant and view/project grants unchanged.
+
 ---
 
 ## ADR-014: Milestones, labels, dependencies as plain join tables

@@ -8,10 +8,10 @@ Small teams that share one workspace need a fast, no-ceremony way to track proje
 
 ## Users
 
-- **Member** — any signed-in user. Sees everything (single tenant); edits only what they hold an edit grant on (or created — creators get a grant on their own projects).
+- **Member** — any signed-in user. Sees everything and works tasks everywhere (create, edit, move, status, labels, dependencies). Project/view structure is editable only where they hold a grant (creators get one on their own projects).
 - **Admin** — edits everything, manages users (/admin), customizes statuses and labels, grants/revokes edit permissions.
 
-Single tenant: reads are open to all signed-in users. Edit rights are granular: admins grant per-project, per-view, or per-task edit permissions (project grant covers everything inside it; a parent-task grant covers its sub-tasks).
+Single tenant: reads and task work are open to all signed-in users. Structure (project meta/delete, views, eligible statuses, milestones) is gated: admins, plus per-project or per-view grants.
 
 ## Core features (shipped)
 
@@ -45,7 +45,7 @@ Single tenant: reads are open to all signed-in users. Edit rights are granular: 
 - App-wide labels managed at Settings → Labels (admin); optional label groups. Attachable to projects and tasks.
 
 ### Permissions
-- Read: every signed-in user. Edit: admins, plus users holding admin-granted edit permissions on a project, a view, or a task.
+- Read + task editing: every signed-in user. Structure editing: admins, plus users holding admin-granted edit permissions on a project or a view.
 
 ### REST API
 - `GET/POST /api/projects`, `GET/PATCH/DELETE /api/projects/:id`

@@ -10,7 +10,6 @@ import {
 	PRIORITIES
 } from '$lib/server/api';
 import { dispatchEvent } from '$lib/server/integrations';
-import { canEditProject, canEditTask } from '$lib/server/permissions';
 import { listProjectStatuses } from '$lib/server/statuses';
 import type { RequestHandler } from './$types';
 
@@ -49,16 +48,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const [proj] = await db.select().from(project).where(eq(project.id, projectId));
 	if (!proj) return apiError(404, 'Project not found');
 
-	let allowed = await canEditProject(locals.user, projectId);
-
-	let parent = null;
 	if (parentId) {
-		[parent] = await db.select().from(task).where(eq(task.id, parentId));
+		const [parent] = await db.select().from(task).where(eq(task.id, parentId));
 		if (!parent || parent.projectId !== projectId) return apiError(400, 'Invalid parent task');
 		if (parent.parentId) return apiError(400, 'Sub-tasks cannot have their own sub-tasks');
-		if (!allowed) allowed = await canEditTask(locals.user, parent);
 	}
-	if (!allowed) return apiError(403, 'No edit permission on this project');
 
 	const eligible = await listProjectStatuses(projectId);
 

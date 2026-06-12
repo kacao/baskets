@@ -109,18 +109,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		editableViews[v.id] = canEditProj || (await canEditView(locals.user, v.id));
 	}
 
-	// Per-task edit rights only matter for non-project-editors holding task grants
-	const editableTasks: Record<string, boolean> = {};
-	if (!canEditProj && locals.user) {
-		const grants = await listProjectGrants(params.id);
-		const mine = grants.filter((g) => g.userId === locals.user!.id && g.resourceType === 'task');
-		const granted = new Set(mine.map((g) => g.resourceId));
-		for (const t of tasks) {
-			editableTasks[t.id] =
-				granted.has(t.id) || (t.parentId !== null && granted.has(t.parentId));
-		}
-	}
-
 	const grants = admin ? await listProjectGrants(params.id) : [];
 
 	return {
@@ -138,7 +126,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		projectDependsOn: projDeps.map((d) => d.dependsOnId),
 		allProjects,
 		taskDeps,
-		perm: { admin, project: canEditProj, views: editableViews, tasks: editableTasks },
+		perm: { admin, project: canEditProj, views: editableViews },
 		grants
 	};
 };
@@ -153,13 +141,6 @@ export const actions: Actions = {
 		const title = String(form.get('title') ?? '').trim();
 		const parentId = String(form.get('parentId') ?? '') || null;
 		const priority = String(form.get('priority') ?? 'none');
-
-		let allowed = await canEditProject(locals.user, params.id);
-		if (!allowed && parentId) {
-			const parent = await getTask(parentId);
-			if (parent) allowed = await canEditTask(locals.user, parent);
-		}
-		if (!allowed) return fail(403, { message: 'No edit permission on this project' });
 
 		if (!title) return fail(400, { message: 'Task title is required' });
 		if (title.length > 240) return fail(400, { message: 'Title too long (max 240)' });
@@ -751,7 +732,8 @@ export const actions: Actions = {
 		const resourceType = String(form.get('resourceType') ?? '');
 		const resourceId = String(form.get('resourceId') ?? '');
 
-		if (!userId || !['project', 'view', 'task'].includes(resourceType) || !resourceId)
+		// Tasks are member-editable by default — grants only apply to structure
+		if (!userId || !['project', 'view'].includes(resourceType) || !resourceId)
 			return fail(400, { message: 'Invalid grant' });
 
 		// Resource must belong to this project
@@ -760,10 +742,6 @@ export const actions: Actions = {
 		if (resourceType === 'view') {
 			const [v] = await db.select().from(view).where(eq(view.id, resourceId));
 			if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
-		}
-		if (resourceType === 'task') {
-			const t = await getTask(resourceId);
-			if (!t || t.projectId !== params.id) return fail(400, { message: 'Invalid task' });
 		}
 
 		await db
