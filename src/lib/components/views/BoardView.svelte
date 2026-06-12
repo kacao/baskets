@@ -39,6 +39,7 @@
 	let over = $state<{ statusId: string; index: number } | null>(null);
 	let addingTo = $state<string | null>(null);
 	let addInput = $state<HTMLInputElement | null>(null);
+	let justDragged = $state(false);
 
 	const glyph: Record<string, string> = { todo: '○', active: '◐', done: '●', canceled: '⊘' };
 
@@ -114,6 +115,11 @@
 	}
 
 	function reset() {
+		if (dragId) {
+			// swallow the click that some browsers fire right after a drop
+			justDragged = true;
+			setTimeout(() => (justDragged = false), 100);
+		}
 		dragId = null;
 		over = null;
 	}
@@ -157,11 +163,15 @@
 					{#if over?.statusId === s.id && over.index === i && dragId !== t.id}
 						<div class="drop-line"></div>
 					{/if}
+					<!-- Whole card is draggable AND clickable; an inner button would block
+					     Chrome from initiating drag, so the card itself is the control. -->
 					<div
 						class="bcard"
 						class:dragging={dragId === t.id}
 						class:clickable={Boolean(tableViewId)}
-						role="listitem"
+						role="button"
+						tabindex="0"
+						aria-label={t.title}
 						draggable={editable}
 						ondragstart={(e) => {
 							dragId = t.id;
@@ -171,16 +181,12 @@
 						ondragend={reset}
 						ondragover={(e) => onCardDragOver(e, s.id, i)}
 						ondrop={onDrop}
+						onclick={() => !justDragged && openDetail(t)}
+						onkeydown={(e) => e.key === 'Enter' && openDetail(t)}
 					>
 						<div class="bcard-top">
 							<PriorityIcon priority={t.priority} />
-							{#if tableViewId}
-								<button class="bcard-title bcard-title--link" onclick={() => openDetail(t)}>
-									{t.title}
-								</button>
-							{:else}
-								<span class="bcard-title">{t.title}</span>
-							{/if}
+							<span class="bcard-title">{t.title}</span>
 						</div>
 						{#if labelsOf(t.id).length > 0 || t.dueDate || t.assigneeId}
 							<div class="bcard-meta">
@@ -339,16 +345,6 @@
 		font-weight: 500;
 		line-height: 1.4;
 		overflow-wrap: anywhere;
-	}
-
-	.bcard-title--link {
-		border: none;
-		background: none;
-		color: var(--color-fg);
-		font-family: var(--font-body);
-		text-align: left;
-		padding: 0;
-		cursor: pointer;
 	}
 
 	.bcard-meta {
