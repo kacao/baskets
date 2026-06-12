@@ -272,11 +272,19 @@
 
 <style>
 	.panel {
-		width: 380px;
-		flex: 0 0 380px;
+		/* full content-pane height: from just under the sticky topbar to the
+		   bottom of the viewport, flush right (59px matches the topbar, same
+		   constant the mobile sidebar uses) */
+		position: fixed;
+		top: 59px;
+		right: 0;
+		bottom: 0;
+		width: 400px;
+		background: var(--color-bg);
 		border-left: 1px solid var(--color-border-subtle);
-		padding: 0 0 var(--sp-4) var(--sp-3);
-		min-height: 320px;
+		padding: var(--sp-3) var(--sp-3) var(--sp-4);
+		overflow-y: auto;
+		z-index: 8;
 	}
 
 	.panel-head {
@@ -388,11 +396,6 @@
 	@media (max-width: 900px) {
 		.panel {
 			width: 100%;
-			flex-basis: auto;
-			border-left: none;
-			border-top: 1px solid var(--color-border-subtle);
-			padding-left: 0;
-			padding-top: var(--sp-2);
 		}
 	}
 </style>

@@ -144,7 +144,7 @@
 	}
 </script>
 
-<div class="board-wrap">
+<div class="board-wrap" class:with-panel={Boolean(selected)}>
 <div class="board">
 	{#each statuses as s (s.id)}
 		{@const col = inColumn(s.id)}
@@ -266,15 +266,12 @@
 </div>
 
 <style>
-	.board-wrap {
-		display: flex;
-		gap: var(--sp-3);
-		align-items: flex-start;
+	.board-wrap.with-panel {
+		/* keep columns clear of the fixed task panel */
+		padding-right: 416px;
 	}
 
 	.board {
-		flex: 1;
-		min-width: 0;
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 		gap: var(--sp-2);
@@ -282,9 +279,8 @@
 	}
 
 	@media (max-width: 900px) {
-		.board-wrap {
-			flex-direction: column;
-			align-items: stretch;
+		.board-wrap.with-panel {
+			padding-right: 0;
 		}
 	}
 
