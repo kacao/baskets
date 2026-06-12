@@ -57,16 +57,13 @@
 
 <style>
 	.board {
-		display: flex;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 		gap: var(--sp-2);
-		align-items: flex-start;
-		overflow-x: auto;
-		padding-bottom: var(--sp-2);
+		align-items: start;
 	}
 
 	.column {
-		flex: 1 0 220px;
-		max-width: 300px;
 		border: 1px solid var(--color-border-subtle);
 		background: var(--color-bg);
 	}

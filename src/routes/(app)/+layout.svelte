@@ -221,7 +221,6 @@
 	.content {
 		flex: 1;
 		padding: var(--sp-4) var(--sp-4) var(--sp-7);
-		max-width: 1100px;
 		min-width: 0;
 	}
 
