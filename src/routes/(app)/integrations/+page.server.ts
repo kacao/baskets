@@ -11,15 +11,18 @@ async function getSlack() {
 	return row ?? null;
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ locals }) => {
 	const slack = await getSlack();
+	const admin = isAdmin(locals.user);
 
 	return {
 		slack: slack
 			? {
 					enabled: slack.enabled,
-					// never ship the full webhook URL to the client
-					webhookHint: '…' + (JSON.parse(slack.config) as SlackConfig).webhookUrl.slice(-8),
+					// never ship the full webhook URL; even the hint is admins-only
+					webhookHint: admin
+						? '…' + (JSON.parse(slack.config) as SlackConfig).webhookUrl.slice(-8)
+						: null,
 					updatedAt: slack.updatedAt
 				}
 			: null
