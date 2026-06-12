@@ -238,7 +238,14 @@
 	</div>
 {:else}
 	<div class="u-between" style="margin-bottom: var(--sp-2); flex-wrap: wrap;">
-		<h2 style="overflow-wrap: anywhere;">{data.project.name}</h2>
+		<div class="u-flex">
+			<h2 style="overflow-wrap: anywhere;">{data.project.name}</h2>
+			{#if !data.perm.project}
+				<span class="badge" title="You don't have an edit grant on this project — ask an admin">
+					view only
+				</span>
+			{/if}
+		</div>
 		{#if data.perm.project}
 			<div class="u-flex">
 				<button class="btn btn--sm" onclick={() => (editingProject = true)}>Edit</button>
