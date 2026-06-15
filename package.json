@@ -6,21 +6,28 @@
 	"description": "Baskets — simple project management (projects, tasks, sub-tasks)",
 	"scripts": {
 		"dev": "vite dev",
+		"icons:build": "node scripts/build-iconoir-sprite.mjs",
+		"prebuild": "node scripts/build-iconoir-sprite.mjs",
 		"build": "vite build",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"db:push": "drizzle-kit push",
 		"db:seed": "node --env-file=.env scripts/seed.ts",
-		"start": "node --env-file=.env build/index.js"
+		"start": "node --env-file=.env server.js"
 	},
 	"dependencies": {
 		"@fontsource/ibm-plex-mono": "^5.2.7",
 		"@fontsource/inter": "^5.2.8",
+		"@tailwindcss/vite": "^4.3.0",
 		"better-auth": "^1.3.0",
 		"better-sqlite3": "^12.0.0",
+		"daisyui": "^5.5.20",
 		"drizzle-orm": "^0.45.2",
+		"iconoir": "^7.11.0",
 		"leaflet": "^1.9.4",
-		"qrcode": "^1.5.4"
+		"qrcode": "^1.5.4",
+		"tailwindcss": "^4.3.0",
+		"ws": "^8.21.0"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-node": "^5.2.0",
@@ -29,6 +36,7 @@
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/leaflet": "^1.9.21",
 		"@types/qrcode": "^1.5.5",
+		"@types/ws": "^8.18.1",
 		"drizzle-kit": "^0.31.0",
 		"svelte": "^5.28.0",
 		"svelte-check": "^4.1.0",

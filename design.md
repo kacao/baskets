@@ -1,6 +1,8 @@
 # StudioBlank Design System
 
-Source of truth for all visual rules in Baskets. Source: https://designmd.ai/chef/studioblank-design-system (v1, MIT).
+> **HISTORICAL — superseded by ADR-022.** Baskets' UI now uses Tailwind 4 + DaisyUI 5 (stock light/dark themes). This document describes the retired StudioBlank look and is kept for reference only; it is no longer the source of visual truth.
+
+Source: https://designmd.ai/chef/studioblank-design-system (v1, MIT).
 
 ## Overview
 

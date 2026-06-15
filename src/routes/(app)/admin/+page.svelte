@@ -52,13 +52,13 @@
 
 <div class="u-between" style="margin-bottom: var(--sp-4); flex-wrap: wrap;">
 	<h2>{$t('Users')}</h2>
-	<button class="btn btn--primary" onclick={() => (showCreate = !showCreate)}>
+	<button class="btn btn-primary" onclick={() => (showCreate = !showCreate)}>
 		{showCreate ? $t('Cancel') : $t('+ New user')}
 	</button>
 </div>
 
 {#if error}
-	<div class="alert alert--error" role="alert">{error}</div>
+	<div class="alert alert-error" role="alert">{error}</div>
 {/if}
 
 {#if showCreate}
@@ -84,7 +84,7 @@
 					<option value="admin">{$t('admin')}</option>
 				</select>
 			</div>
-			<button class="btn btn--primary" type="submit" disabled={busy === 'create'}>
+			<button class="btn btn-primary" type="submit" disabled={busy === 'create'}>
 				{busy === 'create' ? $t('Creating…') : $t('Create user')}
 			</button>
 		</form>
@@ -112,27 +112,27 @@
 					</td>
 					<td class="mono u-small">{u.email}</td>
 					<td>
-						<span class="badge" class:badge--inverted={u.role === 'admin'}>
+						<span class="badge" class:badge-neutral={u.role === 'admin'}>
 							{$t(u.role ?? 'user')}
 						</span>
 					</td>
 					<td>
-						<span class="badge" class:badge--success={u.twoFactorEnabled}>
+						<span class="badge" class:badge-success={u.twoFactorEnabled}>
 							{u.twoFactorEnabled ? $t('on') : $t('off')}
 						</span>
 					</td>
 					<td>
 						{#if u.banned}
-							<span class="badge badge--error">{$t('banned')}</span>
+							<span class="badge badge-error">{$t('banned')}</span>
 						{:else}
-							<span class="badge badge--success">{$t('active')}</span>
+							<span class="badge badge-success">{$t('active')}</span>
 						{/if}
 					</td>
 					<td>
 						{#if !isSelf(u.id)}
 							<div class="u-flex" style="flex-wrap: wrap;">
 								<button
-									class="btn btn--sm"
+									class="btn btn-sm"
 									disabled={busy === u.id}
 									onclick={() =>
 										run(u.id, () =>
@@ -146,7 +146,7 @@
 								</button>
 								{#if u.banned}
 									<button
-										class="btn btn--sm"
+										class="btn btn-sm"
 										disabled={busy === u.id}
 										onclick={() => run(u.id, () => authClient.admin.unbanUser({ userId: u.id }))}
 									>
@@ -154,7 +154,7 @@
 									</button>
 								{:else}
 									<button
-										class="btn btn--sm btn--danger"
+										class="btn btn-sm btn-error"
 										disabled={busy === u.id}
 										onclick={() => run(u.id, () => authClient.admin.banUser({ userId: u.id }))}
 									>
@@ -162,7 +162,7 @@
 									</button>
 								{/if}
 								<button
-									class="btn btn--sm btn--danger"
+									class="btn btn-sm btn-error"
 									disabled={busy === u.id}
 									onclick={() => {
 										if (confirm($t('Permanently remove {email}?', { email: u.email })))

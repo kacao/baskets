@@ -6,22 +6,30 @@
 		id: string;
 		parentId: string | null;
 		title: string;
+		locationId: string | null;
 		location: string | null;
 	};
+	type Location = { id: string; title: string; latitude: number | null; longitude: number | null };
 
-	let { tasks }: { tasks: Task[] } = $props();
+	let { tasks, locations }: { tasks: Task[]; locations: Location[] } = $props();
 
 	let el: HTMLDivElement;
 	let map: import('leaflet').Map | null = null;
 
+	type Point = { task: Task; lat: number; lng: number };
 	const points = $derived(
 		tasks
-			.filter((t) => t.location)
-			.map((t) => {
-				const [lat, lng] = t.location!.split(',').map((v) => parseFloat(v.trim()));
-				return { task: t, lat, lng };
+			.map((t): Point | null => {
+				// prefer a picked Location; fall back to the legacy freeform "lat, lng"
+				const loc = t.locationId ? locations.find((l) => l.id === t.locationId) : null;
+				if (loc) return { task: t, lat: loc.latitude ?? NaN, lng: loc.longitude ?? NaN };
+				if (t.location) {
+					const [lat, lng] = t.location.split(',').map((v) => parseFloat(v.trim()));
+					return { task: t, lat, lng };
+				}
+				return null;
 			})
-			.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+			.filter((p): p is Point => !!p && Number.isFinite(p.lat) && Number.isFinite(p.lng))
 	);
 
 	onMount(() => {
@@ -69,7 +77,7 @@
 
 {#if points.length === 0}
 	<div class="alert" role="status">
-		{$t('No tasks have a location yet. Set “Location (lat, lng)” in a task’s edit form to plot it here.')}
+		{$t('No tasks have a location yet. Pick a Location on a task to plot it here.')}
 	</div>
 {/if}
 <div class="map" bind:this={el}></div>

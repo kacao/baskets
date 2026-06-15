@@ -1,75 +1,66 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import Icon from '$lib/components/Icon.svelte';
+	import EntityIcon from '$lib/components/EntityIcon.svelte';
+	import IconPicker from '$lib/components/IconPicker.svelte';
+	import Popover from '$lib/components/Popover.svelte';
 	import { t } from '$lib/i18n';
+	import { categoryLabel } from '$lib/statuses';
 
 	let { data, form } = $props();
-	let renaming = $state<string | null>(null);
 </script>
 
 <svelte:head><title>{$t('Statuses')} — Baskets</title></svelte:head>
 
 <h2 style="margin-bottom: var(--sp-2);">{$t('Statuses')}</h2>
 <p class="u-small u-muted" style="margin-bottom: var(--sp-4); max-width: 65ch;">
-	{$t('App-wide statuses available to projects. Each project chooses which of these are eligible for its tasks (in the project’s Edit panel). The category drives behavior: “done” marks progress and completes sub-tasks.')}
+	{$t('The five default statuses every project starts from. Their name, category and deletion are fixed — but you can change each status’s icon here (applies everywhere). Custom statuses are added per workspace or per project in their settings.')}
 </p>
 
 {#if form?.message}
-	<div class="alert alert--error" role="alert">{form.message}</div>
+	<div class="alert alert-error" role="alert" style="max-width: 640px; margin-bottom: var(--sp-3);">{form.message}</div>
 {/if}
 
-<div class="card" style="max-width: 640px; margin-bottom: var(--sp-4);">
+<div class="card" style="max-width: 640px;">
 	{#each data.statuses as s (s.id)}
 		<div class="row">
-			{#if renaming === s.id}
-				<form
-					method="POST"
-					action="?/rename"
-					use:enhance={() =>
-						({ update }) => {
-							renaming = null;
-							update();
+			<Popover ariaLabel={$t('Change icon')}>
+				{#snippet trigger()}
+					<span class="ic-trigger" title={$t('Change icon')}>
+						{#if s.icon}<EntityIcon value={s.icon} size={18} />{:else}<span class="status-dot" style="--c: {s.color || 'var(--color-muted)'}" aria-hidden="true"></span>{/if}
+					</span>
+				{/snippet}
+				{#snippet panel(close)}
+					<form
+						id="icon-form-{s.id}"
+						method="POST"
+						action="?/setStatusIcon"
+						use:enhance={() => async ({ update }) => {
+							close();
+							await update();
 						}}
-					class="u-flex"
-					style="flex: 1;"
-				>
-					<input type="hidden" name="id" value={s.id} />
-					<input name="name" class="input" value={s.name} style="flex: 1;" required maxlength="40" />
-					<button class="btn btn--sm btn--primary" type="submit">{$t('Save')}</button>
-					<button class="btn btn--sm" type="button" onclick={() => (renaming = null)}>{$t('Cancel')}</button>
-				</form>
-			{:else}
-				<span class="name">{s.name}</span>
-				<span class="badge">{$t(s.category)}</span>
-				{#if s.builtIn}
-					<span class="badge">{$t('built-in')}</span>
-				{/if}
-				<span class="u-tiny u-muted">{$t('{n} task(s)', { n: s.inUse })}</span>
-				<span style="flex: 1;"></span>
-				<button class="btn btn--sm" onclick={() => (renaming = s.id)}>{$t('Rename')}</button>
-				{#if !s.builtIn}
-					<form method="POST" action="?/delete" use:enhance>
+					>
 						<input type="hidden" name="id" value={s.id} />
-						<button class="btn btn--sm btn--danger" type="submit" disabled={s.inUse > 0}>
-							{$t('Delete')}
-						</button>
+						<input type="hidden" name="icon" value={s.icon ?? ''} />
+						<IconPicker
+							value={s.icon}
+							onSelect={(v) => {
+								const f = document.getElementById(`icon-form-${s.id}`) as HTMLFormElement | null;
+								if (!f) return;
+								(f.elements.namedItem('icon') as HTMLInputElement).value = v;
+								s.icon = v; // optimistic; load() refresh confirms
+								f.requestSubmit();
+							}}
+						/>
 					</form>
-				{/if}
-			{/if}
+				{/snippet}
+			</Popover>
+			<span class="name">{s.name}</span>
+			<span class="badge">{categoryLabel(s.category)}</span>
+			<span class="badge">{$t('built-in')}</span>
+			<span class="u-tiny u-muted">{$t('{n} task(s)', { n: s.inUse })}</span>
 		</div>
 	{/each}
-</div>
-
-<div class="card" style="max-width: 640px;">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('New status')}</h4>
-	<form method="POST" action="?/create" use:enhance class="u-flex" style="flex-wrap: wrap;">
-		<input name="name" class="input" style="flex: 1; min-width: 160px;" placeholder={$t('Status name…')} required maxlength="40" />
-		<select name="category" class="select" style="width: auto;">
-			{#each data.categories as c (c)}
-				<option value={c}>{$t(c)}</option>
-			{/each}
-		</select>
-		<button class="btn btn--primary" type="submit">{$t('Add')}</button>
-	</form>
 </div>
 
 <style>
@@ -83,6 +74,28 @@
 
 	.row:last-child {
 		border-bottom: none;
+	}
+
+	.ic-trigger {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border-radius: var(--radius-field, 0.25rem);
+		cursor: pointer;
+		transition: background var(--dur-fast) ease;
+	}
+
+	.ic-trigger:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.status-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 999px;
+		background: var(--c);
 	}
 
 	.name {

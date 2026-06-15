@@ -1,17 +1,17 @@
 # Baskets
 
-Simple single-tenant project management — projects → tasks → sub-tasks. Linear/Notion-inspired, styled with the [StudioBlank](https://designmd.ai/chef/studioblank-design-system) ultra-minimal design system (see `design.md`).
+Self-hosted project management — workspaces → projects → tasks → sub-tasks. Linear/Notion-inspired, built with Tailwind 4 + DaisyUI 5 (light/dark themes).
 
 ## Stack
 
-SvelteKit (Svelte 5) · SQLite via better-sqlite3 + Drizzle ORM · BetterAuth (email/password, TOTP 2FA, admin plugin) · adapter-node.
+SvelteKit (Svelte 5 runes) · Tailwind 4 + DaisyUI 5 · SQLite via better-sqlite3 + Drizzle ORM · BetterAuth (email/password, TOTP 2FA, admin plugin) · adapter-node.
 
 ## Setup
 
 ```bash
 npm install
 cp .env.example .env        # set a real BETTER_AUTH_SECRET (openssl rand -hex 32)
-npm run db:push             # create tables in ./baskets.db
+npm run db:push             # create tables in ./data/baskets.db
 npm run db:seed             # optional: admin + demo users + sample data
 npm run dev                 # http://localhost:5173
 ```
@@ -23,34 +23,42 @@ Seeded accounts (change after first login):
 | Admin | admin@baskets.local | admin-baskets-2026 |
 | Demo | demo@baskets.local | demo-baskets-2026 |
 
-Without seeding, register at `/register` — the first user must then be promoted to admin manually: `sqlite3 baskets.db "update user set role='admin' where email='you@example.com'"`.
+Without seeding, register at `/register` — promote the first user to admin manually: `sqlite3 data/baskets.db "update user set role='admin' where email='you@example.com'"`.
 
 ## Features
 
 - Email/password auth + optional TOTP 2FA with backup codes; per-user API keys (`bsk_…`) for the REST API
-- Projects with multiple views — table, board (Linear-style drag-and-drop, split task panel), list (ranked by an `order` field, expandable sub-tasks), dashboard, map (Leaflet/OSM via a task `lat, lng` location). Only Table is enabled by default; "+" enables the rest (one view per type)
-- Tasks: table-driven statuses with behavior categories (app-wide pool + project-scoped statuses), priority, assignee, milestone, labels (optional groups), due date, dependencies (cycle-checked; sub-tasks only on siblings), one level of sub-tasks (done-category parent completes subs)
-- Per-project settings pane (`/projects/:id/settings`): general, statuses, labels, dependencies, milestones, edit grants, delete
-- Permissions: reads and task editing open to all members; structure edits (project/views/statuses/milestones) need admin or a project/view grant
-- REST API under `/api/{projects,tasks}` (session cookie or `Authorization: Bearer bsk_…`); Slack integration (incoming webhook) for project/task events
-- i18n (English, Vietnamese) — switch in Settings; whole UI translated, user content untouched
-- Admin → Users: create users, toggle admin role, ban/unban, remove
-- Responsive (mobile sidebar), ≤200ms transitions, reduced-motion safe
+- **Workspaces** own projects, custom statuses, and labels; owner + grants gate structure edits and define visibility (you see only what you own or were granted). Sidebar workspace switcher.
+- **Projects** with an optional emoji icon, project status, and pin; a "…" menu for edit/pin/status/icon/labels/delete
+- **Views** per project — table, board (drag-and-drop, split panel), list, dashboard, map (Leaflet/OSM). Multiple per type; add/hide/duplicate/delete via the viewbar "+" and per-tab right-click menu. The **table** view is a real table with a show/hide-columns menu, sub-task chevrons, and an inline new-task dialog.
+- **Tasks**: colored statuses (category-driven behavior; pill + popover picker), priority, assignee, milestone, workspace labels, due date, dependencies (cycle-checked), one level of sub-tasks (done-category parent completes subs). Editing opens a shared right-side pane (used for task, milestones, and view-customize editing alike)
+- **Realtime** (WebSockets, `/ws`): live updates — when anyone changes a project, open viewers auto-refresh — plus presence avatars showing who else is viewing
+- **Search & filter** across views (status/assignee/milestone/label/priority/due), saveable as named filters; expanded sorts (title/due/status/assignee/created)
+- **Timeline (Gantt)** and **Calendar** views (bars span start→due; month grid on due date)
+- **Comments + activity log** per task, **in-app notifications** (assignment, mentions, due reminders) with a topbar bell
+- **Bulk actions** (multi-select → set status/assignee/milestone/priority, move, delete) — in tables/lists and on sub-tasks
+- **Task templates** & simple **recurring tasks**; **CSV export** of a project
+- **Budget tracking**: designate estimated/actual cost fields → per-milestone & project variance rollup
+- **Photo/document capture** on tasks (drag-drop + camera), mobile-responsive for field use
+- Statuses: five fixed app-wide defaults + workspace- and project-scoped custom statuses, each with a color
+- REST API under `/api/{projects,tasks}` (session cookie or `Authorization: Bearer bsk_…`); see `/llms.txt`. Slack integration (incoming webhook) for project/task events
+- Light/dark DaisyUI themes (topbar toggle, cookie-persisted); responsive mobile sidebar; ≤200ms transitions, reduced-motion safe
+- Admin → Users: create, toggle admin, ban/unban, remove
 
 See `PRD.md` for product scope and `ADR.md` for architecture decisions.
-
-## Theming
-
-All visual tokens live in `src/app.css` under `[data-theme='studioblank']`. To add a theme, define a new `[data-theme='...']` block and switch the `data-theme` attribute in `src/app.html`. Components only consume tokens.
 
 ## Production
 
 ```bash
 npm run build
-ORIGIN=https://your-domain npm run start   # serves build/ via node
+ORIGIN=https://your-domain npm run start   # custom server.js: adapter-node handler + /ws WebSocket
 ```
+
+`npm start` runs `server.js` (a thin `http.createServer` wrapping the generated `build/handler.js` and attaching the realtime `/ws` transport), not `build/index.js` — adapter-node's default entry has no WebSocket upgrade hook. Keep `src/lib/server/realtime/attach.js` deployed alongside `build/`. Single Node process only; clustering would need a shared pub/sub fan-out.
 
 ## Notes
 
 - `src/lib/server/db/schema.ts` holds both BetterAuth tables and app tables; after changing it run `npm run db:push`.
-- DB file location is `DATABASE_URL` in `.env` (default `./baskets.db`). WAL mode is enabled when the filesystem supports it.
+- DB file location is `DATABASE_URL` in `.env` (default `./data/baskets.db`); the `data/` dir is kept in git via `.gitkeep`, the DB files themselves are gitignored. WAL mode enabled when the filesystem supports it.
+- `static/llms.txt` documents the REST API for agents — keep it updated when the API changes.
+- Theming (Tailwind 4 + DaisyUI 5, token bridge, light/dark cookie) is documented in `ADR.md` (ADR-022).

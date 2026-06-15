@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '../app.css';
-	import '$lib/i18n/vi';
+	import '$lib/print.css';
 	import { locale } from '$lib/i18n';
 
 	let { data, children } = $props();

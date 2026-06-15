@@ -1,203 +1,81 @@
 # ADR — Baskets
 
-Architecture decision records. One section per decision; status reflects current state.
+Architecture decisions, squashed into one current-state digest (per-decision history and superseded records live in git). Topic → originating ADR(s) noted in parentheses for traceability.
 
 ---
 
-## ADR-001: SvelteKit monolith with server-side form actions
+## Stack, build & data (ADR-001/002/021/025)
 
-**Status:** Accepted
-
-**Context:** Small single-tenant app; one developer; no need for a separate API tier for the UI.
-
-**Decision:** Single SvelteKit app (adapter-node). UI mutations use form actions in `+page.server.ts`; pages load data in server `load` functions. No client-side data layer.
-
-**Consequences:** Progressive enhancement for free, minimal client JS, validation co-located with mutations. Programmatic access is handled separately (ADR-005) — form actions are not an API surface.
+- **SvelteKit monolith** (`adapter-node`). UI mutations are **form actions** in `+page.server.ts`; pages load via server `load`. No client-side data layer — progressive enhancement, validation co-located with mutations.
+- **SQLite** (`better-sqlite3`, synchronous) + **Drizzle ORM**. Single schema file `src/lib/server/db/schema.ts`; changes apply via `drizzle-kit push` — **no migration files** (destructive-change-blind, fine at this scale). DB lives under `data/` (`DATABASE_URL`, default `./data/baskets.db`; the dir must exist; `*.db*` gitignored, kept via `data/.gitkeep`).
+- **Production runs a custom `server.js`** = adapter-node's `build/handler.js` wrapped in `http.createServer` + the realtime `/ws` upgrade (`attachRealtime`). `npm start` runs it (not `build/index.js`); `npm run build` still emits `build/handler.js`. Single Node process (clustering would need a pub/sub fan-out).
 
 ---
 
-## ADR-002: SQLite via better-sqlite3 + Drizzle ORM
+## Auth, API & access control (ADR-003/005/006/013/017/019)
 
-**Status:** Accepted
-
-**Context:** Single-tenant, single-node deployment; data volume is small; ops simplicity is a priority.
-
-**Decision:** SQLite file database (`DATABASE_URL`, default `./baskets.db`) accessed synchronously via better-sqlite3, with Drizzle ORM for schema (`src/lib/server/db/schema.ts`) and queries. Schema changes apply via `drizzle-kit push` rather than migration files.
-
-**Consequences:** Zero-infrastructure deploys and trivial backups. Sync driver is acceptable at this scale. No migration history — `db:push` is destructive-change-blind, fine for this project, would need revisiting for multi-instance or managed deployments. Parameterization handled by Drizzle.
+- **BetterAuth** with `twoFactor` (TOTP) + `admin` plugins, Drizzle adapter, auth tables in the app schema. `hooks.server.ts` populates `locals.user`/`locals.session` per request; client auth via `authClient`. The seed script mirrors the auth config.
+- **REST API** at `src/routes/api/{projects,tasks,me}` returning JSON. **Dual auth**: browser session cookie OR `Authorization: Bearer bsk_…`. Own API-key impl (no BetterAuth plugin): `api_key` table (name, displayable prefix, SHA-256 hash, owner, last-used); `bsk_`-prefixed 256-bit tokens, plaintext shown once; resolved in `hooks.server.ts` before session, banned users rejected. Shared validation in `src/lib/server/api.ts`. Form-action and REST mutation paths stay behaviorally in sync.
+- **Single tenant**; `user.role === 'admin'` gates `/admin`. **Workspaces are the org + sharing primitive**: every `project.workspaceId` belongs to one `workspace` (`ownerId`). Custom statuses and all labels are workspace-scoped. Bootstrapped by `ensureDefaultWorkspace` (hooks); a workspace is deletable only when empty, the last can't be deleted; a user's first workspace seeds sample projects.
+- **Visibility = access**: admins see everything; everyone else sees workspaces they own / hold a `workspace` grant on (and the projects inside) + projects with a direct `project` grant. Inaccessible reads return **404** (indistinguishable from missing). Guard every read with `canAccessProject`; filter lists with `accessibleWorkspaceIds`/`grantedProjectIds` (`src/lib/server/permissions.ts`).
+- **Edit rights**: **task editing** (create/edit/move/status/labels/deps) is open to any member with project **access** (`canEditTask ⇒ canAccessProject`). **Structure edits** (workspace meta; project create-in-workspace/meta/delete; views; eligible statuses; milestones; project labels; locations) need admin / workspace owner / a `permission` grant — `canEditWorkspace/Project/View`. `permission` table = (`userId`, `resourceType: workspace|project|view|task`, `resourceId`). Cascade: workspace owner/grant ⇒ its projects ⇒ their views. View grants do not confer visibility.
 
 ---
 
-## ADR-003: BetterAuth for authentication
+## Domain model (ADR-010/011/014/015/024/025/029/031)
 
-**Status:** Accepted
-
-**Context:** Need email/password auth, TOTP 2FA, and basic user administration without building it.
-
-**Decision:** BetterAuth with `twoFactor` and `admin` plugins, Drizzle adapter, auth tables co-located in the app schema. `hooks.server.ts` populates `locals.user`/`locals.session` per request. Client-side auth actions go through `authClient` (`src/lib/auth-client.ts`).
-
-**Consequences:** Auth tables must track BetterAuth's expected fields across upgrades (add column + `db:push` when it complains). Seed script must mirror the auth config.
-
----
-
-## ADR-004: Single tenant, two roles
-
-**Status:** Partially superseded by ADR-013 (edit rights are now grant-based; single-tenant reads and the admin role remain)
-
-**Context:** Product is for one team sharing one instance.
-
-**Decision:** No workspaces or per-project ACLs. All signed-in users see and edit everything; the only privilege boundary is `user.role === 'admin'` for /admin.
-
-**Consequences:** Authorization checks are uniformly "signed in?" (plus admin gate). Massive simplification of every query and endpoint. Multi-tenancy would be a rewrite-level change — explicitly out of scope (see PRD non-goals).
+- **Tasks**: one nesting level (`task.parentId`, depth 1, enforced in form action + REST). Parent → `done` cascades to sub-tasks; deleting a parent deletes its sub-tasks.
+- **Statuses**: table-driven; behavior keys off `status.category` (`backlog|planned|in-progress|completed|canceled` — one per default status; `completed` is the "done" bucket that completes sub-tasks; `backlog` is the default for new tasks), never the name. Categories + labels live in the client-safe `src/lib/statuses.ts` (`STATUS_CATEGORIES`, `categoryLabel`, `DONE_CATEGORY`, `INITIAL_CATEGORY`), re-exported by `src/lib/server/statuses.ts`; `ensureDefaultStatuses` reconciles built-in rows' name/category/color (migrates the old `todo/active/done` set). Three scopes: app-wide = the **five fixed built-ins** (Backlog/Planned/In progress/Completed/Canceled — name/category/deletion fixed, but `/settings/statuses` (admin-only) lets you change each built-in's **icon** app-wide via `setStatusIcon`; `ensureDefaultStatuses` preserves a chosen icon across reboots since it only fills the icon when empty), `status.workspaceId` (workspace settings), `status.projectId` (project settings). `project_status` whitelists per project; `task.statusId` FK. Optional `status.color` (hex) → tinted pill + optional `status.icon` (emoji or `iconoir:<name>`, picked via `IconPicker` in workspace/project status editors; built-ins seed default iconoir icons). `StatusSelect` = pill + click popover, rendered per **`project.statusDisplay`** (`text` (default) | `icon` | `text-icon`, set in project settings). Name uniqueness enforced in code per scope; bootstrapped by `ensureDefaultStatuses` (hooks), seeds the 5 default colors. Optional `status.description` (≤200 chars, nullable). **Status editor (ADR-029)**: workspace + project settings share one **`StatusEditor.svelte`** — a **Linear-style editor grouping statuses by category** (one section per `STATUS_CATEGORIES` entry, gray header bar + per-category "+" that opens an inline create row: color, icon, name, description). Built-in defaults (and, in a project, inherited workspace statuses) render **read-only** under their category; scope-custom statuses are click-to-edit, deletable (disabled while in use), and **draggable to reorder within their category** — drop POSTs `?/reorderStatus` (ordered ids → server rewrites `status.position`, keeping customs after the inherited rows globally).
+- **Milestones / labels / dependencies** as plain join tables: `milestone` (per project, `task.milestoneId` same-project; `milestone_dependency` same-project, DFS cycle-checked); workspace-scoped `label`/`label_group` via `project_label`/`task_label`; `project_dependency`/`task_dependency`/`milestone_dependency` (same project, sub-tasks only on siblings, DFS cycle-checked). All dependencies are **informational** ("blocked by"), they don't gate status.
+- **Locations** (project-scoped `location`): `title` required, `address`/`latitude`/`longitude` optional. `task.locationId` FK (`set null` on delete); legacy `task.location` text kept as a map fallback. CRUD in project settings; pick/create from the task pane.
+- **Custom fields (ADR-031)**: project-scoped typed fields on tasks. Tables: `custom_field` (id/projectId/name/type/`config` schemaless JSON/position — type ∈ text|number|select|date|person|files|task|checkbox|email|phone|place|url, name unique-per-project in code, **type immutable after create**, **`appliesTo`** all|tasks|subtasks gating which task levels a field shows on — enforced client-side (`fieldAppliesTo`) in TaskPanel/NewTaskPane/Table columns and server-side in `writeTaskCustomValues`), `custom_field_option` (select members, enum-with-color/icon like `label`), `task_custom_value` (composite PK `(taskId,fieldId)`, single `value` TEXT — scalar, or a JSON array for the multi-capable types select/person/place/files; absent row = no value), `file` (uploads). One TEXT value/row chosen over typed columns/row-per-value: matches the repo's schemaless-JSON instinct, preserves multi-value order, one-query load; v1 is **display-only** (no sort/group/filter by custom fields). Deferred **formula**/**button** slot in via type+config with no schema change. CRUD (fields + options, drag-reorder) in project settings via shared `CustomFieldEditor.svelte`; values render + edit through one `CustomFieldValue.svelte` (`pill` in `TaskPanel`, `cell` as optional Table `cf:<fieldId>` columns, `input` in `NewTaskPane`). Writes funnel through `writeTaskCustomValues` (one validated path for form actions + REST, validates every reference against `field.projectId` — no cross-project leakage). Number custom-format: format string stored, NOT interpreted (v1 renders via `Intl.NumberFormat`; `custom` shows the raw number). Exposed in REST (per-task decoded `customFields` map + field/option lists on `GET /api/projects/{id}`; `customFields` map on task POST/PATCH).
+- **Files (ADR-031)**: `files`-type custom-field uploads stored on **local disk** under `UPLOADS_DIR` (default `./data/uploads/<projectId>/<uuid>`, gitignored, created on demand); `file` table holds metadata (`storagePath` never exposed). Served ONLY via the access-gated `GET /api/files/[id]` (streams, `canAccessProject` → 404 otherwise; `nosniff` + `Content-Security-Policy: sandbox`, non-raster-image as `attachment` — prevents stored-XSS from a file served on our origin); `POST /api/files` (multipart, 10 MB cap, denylist of exec + active-markup extensions incl. svg/html/xml/js, **MIME server-derived from the extension** not the client claim, `taskId` validated same-project) + `DELETE` (unlinks row + disk + strips id from referencing values). Deleting a files-field unlinks its bytes first (`deleteFilesForField`, since the FK only nulls `file.fieldId`).
+- **Views**: `view` table per project, **schemaless `config` JSON** (readers treat keys as optional hints). Types `table|board|list|dashboard|map`, one component each in `src/lib/components/views/`; **multiple views per type**; new projects get one Table view via `createProjectWithDefaults` (requires `workspaceId`). Map = Leaflet + OSM, client-only (`onMount`), `circleMarker`s from a task's location coords (no geocoding).
 
 ---
 
-## ADR-005: REST API as separate `/api` routes, dual auth
+## Project page & editing UX (ADR-012/020/023/024/025/027/030)
 
-**Status:** Accepted
-
-**Context:** Programmatic access needed (scripts, CI, future integrations) without disturbing the form-action UI layer.
-
-**Decision:** Dedicated `+server.ts` endpoints under `src/routes/api/{projects,tasks}` returning JSON, accepting either the browser session cookie or a bearer API key. Validation rules duplicated from form actions via shared constants/helpers in `src/lib/server/api.ts`; errors are `{ error }` JSON with proper status codes.
-
-**Consequences:** Two mutation paths (form action + REST) must stay behaviorally in sync (e.g., parent-done-cascades rule lives in both). Acceptable duplication at current size; extract shared service functions if a third surface appears.
-
----
-
-## ADR-006: Custom API keys (hash-stored) instead of BetterAuth apiKey plugin
-
-**Status:** Accepted
-
-**Context:** REST needed `Authorization: Bearer` auth. BetterAuth ships an apiKey plugin, but its header conventions, table shape, and version coupling add surface we don't control.
-
-**Decision:** Own implementation: `api_key` table (name, displayable prefix, SHA-256 hash, owner, last-used), `bsk_`-prefixed 256-bit random tokens, plaintext shown once. `src/lib/server/api-keys.ts` generates/resolves; `hooks.server.ts` resolves `Bearer bsk_…` into `locals.user` before session lookup and rejects banned users.
-
-**Consequences:** ~60 lines we fully own; no plugin version risk. Unsalted fast hash is appropriate because tokens are high-entropy random (nothing brute-forceable). Keys inherit the owner's privileges — no scoped keys until a real need appears.
+- **Linear-style project page**: header = title + emoji `project.icon` + pin (`project.pinned`, sorts first) + a "…" menu (editors) whose items are uniform `.menu-item`s with hover fly-out submenus — **Create…** (Task / Milestone) / **Status** / Edit project… / Pin / Icon / Labels / Milestones… / Delete. Viewbar: tabs render `config.display` (`text|text-icon|icon`); hover "+" adds a view or unhides a hidden one; right-click a tab → Rename / Display as / Customize / Duplicate / Delete (real delete, ≥1 visible view enforced). Board column quick-add is one task-creation affordance; the project "…" menu's **Create…** hover-flyout (→ **Task** / **Milestone**) opens a focused **New-task pane** (`NewTaskPane`) / **New-milestone pane** (`NewMilestonePane`, name + target date) in the shared `SidePane` — both with a "Create more" toggle + success toast. (The separate "Milestones…" item still opens the management pane.)
+- **New-task pane (ADR-027)**: `NewTaskPane` renders in the one shared `SidePane` with Title/Status/Priority/Assignee/Milestone/Due-date + a **"Create more"** toggle. `createTask` now accepts `assigneeId`/`milestoneId`/`dueDate` (in addition to title/priority/statusId). On success it toasts "New task added"; with "Create more" on it keeps the pane open, resets title+priority, and carries status/milestone/assignee/due to the next task. Opened from: the "…" menu's **Create… → Task** (editor-gated with the rest of that menu), the **Table** column-menu "Create task…", an empty Table's "+", and — when a Table is **grouped** — a hover-revealed "+" on each group header that **prefills the grouping value** (status/milestone/assignee, or today's date for the Today due-bucket). **Table sort** (`view.config.sortBy` = `priority|order`, set in Customize) orders rows (priority urgent→none; order asc, nulls last) within each group.
+- **One shared side pane** (`src/lib/components/SidePane.svelte`): the task pane (`TaskPanel`), the **Customize** pane, and the **Milestones** pane all render in one reusable right-pane chrome (slide-in, Escape-close, `title`/`header` snippet + ×). A `use:portal` action lifts the `<aside>` into the app shell's `[data-pane-host]` (the `.main-body` row), making it an **in-flow flex sibling of `.content`** (which is `overflow: scroll` inside a `height: 100dvh` shell, so content keeps its own scrollbars). Opening it resizes `.content` but not its children — SidePane mirrors its width to `--pane-w` on the host and `.content > *` gets `min-width: calc(100% + var(--pane-w))`, so children hold their pre-open width and `.content` scrolls instead of reflowing. Resizable left-edge handle (`--pane-w`, clamp 320…min(900,92vw), `localStorage`); top aligns to the topbar (≈49px); full-width fixed overlay under 900px. **Exactly one pane open at a time** via `src/lib/sidePaneRegistry.ts`.
+- **Task pane**: full-width **Title + Description** (auto-save on blur) with a **pills row** between them — Priority / Assignee / Milestone / Order / Location / Blocked-by — each a reusable `src/lib/components/Popover.svelte`. Milestone/Location popovers search the list and show a single **Create "&lt;term&gt;"** affordance only on a no-match search. Pills + title/desc persist via **`patchTask`** (updates only the fields present in the form via `form.has`, so no field clobbers another). `createMilestone`/`createLocation` accept an optional `taskId` to create-and-assign in one step.
+- **Table** keeps column widths (cells `white-space: nowrap`, `.table { width:100% }`, `.task-title` has no `min-width:0`) so the content pane scrolls horizontally instead of the table squishing (Notion-style). **Resizable columns** (TableView): per-`<th>` drag handles persist widths to `view.config.colWidths`; once set, the table is `table-layout: fixed` (explicit `width` = Σ col widths) so columns are authoritative and the pane scrolls. **Group by** (`view.config.groupBy` = `status|milestone|assignee|due|label`; **label** = a task appears in each of its labels' groups + "No label", group-"+" prefills via `createTask` `labelId`): TableView **and ListView** group identically; **BoardView** adds `label` swimlanes (multi-value, so cross-lane drag changes status/position only). TableView renders **one `<table>`** with a shared `<thead>` and one `<tbody>` per non-empty group, each led by a spanning **group-header row** (chevron + title + count + hover "+"); rows are a `{#snippet groupRows}`. One table = a single auto-layout, so **columns line up across all groups** (separate per-group `<table>`s sized columns independently → misaligned; ADR-030). Column show/hide menu is a single `<thead>` control (`colMenuOpen`); `due` → Overdue/Today/Next 7 days/Later/No due date; **BoardView** (`status` default `|milestone|assignee`) keeps statuses as columns: `status` = one board; `milestone`/`assignee` = horizontal **swimlanes** (one row per value + a `_none` row), each row a full status-column board. Cross-column drag = `moveTask` (status+position); cross-swimlane drag also `patchTask`es the milestone/assignee; each cell's quick-add prefills status + the lane's field.
+- **No decorative glyphs** before entity names (`◇` milestone, `●` label, `⛓` project); a `⛓ N` blocker count is fine (a count, not a name prefix).
 
 ---
 
-## ADR-007: Integration events are fire-and-forget
+## Realtime collaboration (ADR-025)
 
-**Status:** Accepted
-
-**Context:** Slack (and future integrations) must never make task/project mutations slow or failing.
-
-**Decision:** `dispatchEvent(event)` in `src/lib/server/integrations/` is called un-awaited (`void dispatchEvent(...)`) after mutations. It catches all errors internally, applies a 5s timeout to outbound webhooks, and logs failures. One `integration` row per type; config is JSON per type.
-
-**Consequences:** At-most-once delivery; a lost notification is acceptable, a blocked mutation is not. No retry queue until something needs it. New integrations: add a module + a case in `dispatchEvent`.
+Native **WebSockets** (`ws`) on `/ws`. Transport is **plain-ESM** `src/lib/server/realtime/attach.js` (no `$lib`/TS), shared by the Vite dev/preview plugin (`vite.config.ts`) and prod `server.js`. **Sync = invalidate + refetch**: a mutation calls `broadcastProjectChange(projectId, actorId)` (fire-and-forget, `src/lib/server/realtime/hub.ts`; the live-connection `Set` lives on `globalThis` to bridge dev module realms) → clients debounce `invalidateAll()` (reuses every `load()` permission filter; actor skipped). Upgrade auth + per-project `subscribe` authorize by forwarding cookies to the app's own `GET /api/me` and `GET /api/projects/{id}` — the WS layer imports no app modules. **Presence** avatars in the project header (`src/lib/realtime.svelte.ts`, 30s heartbeat, reconnect-with-backoff). Not OT — concurrent same-field edits are last-write-wins (refetch reconciles).
 
 ---
 
-## ADR-008: Slack webhook URL validated and never re-exposed
+## Cross-cutting (ADR-007/008/016/018/022/027/028)
 
-**Status:** Accepted
-
-**Context:** Webhook URLs are capability secrets and an SSRF vector if user-supplied URLs are fetched server-side.
-
-**Decision:** URL must start with `https://hooks.slack.com/`; stored server-side only; the client gets a masked hint (last 8 chars). Test-message action exercises the stored URL without revealing it.
-
-**Consequences:** No arbitrary-URL fetches from the integrations form. Generic outgoing webhooks (future) will need their own allowlisting/egress policy decision.
-
----
-
-## ADR-009: Token-only theming, one design-system source of truth
-
-**Status:** Accepted (supersedes the original RawBlock theme)
-
-**Context:** Visual identity should be swappable without touching components; the app has already switched RawBlock → StudioBlank once.
-
-**Decision:** Every visual primitive (colors, type scale/weights/transforms, borders, spacing, motion) is a CSS variable defined per `[data-theme]` block in `src/app.css`. Components consume tokens only. Active theme set by one attribute in `src/app.html`. `design.md` documents the active system; superseded specs are kept as `.bak` files.
-
-**Consequences:** The RawBlock→StudioBlank migration proved the model: theme swap = new token block + attribute flip, with component edits only where old styles had cheated (hardcoded values). Token set is the contract; new components must not bypass it.
+- **Theming**: Tailwind 4 (`@tailwindcss/vite`) + DaisyUI 5 — stock **light** (default) / **dark** themes, topbar toggle. DaisyUI owns base component classes (`btn/input/select/textarea/badge/alert/menu`); a **token bridge** in `app.css` maps legacy `--color-*`/`--sp-*`/`--dur-*`/`--radius` vars onto DaisyUI theme tokens so component-scoped `<style>` blocks follow the active theme. Theme = `theme` cookie applied to `<html data-theme>` at SSR (`hooks.server.ts` `transformPageChunk`). `.card`/`.label`/`.field`/`.u-*` are thin helpers. **No focus rings** (`:focus{outline:none}`).
+- **Motion**: no animation library — `svelte/transition` + `animate:flip` + CSS, ≤200ms (`--dur-fast/--dur/--dur-slow`); route content fades via `{#key pathname}`; `prefers-reduced-motion` kills all motion (css-based transitions included). Popovers/dropdown menus share a `popover` transition (`src/lib/transitions.ts`: fade + slight rise + scale, `cubicOut`; pair with `transform-origin`). Destructive confirms use enhance's `cancel()` (never `onsubmit`+`preventDefault`).
+- **i18n**: hand-rolled `src/lib/i18n` — English strings **are** the keys (`en` passthrough), `{param}` interpolation, missing → English fallback. App is English-only (Vietnamese removed); `$t` + `registerDictionary` kept so a locale can be re-added. DB content (status/label/project/task/user names) is never translated.
+- **Integrations**: `dispatchEvent(event)` (`src/lib/server/integrations/`) called **fire-and-forget** (`void`, never throws, 5s webhook timeout) after mutations. One `integration` row per `type`; events `project.created`/`task.created`/`task.completed`. **Slack** = incoming webhook (URL must start with `https://hooks.slack.com/`, stored server-side, never re-exposed — no arbitrary-URL fetches). New integration = new module + a case in `dispatchEvent`.
+- **Icons (ADR-028)**: **iconoir** (MIT, 1383 stroke icons, https://iconoir.com) rendered from a generated **external SVG sprite** `static/iconoir.svg` (one `<symbol>` per icon; built by `scripts/build-iconoir-sprite.mjs` → `npm run icons:build`, also a `prebuild` step; the searchable name list is `src/lib/iconoirNames.ts`). `Icon.svelte` renders one by name (`<use href="{base}/iconoir.svg#name">`, `size` prop, inherits `currentColor`) — external `<use>` keeps page DOM light and the sprite is fetched/cached once. `EntityIcon.svelte` renders a stored icon VALUE: `iconoir:<name>` → `<Icon>`, otherwise a plain emoji/glyph string (so legacy emoji `project.icon`s still render). `IconPicker.svelte` = a searchable picker with **Emoji + Icons** tabs (capped grid), emitting an emoji char or `iconoir:<name>`; used for `project.icon` from the project "…" → Icon submenu (`setProjectIcon` validates iconoir names against the set; `project.icon` now holds an emoji OR `iconoir:<name>`). Built-in UI chrome (dots `more-horiz`, chevrons `nav-arrow-*`, close `xmark`, view-type table/view-grid/list/dashboard-dots/map-pin, `check`, pin `star`, `menu`, theme `sun-light`/`half-moon`, back `arrow-left`) renders via `<Icon>`; deliberately-custom **semantic** glyphs stay (PriorityIcon signal bars, BoardView status-category `○◐●⊘`).
+- **Toasts (ADR-027)**: tiny app-wide primitive — `toast(message)` from `src/lib/toast.svelte.ts` (a module-level `$state` array, auto-dismiss) rendered by `src/lib/components/Toaster.svelte` mounted once in the `(app)` shell. No deps; click to dismiss. Used for transient confirmations (e.g. "New task added").
+- **Confirm modal**: same shape as toasts — `confirmDialog(message, opts)` (`src/lib/confirm.svelte.ts`) returns a `Promise<boolean>`; `ConfirmModal.svelte` (mounted once in the `(app)` shell) renders a **page-centered** dialog with a dimmed backdrop (Escape/backdrop cancel, Enter confirm, optional `danger` styling). Replaces the browser-native `confirm()` (which Chrome anchors to the top, not page-center). Used by task + sub-task deletes; the trigger is a `type="button"` that `requestSubmit()`s its enhance form only after the promise resolves true.
+- **`static/llms.txt`** (served at `/llms.txt`) documents the REST API for agents — keep it updated on any REST endpoint / field / status / view / location change.
 
 ---
 
-## ADR-010: One level of task nesting
+## Essential features batch (ADR-032)
 
-**Status:** Accepted
+Twelve features shipped together on `feat/essential-features` (Linear project "Baskets — Essential Features", BASDEV-2…13). **Schema-first**: all columns/tables added in one `drizzle-kit push`, then features built as new files + thin wiring into shared files. New schema: `task.startDate` / `task.recurrence` / `task.coverFileId`; `project.estimatedCostFieldId` / `project.actualCostFieldId`; tables `comment`, `activity`, `notification`, `saved_filter`, `template`.
 
-**Context:** Sub-tasks add value; arbitrary trees add UI and query complexity disproportionate to this product's scope.
-
-**Decision:** `task.parentId` self-reference, max depth 1, enforced at creation in both the form action and the REST endpoint. Parent completion cascades to children; deleting a parent deletes children first.
-
-**Consequences:** Flat queries, simple UI. If deeper hierarchies are ever needed, this becomes a recursive structure with closure-table or CTE queries — a deliberate future decision, not an accident.
-
----
-
-## ADR-011: Table-driven statuses with behavior categories
-
-**Status:** Accepted (supersedes the hardcoded `todo | in_progress | done` enum)
-
-**Context:** Statuses must be customizable app-wide (Settings → Statuses) and selectable per project. App logic (done-cascade, progress, strikethrough) must not depend on user-editable names.
-
-**Decision:** `status` table with a `category` column (`todo | active | done | canceled`) driving all behavior; names are display-only. Five built-ins (Backlog, Planned, In progress, Completed, Canceled) are bootstrapped idempotently at server start (`ensureDefaultStatuses`) and cannot be deleted; custom statuses can't be deleted while in use. `project_status` join table whitelists statuses per project; `task.statusId` is an FK. REST accepts `statusId` or case-insensitive `status` name.
-
-**Consequences:** Renames are free; behavior keys off category only. Status management is admin-only. The REST contract changed from fixed strings to names/ids (breaking; acceptable pre-release).
-
-**Update (2026-06-12):** Statuses are now two-scope: `status.projectId` null = app-wide (managed at /settings/statuses, admin), set = owned by one project (managed in the project's settings pane by project editors; add/edit/delete, auto-eligible on creation, cascade-deleted with the project, delete blocked while tasks use it). The DB unique constraint on `name` was dropped — uniqueness is enforced in code per scope (globals unique among globals; a project status must not collide with globals or siblings). Each project also gained a dedicated settings pane at /projects/[id]/settings (general, statuses, labels, dependencies, milestones, grants, delete) replacing the inline Edit card.
-
----
-
-## ADR-012: Notion-style project views, config as JSON
-
-**Status:** Accepted
-
-**Context:** Projects need multiple views (dashboard, table, board, map) with per-view configuration and edit/normal modes.
-
-**Decision:** `view` table per project (`type`, `config` JSON, `isDefault`). Invariants: every project gets a default Table view at creation; the last view can't be deleted. Active view selected via `?view=` query param. Config is type-specific and intentionally schemaless JSON (table: visible columns + status filter); unknown keys are ignored. One Svelte component per view type under `src/lib/components/views/`.
-
-**Consequences:** New view types = new component + enum entry; config migrations are unnecessary because readers treat config as optional hints.
-
-**Update (2026-06-12):** Board gained Linear-style drag-and-drop (native HTML5 DnD, no library): cards move between/within columns through a `moveTask` action that orders by `beforeId` with midpoint positioning and a full-column renumber when gaps run out. Also per-column quick-add, category-glyph headers with counts, priority icons, assignee initials, and card click → split task panel (`?task=` deep link). A fifth view type `list` ranks all tasks by the nullable `task.order` field (unranked last, board position as tiebreaker) with expandable sub-task rows.
-
-**Update (2026-06-12, #2):** Views are enable-style: one view per type per project, only Table enabled by default. The "+" button in the view bar lists the not-yet-enabled types; enabling creates the view, deleting disables it (last view still protected). View type is fixed at enablement; Edit view renames/configures only.
-
----
-
-## ADR-013: Grant-based edit permissions, read stays open
-
-**Status:** Accepted (supersedes "all members edit everything" from ADR-004)
-
-**Context:** Requirement: admins edit views and grant edit rights to users for specific projects, views, and tasks.
-
-**Decision:** Single `permission` table of edit grants (`userId`, `resourceType: project|view|task`, `resourceId`). Reads remain open to all signed-in users (single tenant). Resolution cascades: project grant ⇒ everything inside; parent-task grant ⇒ its sub-tasks; view grant ⇒ that view's config. Admins bypass. Non-admin project creators get an automatic grant on their own project. Grant management is admin-only, done in the project Edit panel. Enforced in form actions AND REST.
-
-**Consequences:** Non-admin users are read-only by default until granted. No "viewer/commenter" levels — single `edit` level until needed. Permission checks add one indexed query per mutation.
-
-**Update (2026-06-12):** Strict default proved wrong in dogfooding (members couldn't move cards or add tasks on shared projects and reported it as broken). Decision revised with the user: **task editing (create/edit/move/status/labels/deps) is open to every signed-in member**; grants now gate STRUCTURE only — project meta/delete, views, eligible statuses, milestones, label attachment to projects. `canEditTask` returns true for any session; task-scoped grants are no longer issued (legacy rows are inert). Creator auto-grant and view/project grants unchanged.
-
----
-
-## ADR-014: Milestones, labels, dependencies as plain join tables
-
-**Status:** Accepted
-
-**Context:** Milestones (per project, assignable to its tasks), labels (app-wide, optionally grouped, attachable to projects and tasks), dependencies (project→project, task→task same project, sub-task→sibling sub-task).
-
-**Decision:** `milestone` (+ `task.milestoneId` FK, same-project validated), `label`/`label_group` (group optional, `set null` on group delete) with `project_label`/`task_label` joins, `project_dependency`/`task_dependency` composite-PK joins. Dependency rules enforced server-side: same-project, sub-tasks only on siblings, cycle-checked with DFS before insert. Dependencies are informational (displayed as "blocked by") — they do not gate status changes.
-
-**Consequences:** All flat, indexable, cascade-deleting structures. Blocking semantics (can't complete while blocked) is a future product decision, not a schema change.
-
----
-
-## ADR-015: Map view via Leaflet + OpenStreetMap, coordinates only
-
-**Status:** Accepted
-
-**Context:** "Map" is a required view type but tasks had no geodata; geocoding services add keys/cost/SSRF surface.
-
-**Decision:** `task.location` stores raw `"lat, lng"` (validated by regex). Map view lazy-imports Leaflet client-side (`onMount`), renders OSM tiles and `circleMarker`s (no icon assets), fits bounds. No geocoding — users enter coordinates.
-
-**Consequences:** Only dependency added is `leaflet`; SSR untouched. Address-based input would need a geocoding decision later.
-
----
-
-## ADR-016: Hand-rolled i18n, English strings as keys
-
-**Status:** Accepted
-
-**Context:** Whole-app i18n requested. svelte-i18n / Paraglide add tooling and message-catalog ceremony disproportionate to a two-locale single-tenant app.
-
-**Decision:** ~50-line module (`src/lib/i18n/`): a `locale` store plus a derived `t` store; English strings ARE the keys (`en` is passthrough), other locales map key → translation with `{param}` interpolation, missing keys fall back to English. Locale persisted in a `locale` cookie, read in the root layout `load`, set synchronously in the root layout component before render (SvelteKit SSR renders synchronously after loads, so the shared store is safe per-request). Switcher in /settings. DB-driven content (status/label/project/task/user names) is intentionally NOT translated; server-side action/API error messages remain English for now. Locales: en, vi.
-
-**Consequences:** Zero dependencies, greppable keys, no extraction step; adding a locale = one dictionary file + a LOCALES entry. Costs: no pluralization rules beyond manual phrasing, English source-string changes orphan dictionary keys (caught by fallback), and server messages need a separate decision if they must localize.
+- **Search + filter** (BASDEV-2/7): `FilterBar.svelte` + pure `src/lib/taskFilter.ts` (`matchTask`/`filterTasks`) + `src/lib/taskSort.ts` (`sortTasks`: priority|order|title|due|status|assignee|createdAt, `:desc`). Active filter set lives in `view.config.filters` (persisted via the existing `?/updateView`); the project page derives `filteredTasks = sortTasks(filterTasks(tasks, …), …)` and passes it to Table/List/Board as their `tasks` prop (views unchanged). Facets render as **pill popovers** (no chevron). **Saved filters** = `saved_filter` table + `SavedFilters.svelte`.
+- **Comments + activity** (BASDEV-3): `comment` + `activity` tables; `src/lib/server/comments.ts` (CRUD + `logActivity`); REST `GET/POST /api/tasks/{id}/comments`, `PATCH/DELETE /api/comments/{id}`; `TaskComments.svelte` (merged chronological feed) in the task pane. `createTask`/`patchTask`/`setStatus` fire `logActivity` (fire-and-forget).
+- **Notifications** (BASDEV-4): `notification` table; `src/lib/server/notifications.ts` (create/list/markRead/unreadCount + `generateDueReminders`); REST `GET /api/notifications`, `POST /api/notifications/{id}`, `POST /api/notifications/read-all`; `NotificationBell.svelte` (topbar bell + unread badge, self-fetches). An `assigned` notification fires when `patchTask` changes the assignee.
+- **Timeline / Calendar views** (BASDEV-5/11): new view types `timeline` (`TimelineView.svelte`, bars spanning `startDate→dueDate`, grouped by milestone) and `calendar` (`CalendarView.svelte`, month grid on `dueDate`). Registered in `VIEW_TYPES`/`VIEW_ICONS` + the switcher AND in the server-side `VIEW_TYPES` allow-list (`src/lib/server/projects.ts`) so `createView` accepts them.
+- **Bulk actions** (BASDEV-6): `selection.svelte.ts` store + `BulkActionBar.svelte`; hover-only row checkboxes in Table/List; `bulkPatchTasks` (status/assignee/milestone/priority, plus **`parentId`** for Move, depth-1 guarded) + `bulkDeleteTasks` + `bulkReparentToNew` (create a parent and move). The task pane reuses these for **sub-task bulk edit** (Move/Status/Assignee/Milestone/Priority/Delete).
+- **Templates + recurring** (BASDEV-8): `template` table + `src/lib/server/templates.ts` (`instantiateTemplate`) + `TemplatePicker.svelte` + `src/lib/recurrence.ts` (`parseRecurrence`/`nextDueDate`). Completing a recurring task (status → completed in `setStatus`) spawns the next occurrence. (Board drag-to-complete via `moveTask` does not yet spawn — follow-up.)
+- **Export** (BASDEV-9): REST `GET /api/projects/{id}/export?format=csv` (access-gated, CSV-escaped, incl. custom fields/cost) + an Export-CSV menu item + print stylesheet.
+- **Budget** (BASDEV-10): `project.estimatedCostFieldId`/`actualCostFieldId` designate the number fields; `src/lib/budget.ts` (`computeBudget`, sub-task rollup reusing `fieldAggregations` summing) + `BudgetSummary.svelte` (per-milestone + project estimated/actual/variance, under=green/over=red).
+- **Photo / doc capture** (BASDEV-12): `TaskAttachments.svelte` (drag-drop + `<input capture>` camera) reusing `/api/files`, REST `POST /api/tasks/{id}/files`; optional `task.coverFileId` cover thumbnail.
+- **Mobile responsive** (BASDEV-13): `src/lib/mobile.css` (imported from `app.css`) — sidebar drawer < 720px, viewbar/table horizontal scroll, larger touch targets, full-screen pane overlay.
+- **`Popover.svelte`** gained an **`up`** prop (opens above the trigger) for bottom-anchored bars (e.g. `BulkActionBar`).

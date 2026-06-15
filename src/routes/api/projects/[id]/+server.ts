@@ -1,10 +1,12 @@
 import { json } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { milestone, project, task, view } from '$lib/server/db/schema';
+import { customField, customFieldOption, location, milestone, project, task, view } from '$lib/server/db/schema';
 import { apiError, readJson, optionalString, ApiValidationError } from '$lib/server/api';
-import { canEditProject } from '$lib/server/permissions';
+import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import { canAccessProject, canEditProject } from '$lib/server/permissions';
 import { listProjectStatuses } from '$lib/server/statuses';
+import { customValuesByTask, listCustomFieldOptions, listProjectCustomFields } from '$lib/server/customFields';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals }) => {
@@ -12,8 +14,10 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) return apiError(404, 'Project not found');
+	// ADR-019: inaccessible projects are indistinguishable from missing ones
+	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Project not found');
 
-	const [tasks, views, milestones, statuses] = await Promise.all([
+	const [tasks, views, milestones, locations, statuses] = await Promise.all([
 		db
 			.select()
 			.from(task)
@@ -29,10 +33,32 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 			.from(milestone)
 			.where(eq(milestone.projectId, params.id))
 			.orderBy(asc(milestone.position), asc(milestone.createdAt)),
+		db
+			.select()
+			.from(location)
+			.where(eq(location.projectId, params.id))
+			.orderBy(asc(location.position), asc(location.title)),
 		listProjectStatuses(params.id)
 	]);
 
-	return json({ project: proj, tasks, views, milestones, statuses });
+	const customFields = await listProjectCustomFields(params.id);
+	const [customFieldOptions, valuesByTask] = await Promise.all([
+		listCustomFieldOptions(customFields.map((f) => f.id)),
+		customValuesByTask(params.id, tasks.map((t) => t.id))
+	]);
+	// attach each task's decoded custom-field value map
+	const tasksWithCf = tasks.map((t) => ({ ...t, customFields: valuesByTask[t.id] ?? {} }));
+
+	return json({
+		project: proj,
+		tasks: tasksWithCf,
+		views,
+		milestones,
+		locations,
+		statuses,
+		customFields,
+		customFieldOptions
+	});
 };
 
 export const PATCH: RequestHandler = async ({ request, params, locals }) => {
@@ -72,6 +98,7 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		.where(eq(project.id, params.id))
 		.returning();
 
+	broadcastProjectChange(params.id, locals.user.id);
 	return json({ project: updated });
 };
 
@@ -84,5 +111,6 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 		return apiError(403, 'No edit permission on this project');
 
 	await db.delete(project).where(eq(project.id, params.id));
+	broadcastProjectChange(params.id, locals.user.id);
 	return new Response(null, { status: 204 });
 };

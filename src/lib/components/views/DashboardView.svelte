@@ -18,13 +18,13 @@
 	}: { tasks: Task[]; statuses: Status[]; milestones: Milestone[] } = $props();
 
 	const top = $derived(tasks.filter((t) => !t.parentId));
-	const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'todo';
-	const doneCount = $derived(top.filter((t) => cat(t.statusId) === 'done').length);
+	const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'backlog';
+	const doneCount = $derived(top.filter((t) => cat(t.statusId) === 'completed').length);
 	const pct = $derived(top.length > 0 ? Math.round((doneCount / top.length) * 100) : 0);
 	const overdue = $derived(
 		top.filter(
 			(t) =>
-				t.dueDate && new Date(t.dueDate).getTime() < Date.now() && cat(t.statusId) !== 'done'
+				t.dueDate && new Date(t.dueDate).getTime() < Date.now() && cat(t.statusId) !== 'completed'
 		).length
 	);
 
@@ -35,7 +35,7 @@
 	const byMilestone = $derived(
 		milestones.map((m) => {
 			const mt = tasks.filter((t) => t.milestoneId === m.id);
-			const done = mt.filter((t) => cat(t.statusId) === 'done').length;
+			const done = mt.filter((t) => cat(t.statusId) === 'completed').length;
 			return { milestone: m, total: mt.length, done };
 		})
 	);
@@ -82,7 +82,7 @@
 	{#each byMilestone as row (row.milestone.id)}
 		<div class="bar-row">
 			<span class="bar-label">
-				◇ {row.milestone.name}
+				{row.milestone.name}
 				{#if row.milestone.targetDate}
 					<span class="u-tiny u-muted mono">{fmtDate(row.milestone.targetDate)}</span>
 				{/if}

@@ -27,7 +27,7 @@
 <div class="card" style="max-width: 560px;">
 	<div class="u-between" style="margin-bottom: var(--sp-2);">
 		<h4>Slack</h4>
-		<span class="badge" class:badge--success={connected && data.slack?.enabled}>
+		<span class="badge" class:badge-success={connected && data.slack?.enabled}>
 			{connected ? (data.slack?.enabled ? $t('ON') : $t('PAUSED')) : $t('OFF')}
 		</span>
 	</div>
@@ -36,13 +36,13 @@
 	</p>
 
 	{#if form?.message}
-		<div class="alert alert--error" role="alert">{form.message}</div>
+		<div class="alert alert-error" role="alert">{form.message}</div>
 	{/if}
 	{#if form?.saved}
-		<div class="alert alert--success" role="status">{$t('Slack connected.')}</div>
+		<div class="alert alert-success" role="status">{$t('Slack connected.')}</div>
 	{/if}
 	{#if form?.tested}
-		<div class="alert alert--success" role="status">{$t('Test message sent — check your channel.')}</div>
+		<div class="alert alert-success" role="status">{$t('Test message sent — check your channel.')}</div>
 	{/if}
 
 	{#if !admin}
@@ -64,7 +64,7 @@
 			</form>
 			<button class="btn" type="button" onclick={() => (editing = true)}>{$t('Change URL')}</button>
 			<form method="POST" action="?/removeSlack" use:enhance={submit}>
-				<button class="btn btn--danger" type="submit" disabled={loading}>{$t('Remove')}</button>
+				<button class="btn btn-error" type="submit" disabled={loading}>{$t('Remove')}</button>
 			</form>
 		</div>
 	{:else}
@@ -81,7 +81,7 @@
 				/>
 			</div>
 			<div class="u-flex">
-				<button class="btn btn--primary" type="submit" disabled={loading}>
+				<button class="btn btn-primary" type="submit" disabled={loading}>
 					{loading ? $t('Saving…') : connected ? $t('Update webhook') : $t('Connect Slack')}
 				</button>
 				{#if editing}

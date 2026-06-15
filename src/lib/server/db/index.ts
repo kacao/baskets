@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { env } from '$env/dynamic/private';
 import * as schema from './schema';
 
-const sqlite = new Database(env.DATABASE_URL ?? './baskets.db');
+const sqlite = new Database(env.DATABASE_URL ?? './data/baskets.db');
 try {
 	sqlite.pragma('journal_mode = WAL');
 } catch {

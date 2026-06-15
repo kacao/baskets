@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { milestone, project, task } from '$lib/server/db/schema';
+import { location, milestone, project, task } from '$lib/server/db/schema';
 import {
 	apiError,
 	readJson,
@@ -10,8 +10,15 @@ import {
 	PRIORITIES
 } from '$lib/server/api';
 import { dispatchEvent } from '$lib/server/integrations';
-import { canEditTask } from '$lib/server/permissions';
+import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import { create as createNotification } from '$lib/server/notifications';
+import { canAccessProject, canEditTask } from '$lib/server/permissions';
 import { listProjectStatuses } from '$lib/server/statuses';
+import {
+	apiCustomFieldEntries,
+	customValuesByTask,
+	writeTaskCustomValues
+} from '$lib/server/customFields';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals }) => {
@@ -19,6 +26,9 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 	const [found] = await db.select().from(task).where(eq(task.id, params.id));
 	if (!found) return apiError(404, 'Task not found');
+	// ADR-019: inaccessible projects' tasks are indistinguishable from missing ones
+	if (!(await canAccessProject(locals.user, found.projectId)))
+		return apiError(404, 'Task not found');
 
 	const subTasks = await db
 		.select()
@@ -26,7 +36,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		.where(eq(task.parentId, params.id))
 		.orderBy(asc(task.position), asc(task.createdAt));
 
-	return json({ task: found, subTasks });
+	const values = await customValuesByTask(found.projectId, [found.id]);
+	return json({ task: { ...found, customFields: values[found.id] ?? {} }, subTasks });
 };
 
 export const PATCH: RequestHandler = async ({ request, params, locals }) => {
@@ -78,9 +89,11 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		}
 	}
 
+	let newAssigneeId: string | null | undefined;
 	if (body.assigneeId !== undefined) {
-		updates.assigneeId =
+		newAssigneeId =
 			typeof body.assigneeId === 'string' && body.assigneeId ? body.assigneeId : null;
+		updates.assigneeId = newAssigneeId;
 	}
 
 	if (body.milestoneId !== undefined) {
@@ -93,6 +106,19 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 			updates.milestoneId = body.milestoneId;
 		} else {
 			return apiError(400, 'milestoneId must be a string or null');
+		}
+	}
+
+	if (body.locationId !== undefined) {
+		if (body.locationId === null || body.locationId === '') {
+			updates.locationId = null;
+		} else if (typeof body.locationId === 'string') {
+			const [l] = await db.select().from(location).where(eq(location.id, body.locationId));
+			if (!l || l.projectId !== existing.projectId)
+				return apiError(400, 'locationId must reference a location of the same project');
+			updates.locationId = body.locationId;
+		} else {
+			return apiError(400, 'locationId must be a string or null');
 		}
 	}
 
@@ -125,7 +151,11 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		}
 	}
 
-	if (Object.keys(updates).length === 0) return apiError(400, 'No fields to update');
+	const cfMap =
+		body.customFields && typeof body.customFields === 'object' && !Array.isArray(body.customFields)
+			? (body.customFields as Record<string, unknown>)
+			: null;
+	if (Object.keys(updates).length === 0 && !cfMap) return apiError(400, 'No fields to update');
 
 	const [updated] = await db
 		.update(task)
@@ -133,9 +163,14 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		.where(eq(task.id, params.id))
 		.returning();
 
+	if (cfMap) {
+		const res = await writeTaskCustomValues(params.id, existing.projectId, apiCustomFieldEntries(cfMap));
+		if (res.error) return apiError(400, res.error);
+	}
+
 	// Completing a parent completes its sub-tasks (same rule as the form action)
-	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'done';
-	if (targetStatus?.category === 'done' && !wasDone) {
+	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	if (targetStatus?.category === 'completed' && !wasDone) {
 		await db
 			.update(task)
 			.set({ statusId: targetStatus.id, updatedAt: new Date() })
@@ -150,7 +185,24 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		});
 	}
 
-	return json({ task: updated });
+	if (
+		newAssigneeId !== undefined &&
+		newAssigneeId &&
+		newAssigneeId !== existing.assigneeId &&
+		newAssigneeId !== locals.user.id
+	) {
+		void createNotification({
+			userId: newAssigneeId,
+			type: 'assigned',
+			body: `You were assigned to "${updated.title}"`,
+			projectId: existing.projectId,
+			taskId: existing.id
+		});
+	}
+
+	broadcastProjectChange(existing.projectId, locals.user.id);
+	const values = await customValuesByTask(existing.projectId, [params.id]);
+	return json({ task: { ...updated, customFields: values[params.id] ?? {} } });
 };
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {
@@ -163,5 +215,6 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 
 	await db.delete(task).where(eq(task.parentId, params.id));
 	await db.delete(task).where(eq(task.id, params.id));
+	broadcastProjectChange(existing.projectId, locals.user.id);
 	return new Response(null, { status: 204 });
 };

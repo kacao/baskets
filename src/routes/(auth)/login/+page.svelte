@@ -43,7 +43,7 @@
 </p>
 
 {#if error}
-	<div class="alert alert--error" role="alert">{error}</div>
+	<div class="alert alert-error" role="alert">{error}</div>
 {/if}
 
 <form onsubmit={submit}>
@@ -69,7 +69,7 @@
 			bind:value={password}
 		/>
 	</div>
-	<button class="btn btn--primary" type="submit" disabled={loading} style="width: 100%;">
+	<button class="btn btn-primary" type="submit" disabled={loading} style="width: 100%;">
 		{loading ? $t('Signing in…') : $t('Sign in')}
 	</button>
 </form>
