@@ -8,6 +8,8 @@
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
 	import { fieldAppliesTo, fieldAggregations } from '$lib/customFields';
+	import { sortTasks } from '$lib/taskSort';
+	import { selection } from '$lib/selection.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { t as i18n } from '$lib/i18n';
 
@@ -24,6 +26,7 @@
 		location: string | null;
 		order: number | null;
 		dueDate: Date | string | null;
+		coverFileId?: string | null;
 	};
 	type Status = { id: string; name: string; category: string };
 	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
@@ -114,7 +117,7 @@
 	const cfValue = (taskId: string, fieldId: string) =>
 		taskCustomValues.find((v) => v.taskId === taskId && v.fieldId === fieldId)?.value ?? null;
 	const colCount = $derived(
-		3 + COLS.filter((k) => show(k)).length + cfCols.filter((c) => show(c.key)).length
+		4 + COLS.filter((k) => show(k)).length + cfCols.filter((c) => show(c.key)).length
 	);
 	let colMenuOpen = $state(false);
 	let collapsed = $state<Record<string, boolean>>({}); // group.key → collapsed
@@ -125,6 +128,7 @@
 	// ---- column resize (persisted to view.config.colWidths) ----
 	// columns in render order; colgroup/headers/cells follow the same sequence.
 	const orderedCols = $derived([
+		'select',
 		'status',
 		'title',
 		...COLS.filter((k) => show(k)),
@@ -132,7 +136,7 @@
 		'actions'
 	]);
 	const COL_DEFAULTS: Record<string, number> = {
-		status: 44, title: 320, priority: 110, assignee: 140, milestone: 160, due: 120, labels: 160, actions: 44
+		select: 36, status: 44, title: 320, priority: 110, assignee: 140, milestone: 160, due: 120, labels: 160, actions: 44
 	};
 	const colDefault = (key: string) => (key.startsWith('cf:') ? 160 : (COL_DEFAULTS[key] ?? 140));
 	const colWidths = $derived(
@@ -211,19 +215,16 @@
 	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
 	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
 
-	// Sort (config.sortBy): priority (urgent→none) or order (asc, nulls last).
+	// Sort (config.sortBy): handled by the shared sortTasks helper (BASDEV-7).
 	const sortBy = $derived(typeof config.sortBy === 'string' ? (config.sortBy as string) : null);
-	const PRIORITY_RANK: Record<string, number> = { none: 0, low: 1, medium: 2, high: 3, urgent: 4 };
-	function sortRows(rows: Task[]): Task[] {
-		if (sortBy === 'priority')
-			return [...rows].sort(
-				(a, b) => (PRIORITY_RANK[b.priority] ?? 0) - (PRIORITY_RANK[a.priority] ?? 0)
-			);
-		if (sortBy === 'order')
-			return [...rows].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
-		return rows;
-	}
-	const sortedTop = $derived(sortRows(topTasks));
+	const statusRank = (id: string) => {
+		const i = statuses.findIndex((s) => s.id === id);
+		return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+	};
+	const assigneeName = (id: string | null) => users.find((u) => u.id === id)?.name ?? null;
+	const sortedTop = $derived(sortTasks(topTasks, sortBy, { statusRank, assigneeName }));
+	// visible top-level ids in render order — used by shift-range bulk select.
+	const orderedIds = $derived(sortedTop.map((t) => t.id));
 
 	// today as a local yyyy-mm-dd (for the "Today" due-group prefill)
 	function todayStr() {
@@ -337,6 +338,17 @@
 			</colgroup>
 			<thead>
 				<tr>
+					<th class="col-select">
+						<input
+							type="checkbox"
+							aria-label={$i18n('Select all')}
+							checked={selection.allSelected(orderedIds)}
+							onclick={() =>
+								selection.allSelected(orderedIds)
+									? selection.clear()
+									: selection.selectAll(orderedIds)}
+						/>
+					</th>
 					<th class="col-status">{$i18n('Status')}</th>
 					<th>{$i18n('Title')}{@render rh('title')}</th>
 					{#if show('priority')}<th>{$i18n('Priority')}{@render rh('priority')}</th>{/if}
@@ -464,6 +476,18 @@
 					{@const doneSubs = subs.filter((s) => isDone(s)).length}
 					{@const deps = depsOf(t.id)}
 					<tr class="task-row" class:is-done={isDone(t)} class:selected={selectedId === t.id}>
+						<td class="col-select" onclick={(e) => e.stopPropagation()}>
+							<input
+								type="checkbox"
+								aria-label={$i18n('Select task')}
+								checked={selection.has(t.id)}
+								onclick={(e) => {
+									e.stopPropagation();
+									if ((e as MouseEvent).shiftKey) selection.range(t.id, orderedIds);
+									else selection.toggle(t.id);
+								}}
+							/>
+						</td>
 						<td class="col-status">
 							<StatusSelect taskId={t.id} statusId={t.statusId} {statuses} canEdit={canEditTask(t)} display={statusDisplay} />
 						</td>
@@ -486,6 +510,7 @@
 									class:selected={selectedId === t.id}
 									onclick={() => openDetail(t)}
 								>
+									{#if t.coverFileId}<img class="row-cover" src={`/api/files/${t.coverFileId}`} alt="" loading="lazy" />{/if}
 									<span class="title-text">{t.title}</span>
 								</button>
 								{#if deps.length > 0}
@@ -548,6 +573,7 @@
 
 					{#each expanded[t.id] ? subs : [] as s (s.id)}
 						<tr class="sub-row-tr" class:is-done={isDone(s)} class:selected={selectedId === s.id}>
+							<td class="col-select"></td>
 							<td class="col-status">
 								<StatusSelect taskId={s.id} statusId={s.statusId} {statuses} canEdit={canEditTask(s)} display={statusDisplay} />
 							</td>
@@ -807,6 +833,22 @@
 
 	.col-resize:hover {
 		background: color-mix(in oklab, var(--color-fg) 25%, transparent);
+	}
+
+	.col-select {
+		width: 1%;
+		white-space: nowrap;
+		text-align: center;
+	}
+
+	.row-cover {
+		width: 20px;
+		height: 20px;
+		object-fit: cover;
+		border-radius: 3px;
+		margin-right: 6px;
+		vertical-align: middle;
+		flex: 0 0 auto;
 	}
 
 	.col-status {

@@ -6,6 +6,7 @@
 @import '@fontsource/ibm-plex-mono/400.css';
 
 @import 'tailwindcss';
+@import './lib/mobile.css';
 @plugin "daisyui" {
 	themes: light --default, dark --prefersdark;
 }

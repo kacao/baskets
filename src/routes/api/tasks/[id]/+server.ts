@@ -11,6 +11,7 @@ import {
 } from '$lib/server/api';
 import { dispatchEvent } from '$lib/server/integrations';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import { create as createNotification } from '$lib/server/notifications';
 import { canAccessProject, canEditTask } from '$lib/server/permissions';
 import { listProjectStatuses } from '$lib/server/statuses';
 import {
@@ -88,9 +89,11 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		}
 	}
 
+	let newAssigneeId: string | null | undefined;
 	if (body.assigneeId !== undefined) {
-		updates.assigneeId =
+		newAssigneeId =
 			typeof body.assigneeId === 'string' && body.assigneeId ? body.assigneeId : null;
+		updates.assigneeId = newAssigneeId;
 	}
 
 	if (body.milestoneId !== undefined) {
@@ -179,6 +182,21 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 			actor: locals.user.name,
 			projectName: proj?.name ?? 'Unknown project',
 			taskTitle: updated.title
+		});
+	}
+
+	if (
+		newAssigneeId !== undefined &&
+		newAssigneeId &&
+		newAssigneeId !== existing.assigneeId &&
+		newAssigneeId !== locals.user.id
+	) {
+		void createNotification({
+			userId: newAssigneeId,
+			type: 'assigned',
+			body: `You were assigned to "${updated.title}"`,
+			projectId: existing.projectId,
+			taskId: existing.id
 		});
 	}
 

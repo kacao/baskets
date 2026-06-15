@@ -12,7 +12,7 @@ import {
 } from './db/schema';
 import { listStatuses, listWorkspaceStatuses } from './statuses';
 
-export const VIEW_TYPES = ['dashboard', 'table', 'board', 'list', 'map'] as const;
+export const VIEW_TYPES = ['dashboard', 'table', 'board', 'list', 'timeline', 'calendar', 'map'] as const;
 export type ViewType = (typeof VIEW_TYPES)[number];
 
 /**

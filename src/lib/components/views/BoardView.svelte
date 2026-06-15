@@ -23,6 +23,7 @@
 		order: number | null;
 		position: number;
 		dueDate: Date | string | null;
+		coverFileId?: string | null;
 	};
 	type Status = { id: string; name: string; category: string };
 	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
@@ -357,6 +358,9 @@
 							onclick={() => !justDragged && openDetail(t)}
 							onkeydown={(e) => e.key === 'Enter' && openDetail(t)}
 						>
+							{#if t.coverFileId}
+								<img class="bcard-cover" src={`/api/files/${t.coverFileId}`} alt="" loading="lazy" />
+							{/if}
 							<div class="bcard-top">
 								<PriorityIcon priority={t.priority} />
 								<span class="bcard-title">{t.title}</span>
@@ -641,6 +645,15 @@
 
 	.bcard.dragging {
 		opacity: 0.4;
+	}
+
+	.bcard-cover {
+		width: 100%;
+		height: 96px;
+		object-fit: cover;
+		border-radius: var(--radius-field, 0.25rem);
+		margin-bottom: 6px;
+		display: block;
 	}
 
 	.bcard-top {

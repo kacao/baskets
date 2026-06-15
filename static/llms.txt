@@ -148,6 +148,71 @@ Download the file bytes (access-gated by the file's project; `404` otherwise). S
 ### DELETE /api/files/{id}
 Delete a file (row + disk bytes) and strip its id from any task value referencing it. `404` if missing/inaccessible.
 
+## Task attachments
+
+Files can also be attached DIRECTLY to a task (no custom field). These rows have `taskId` set and `fieldId` null, and back the task gallery / cover image.
+
+### GET /api/tasks/{id}/files
+List the files attached directly to a task (excludes custom-field files).
+- 200: `{ "files": [{ "id", "filename", "mimeType", "size" }...] }`. `404` if the task or its project is inaccessible.
+
+### POST /api/tasks/{id}/files
+Upload a file straight onto a task (multipart/form-data; part `file`). The project is derived from the task; max 10 MB; the same blocked-extension + server-derived MIME rules as `/api/files` apply.
+- 201: `{ "file": { "id", "filename", "mimeType", "size" } }`. `403` if no edit permission, `404` if inaccessible.
+- Set a task's cover image from one of these via the `?/setTaskCover` form action (`id`, `coverFileId`; image of the same task; empty clears).
+
+## Comments
+
+### GET /api/tasks/{id}/comments
+List a task's comments plus its activity feed (newest-relevant order).
+- 200: `{ "comments": [{ "id", "taskId", "authorId", "authorName", "body", "createdAt", "updatedAt", "edited" }...], "activity": [{ "id", "type", "actorId", "actorName", "data", "createdAt" }...] }`. `404` if inaccessible.
+
+### POST /api/tasks/{id}/comments
+Add a comment.
+- Body (JSON): `{ "body": string }` (non-empty, max 10000).
+- 201: `{ "comment": <comment> }`. `404` if inaccessible.
+
+### PATCH /api/comments/{id}
+Edit a comment body (author or admin only).
+- Body (JSON): `{ "body": string }`.
+- 200: `{ "comment": <comment> }`. `403` if not the author, `404` if missing.
+
+### DELETE /api/comments/{id}
+Delete a comment (author or admin only). `403`/`404` as above. 204: empty body.
+
+## Notifications
+
+In-app notifications for the current user (assignment + due-date reminders). Due reminders are generated lazily on GET.
+
+### GET /api/notifications
+List the current user's notifications + unread count.
+- 200: `{ "notifications": [{ "id", "userId", "type", "body", "projectId", "taskId", "read", "createdAt" }...], "unreadCount": number }`. `type` ∈ `assigned | due_soon | overdue | ...`.
+
+### POST /api/notifications/{id}
+(also `PATCH`) Mark one notification read (owner-scoped). 200 on success, `404` if not the user's.
+
+### POST /api/notifications/read-all
+(also `PATCH`) Mark all of the user's notifications read. 200: `{ "updated": number }`.
+
+## Templates
+
+Task templates: capture a task (and its sub-tasks + custom values) for reuse.
+
+### GET /api/projects/{id}/templates
+List templates available to a project (its own + its workspace scope).
+- 200: `{ "templates": [{ "id", "name", "scope", "payload", "createdAt" }...] }`. `404` if inaccessible.
+
+### POST /api/projects/{id}/templates
+Create a template, or instantiate one into the project.
+- Create body: `{ "taskId": string, "name": string, "scope"?: "project"|"workspace" }`.
+- Instantiate body: `{ "templateId": string }` → creates the task(s) and returns the new top-level id.
+- `404` if inaccessible.
+
+## Export
+
+### GET /api/projects/{id}/export?format=csv
+Download all project tasks as CSV (UTF-8 BOM, CRLF, RFC-4180 quoting). Columns: Title, Parent, Status, Priority, Assignee, Milestone, Due Date, one per custom field, plus Estimated Cost / Actual Cost (from the project's budget fields). Access-gated (`404` otherwise); served as a `Content-Disposition: attachment` download.
+
 ## Object shapes
 
 - project: `id, name, description, workspaceId, statusId, pinned, createdBy, createdAt, updatedAt`
@@ -157,7 +222,7 @@ Delete a file (row + disk bytes) and strip its id from any task value referencin
 - customField: `id, projectId, name, type, config (JSON object), appliesTo, position, createdAt`. `type` ∈ `text|number|select|date|person|files|task|checkbox|email|phone|place|url`. `appliesTo` ∈ `all | tasks (top-level only) | subtasks` — a value can only be set on a task at the matching level (else `400`). `config` is type-specific: number `{numberFormat, currencyCode?, formatString?}`; select `{multi, displayOption}`; date `{dateFormat, timeFormat}`; person/place/files `{multi}`.
 - customFieldOption: `id, fieldId, title, color, icon, position, createdAt` — members of a `select` field.
 - file: `id, projectId, fieldId, taskId, filename, mimeType, size, createdBy, createdAt` (the on-disk path is never exposed; fetch bytes via `GET /api/files/{id}`).
-- view: `id, projectId, name, type (table|board|list|dashboard|map), config (JSON string), position, isDefault, hidden, createdBy, createdAt, updatedAt`. `config` is schemaless per-view JSON; known **table/list** keys: `groupBy` (`status|milestone|assignee|due|label`; omit = ungrouped), `sortBy` (`priority|order`; omit = natural order; table only), column toggles `priority|assignee|milestone|due|labels` and per-custom-field `cf:<fieldId>` (boolean; absent = shown; table only), `colWidths` (table only — `{ "<colKey>": px }`, colKey ∈ `status|title|priority|assignee|milestone|due|labels|cf:<fieldId>|actions`; presence switches the table to fixed-width columns), `statusIds` (array of status ids to show; absent = all). **board** key: `groupBy` (`status` default `|milestone|assignee|label` — non-status values become swimlanes). `display` (`text|text-icon|icon`) applies to any view's tab.
+- view: `id, projectId, name, type (table|board|list|timeline|calendar|dashboard|map), config (JSON string), position, isDefault, hidden, createdBy, createdAt, updatedAt`. `config` is schemaless per-view JSON; known **table/list** keys: `groupBy` (`status|milestone|assignee|due|label`; omit = ungrouped), `sortBy` (`priority|order|title|due|status|assignee|createdAt`, each optionally `:desc`; omit = natural order), `filters` (saved filter set: `{ statusIds?, priorities?, assigneeIds?, milestoneIds?, labelIds?, due? }`), column toggles `priority|assignee|milestone|due|labels` and per-custom-field `cf:<fieldId>` (boolean; absent = shown; table only), `colWidths` (table only — `{ "<colKey>": px }`, colKey ∈ `status|title|priority|assignee|milestone|due|labels|cf:<fieldId>|actions`; presence switches the table to fixed-width columns), `statusIds` (array of status ids to show; absent = all). **board** key: `groupBy` (`status` default `|milestone|assignee|label` — non-status values become swimlanes). `display` (`text|text-icon|icon`) applies to any view's tab.
 - milestone: `id, projectId, name, description, targetDate, position, createdAt, updatedAt`
 
 ## Example

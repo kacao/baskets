@@ -6,8 +6,11 @@
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
+	import TaskComments from '$lib/components/TaskComments.svelte';
+	import TaskAttachments from '$lib/components/TaskAttachments.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { fieldAppliesTo } from '$lib/customFields';
+	import { describeRecurrence } from '$lib/recurrence';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
 
@@ -24,6 +27,8 @@
 		location: string | null;
 		order: number | null;
 		dueDate: Date | string | null;
+		recurrence?: string | null;
+		coverFileId?: string | null;
 	};
 	type Status = { id: string; name: string; category: string };
 	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
@@ -395,6 +400,33 @@
 					</form>
 				{/snippet}
 			</Popover>
+
+			<!-- Recurrence -->
+			<Popover ariaLabel={$t('Recurrence')}>
+				{#snippet trigger()}
+					<span class="pill-val" class:pill-ph={!task.recurrence}>
+						{describeRecurrence(task.recurrence) ?? $t('Repeat')}
+					</span>
+				{/snippet}
+				{#snippet panel()}
+					<form method="POST" action="?/patchTask" use:enhance class="pop-recur">
+						<input type="hidden" name="id" value={task.id} />
+						<select
+							name="recurrence"
+							class="input"
+							value={task.recurrence ?? ''}
+							onchange={(e) => e.currentTarget.form?.requestSubmit()}
+						>
+							<option value="">{$t('Does not repeat')}</option>
+							<option value="daily:1">{$t('Every day')}</option>
+							<option value="weekly:1">{$t('Every week')}</option>
+							<option value="weekly:2">{$t('Every 2 weeks')}</option>
+							<option value="monthly:1">{$t('Every month')}</option>
+							<option value="yearly:1">{$t('Every year')}</option>
+						</select>
+					</form>
+				{/snippet}
+			</Popover>
 		</div>
 
 		<!-- Description — full width, auto-save on blur. reset:false: a <textarea>'s
@@ -415,6 +447,26 @@
 				aria-label={$t('Description')}
 				onblur={(e) => e.currentTarget.form?.requestSubmit()}>{task.description ?? ''}</textarea
 			>
+		</form>
+
+		<form
+			method="POST"
+			action="?/saveTaskAsTemplate"
+			use:enhance={() => async ({ update }) => update({ reset: false })}
+			class="field save-tpl"
+		>
+			<input type="hidden" name="taskId" value={task.id} />
+			<input
+				name="name"
+				class="input"
+				placeholder={$t('Template name…')}
+				maxlength="120"
+				value={task.title}
+			/>
+			<button class="opt opt--create" type="submit">
+				<Icon name="bookmark" size={14} />
+				{$t('Save as template')}
+			</button>
 		</form>
 	{:else}
 		<h3 style="margin-bottom: var(--sp-2); overflow-wrap: anywhere;">{task.title}</h3>
@@ -469,6 +521,10 @@
 			{/each}
 		</div>
 	{/if}
+
+	<div class="section">
+		<TaskAttachments taskId={task.id} {files} coverFileId={task.coverFileId ?? null} canEdit={editable} />
+	</div>
 
 	{#if editable && labels.length > 0}
 		<div class="section">
@@ -574,6 +630,8 @@
 			{/if}
 		</div>
 	{/if}
+
+	<TaskComments taskId={task.id} />
 
 	<div class="section pane-footer">
 		{#if editable}

@@ -226,6 +226,37 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 };
 
 export const actions: Actions = {
+	/** Budget (BASDEV-10): pick which number custom fields back estimated/actual cost. */
+	setBudgetFields: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const estRaw = String(form.get('estimatedCostFieldId') ?? '').trim() || null;
+		const actRaw = String(form.get('actualCostFieldId') ?? '').trim() || null;
+
+		const validate = async (id: string | null) => {
+			if (!id) return true;
+			const [f] = await db
+				.select({ id: customField.id, type: customField.type })
+				.from(customField)
+				.where(and(eq(customField.id, id), eq(customField.projectId, params.id)));
+			return !!f && f.type === 'number';
+		};
+		if (!(await validate(estRaw)))
+			return fail(400, { message: 'Estimated cost field must be a number field of this project' });
+		if (!(await validate(actRaw)))
+			return fail(400, { message: 'Actual cost field must be a number field of this project' });
+
+		await db
+			.update(project)
+			.set({ estimatedCostFieldId: estRaw, actualCostFieldId: actRaw, updatedAt: new Date() })
+			.where(eq(project.id, params.id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
 	updateProject: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		if (!(await canEditProject(locals.user, params.id)))

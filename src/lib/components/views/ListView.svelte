@@ -7,6 +7,8 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { t as i18n } from '$lib/i18n';
 	import { fieldAggregations } from '$lib/customFields';
+	import { sortTasks } from '$lib/taskSort';
+	import { selection } from '$lib/selection.svelte';
 
 	type Task = {
 		id: string;
@@ -67,17 +69,29 @@
 	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
 	const selected = $derived(tasks.find((t) => t.id === selectedId) ?? null);
 
-	// order rank first (nulls last), then board position as tiebreaker
+	// order rank first (nulls last), then board position as tiebreaker; then the
+	// view's config.sortBy is layered on top via sortTasks (stable). (BASDEV-7)
+	const sortBy = $derived(typeof config.sortBy === 'string' ? (config.sortBy as string) : null);
+	const statusRank = (id: string) => {
+		const i = statuses.findIndex((s) => s.id === id);
+		return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+	};
+	const assigneeName = (id: string | null) => users.find((u) => u.id === id)?.name ?? null;
 	const ordered = $derived(
-		tasks
-			.filter((t) => !t.parentId)
-			.slice()
-			.sort(
-				(a, b) =>
-					(a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER) ||
-					a.position - b.position
-			)
+		sortTasks(
+			tasks
+				.filter((t) => !t.parentId)
+				.slice()
+				.sort(
+					(a, b) =>
+						(a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER) ||
+						a.position - b.position
+				),
+			sortBy,
+			{ statusRank, assigneeName }
+		)
 	);
+	const orderedIds = $derived(ordered.map((t) => t.id));
 
 	const subsOf = (id: string) => tasks.filter((t) => t.parentId === id);
 	const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'backlog';
@@ -217,6 +231,17 @@
 	{@const doneSubs = subs.filter((s) => cat(s.statusId) === 'completed').length}
 	<li class="item">
 		<div class="row" class:is-done={cat(t.statusId) === 'completed'}>
+			<input
+				type="checkbox"
+				class="bulk-check"
+				aria-label={$i18n('Select task')}
+				checked={selection.has(t.id)}
+				onclick={(e) => {
+					e.stopPropagation();
+					if ((e as MouseEvent).shiftKey) selection.range(t.id, orderedIds);
+					else selection.toggle(t.id);
+				}}
+			/>
 			{#if subs.length > 0}
 				<button
 					class="chev"
@@ -356,6 +381,11 @@
 	.row.is-done .title-text {
 		text-decoration: line-through;
 		color: var(--color-muted);
+	}
+
+	.bulk-check {
+		flex: 0 0 auto;
+		cursor: pointer;
 	}
 
 	.chev {

@@ -7,6 +7,7 @@
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import NotificationBell from '$lib/components/NotificationBell.svelte';
 	import { t } from '$lib/i18n';
 
 	let { data, children } = $props();
@@ -49,6 +50,8 @@
 <svelte:window onclick={() => (wsMenuOpen = false)} />
 
 <div class="shell">
+	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+	<div class="drawer-backdrop" class:open={menuOpen} onclick={() => (menuOpen = false)}></div>
 	<nav class="sidebar" class:open={menuOpen}>
 		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 		<div class="ws-switch" onclick={(e) => e.stopPropagation()}>
@@ -178,6 +181,7 @@
 					<span class="badge badge-neutral">{$t('admin')}</span>
 				{/if}
 				<span class="u-small u-muted topbar-user">{data.user?.name}</span>
+				<NotificationBell />
 				<button
 					class="btn btn-sm btn-ghost btn-circle"
 					aria-label={$t('Toggle theme')}

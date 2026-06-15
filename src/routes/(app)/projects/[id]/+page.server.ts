@@ -18,11 +18,28 @@ import {
 	taskCustomValue,
 	taskDependency,
 	taskLabel,
+	template,
 	user,
 	view
 } from '$lib/server/db/schema';
 import { dispatchEvent } from '$lib/server/integrations';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import {
+	logActivity,
+	createComment,
+	updateComment,
+	deleteComment,
+	getComment
+} from '$lib/server/comments';
+import { listSavedFilters, createSavedFilter, deleteSavedFilter } from '$lib/server/savedFilters';
+import {
+	listTemplatesForProject,
+	createTemplate,
+	deleteTemplate,
+	instantiateTemplate,
+	buildPayloadFromTask
+} from '$lib/server/templates';
+import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
 import {
 	listCustomFieldOptions,
 	listProjectCustomFields,
@@ -208,6 +225,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.where(eq(file.projectId, params.id))
 	]);
 
+	const savedFilters = await listSavedFilters(params.id);
+	const templates = await listTemplatesForProject(params.id);
+
 	const admin = isAdmin(locals.user);
 	const canEditProj = await canEditProject(locals.user, params.id);
 
@@ -253,6 +273,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		customFieldOptions,
 		taskCustomValues,
 		files,
+		savedFilters,
+		templates,
 		perm: { admin, project: canEditProj, views: editableViews }
 	};
 };
@@ -349,6 +371,8 @@ export const actions: Actions = {
 			taskTitle: title
 		});
 
+		void logActivity(params.id, taskId, locals.user.id, 'created', { title });
+
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
@@ -371,6 +395,38 @@ export const actions: Actions = {
 		if (!target) return fail(400, { message: 'Status not eligible for this project' });
 
 		await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.id, id));
+
+		void logActivity(params.id, id, locals.user.id, 'status', { to: statusId });
+
+		// Recurring task: when it moves into a completed status, spawn the next
+		// occurrence with its due date advanced by the recurrence rule (BASDEV-8).
+		const wasCompleted = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+		if (target.category === 'completed' && !wasCompleted && existing.recurrence) {
+			const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
+			const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
+			if (backlog) {
+				const spawnNow = new Date();
+				await db.insert(task).values({
+					id: crypto.randomUUID(),
+					projectId: existing.projectId,
+					parentId: existing.parentId,
+					title: existing.title,
+					description: existing.description,
+					priority: existing.priority,
+					statusId: backlog.id,
+					assigneeId: existing.assigneeId,
+					milestoneId: existing.milestoneId,
+					locationId: existing.locationId,
+					startDate: existing.startDate,
+					dueDate: nextDue,
+					recurrence: existing.recurrence,
+					createdBy: locals.user.id,
+					position: spawnNow.getTime(),
+					createdAt: spawnNow,
+					updatedAt: spawnNow
+				});
+			}
+		}
 
 		// Completing a parent completes its sub-tasks
 		if (target.category === 'completed') {
@@ -547,6 +603,12 @@ export const actions: Actions = {
 			const raw = String(form.get('dueDate') ?? '');
 			set.dueDate = raw ? new Date(raw + 'T00:00:00') : null;
 		}
+		if (form.has('recurrence')) {
+			const raw = String(form.get('recurrence') ?? '').trim();
+			if (raw === '') set.recurrence = null;
+			else if (!isValidRecurrence(raw)) return fail(400, { message: 'Invalid recurrence rule' });
+			else set.recurrence = raw;
+		}
 		// re-parent: nest this task under another (make it a sub-task). Depth-1 only.
 		if (form.has('parentId')) {
 			const parentId = String(form.get('parentId') ?? '') || null;
@@ -577,6 +639,22 @@ export const actions: Actions = {
 			const res = await writeTaskCustomValues(id, params.id, cf);
 			if (res.error) return fail(400, { message: res.error });
 		}
+
+		if (set.title !== undefined && set.title !== existing.title)
+			void logActivity(params.id, id, locals.user.id, 'title', { from: existing.title, to: set.title });
+		if (set.statusId !== undefined && set.statusId !== existing.statusId)
+			void logActivity(params.id, id, locals.user.id, 'status', { to: set.statusId });
+		if (set.assigneeId !== undefined && set.assigneeId !== existing.assigneeId)
+			void logActivity(params.id, id, locals.user.id, 'assignee', { to: set.assigneeId });
+		if (set.milestoneId !== undefined && set.milestoneId !== existing.milestoneId)
+			void logActivity(params.id, id, locals.user.id, 'milestone', { to: set.milestoneId });
+		if (set.priority !== undefined && set.priority !== existing.priority)
+			void logActivity(params.id, id, locals.user.id, 'priority', { to: set.priority });
+		if (set.dueDate !== undefined)
+			void logActivity(params.id, id, locals.user.id, 'due', {
+				to: set.dueDate ? new Date(set.dueDate).toISOString().slice(0, 10) : null
+			});
+
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
@@ -594,6 +672,324 @@ export const actions: Actions = {
 
 		await db.delete(task).where(eq(task.parentId, id)); // sub-tasks first
 		await db.delete(task).where(eq(task.id, id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/* ------------------------- comments (BASDEV-3) ------------------------- */
+
+	addComment: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canAccessProject(locals.user, params.id)))
+			return fail(404, { message: 'Not found' });
+
+		const form = await request.formData();
+		const taskId = String(form.get('taskId') ?? '');
+		const body = String(form.get('body') ?? '').trim();
+
+		const existing = await getTask(taskId);
+		if (!existing || existing.projectId !== params.id)
+			return fail(400, { message: 'Invalid task' });
+		if (!body) return fail(400, { message: 'Comment cannot be empty' });
+		if (body.length > 10000) return fail(400, { message: 'Comment too long (max 10000)' });
+
+		await createComment(taskId, locals.user.id, body);
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	editComment: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const form = await request.formData();
+		const commentId = String(form.get('commentId') ?? '');
+		const body = String(form.get('body') ?? '').trim();
+
+		const existing = await getComment(commentId);
+		if (!existing) return fail(404, { message: 'Comment not found' });
+		const target = await getTask(existing.taskId);
+		if (!target || target.projectId !== params.id)
+			return fail(404, { message: 'Comment not found' });
+		if (existing.authorId !== locals.user.id && !isAdmin(locals.user))
+			return fail(403, { message: 'Not your comment' });
+		if (!body) return fail(400, { message: 'Comment cannot be empty' });
+		if (body.length > 10000) return fail(400, { message: 'Comment too long (max 10000)' });
+
+		await updateComment(commentId, body);
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	deleteComment: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const form = await request.formData();
+		const commentId = String(form.get('commentId') ?? '');
+
+		const existing = await getComment(commentId);
+		if (!existing) return fail(404, { message: 'Comment not found' });
+		const target = await getTask(existing.taskId);
+		if (!target || target.projectId !== params.id)
+			return fail(404, { message: 'Comment not found' });
+		if (existing.authorId !== locals.user.id && !isAdmin(locals.user))
+			return fail(403, { message: 'Not your comment' });
+
+		await deleteComment(commentId);
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/* ---------------------------- bulk actions (BASDEV-6) ---------------------------- */
+
+	bulkPatchTasks: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const form = await request.formData();
+		const ids = [...new Set(form.getAll('ids').map(String).filter(Boolean))];
+		if (ids.length === 0) return fail(400, { message: 'No tasks selected' });
+
+		const set: Partial<typeof task.$inferInsert> = {};
+
+		if (form.has('statusId')) {
+			const statusId = String(form.get('statusId') ?? '');
+			if (!statusId) return fail(400, { message: 'Invalid status' });
+			const eligible = await listProjectStatuses(params.id);
+			if (!eligible.some((s) => s.id === statusId))
+				return fail(400, { message: 'Status not eligible for this project' });
+			set.statusId = statusId;
+		}
+		if (form.has('assigneeId')) {
+			const assigneeId = String(form.get('assigneeId') ?? '') || null;
+			if (assigneeId) {
+				const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
+				if (!u) return fail(400, { message: 'Unknown assignee' });
+			}
+			set.assigneeId = assigneeId;
+		}
+		if (form.has('milestoneId')) {
+			const milestoneId = String(form.get('milestoneId') ?? '') || null;
+			if (milestoneId) {
+				const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
+				if (!m || m.projectId !== params.id)
+					return fail(400, { message: 'Milestone must belong to this project' });
+			}
+			set.milestoneId = milestoneId;
+		}
+		if (form.has('priority')) {
+			const priority = String(form.get('priority') ?? 'none');
+			if (!PRIORITIES.includes(priority as (typeof PRIORITIES)[number]))
+				return fail(400, { message: 'Invalid priority' });
+			set.priority = priority;
+		}
+
+		if (Object.keys(set).length === 0) return fail(400, { message: 'No fields to update' });
+
+		const rows = await db.select().from(task).where(inArray(task.id, ids));
+		const allowed: string[] = [];
+		for (const t of rows) {
+			if (t.projectId !== params.id) continue;
+			if (await canEditTask(locals.user, t)) allowed.push(t.id);
+		}
+		if (allowed.length === 0) return fail(403, { message: 'No editable tasks selected' });
+
+		await db
+			.update(task)
+			.set({ ...set, updatedAt: new Date() })
+			.where(inArray(task.id, allowed));
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true, updated: allowed.length };
+	},
+
+	bulkDeleteTasks: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const form = await request.formData();
+		const ids = [...new Set(form.getAll('ids').map(String).filter(Boolean))];
+		if (ids.length === 0) return fail(400, { message: 'No tasks selected' });
+
+		const rows = await db.select().from(task).where(inArray(task.id, ids));
+		const allowed: string[] = [];
+		for (const t of rows) {
+			if (t.projectId !== params.id) continue;
+			if (await canEditTask(locals.user, t)) allowed.push(t.id);
+		}
+		if (allowed.length === 0) return fail(403, { message: 'No deletable tasks selected' });
+
+		await db.delete(task).where(inArray(task.parentId, allowed)); // sub-tasks first
+		await db.delete(task).where(inArray(task.id, allowed));
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true, deleted: allowed.length };
+	},
+
+	/* -------------------------- saved filters (BASDEV-7) -------------------------- */
+
+	createSavedFilter: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const name = String(form.get('name') ?? '').trim();
+		const configRaw = String(form.get('config') ?? '{}');
+
+		if (!name) return fail(400, { message: 'Filter name is required' });
+		if (name.length > 120) return fail(400, { message: 'Filter name too long (max 120)' });
+
+		let config: unknown;
+		try {
+			config = JSON.parse(configRaw);
+		} catch {
+			return fail(400, { message: 'Invalid filter config' });
+		}
+		if (!config || typeof config !== 'object' || Array.isArray(config))
+			return fail(400, { message: 'Invalid filter config' });
+
+		try {
+			await createSavedFilter({
+				projectId: params.id,
+				name,
+				config: config as Record<string, unknown>,
+				createdBy: locals.user.id
+			});
+		} catch (e) {
+			return fail(400, { message: e instanceof Error ? e.message : 'Could not save filter' });
+		}
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	deleteSavedFilter: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const ok = await deleteSavedFilter(id, params.id);
+		if (!ok) return fail(400, { message: 'Invalid saved filter' });
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/* ------------------------ templates + recurring (BASDEV-8) ------------------------ */
+
+	saveTaskAsTemplate: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canAccessProject(locals.user, params.id)))
+			return fail(403, { message: 'No access to this project' });
+
+		const form = await request.formData();
+		const taskId = String(form.get('taskId') ?? '');
+		const name = String(form.get('name') ?? '').trim();
+		const scope = String(form.get('scope') ?? 'project') === 'workspace' ? 'workspace' : 'project';
+		if (!name) return fail(400, { message: 'Template name is required' });
+		if (name.length > 120) return fail(400, { message: 'Name too long (max 120)' });
+
+		const parent = await getTask(taskId);
+		if (!parent || parent.projectId !== params.id)
+			return fail(400, { message: 'Invalid task' });
+
+		const subtasks = await db.select().from(task).where(eq(task.parentId, taskId));
+		const ids = [parent.id, ...subtasks.map((s) => s.id)];
+		const cfValues = ids.length
+			? await db
+					.select({
+						taskId: taskCustomValue.taskId,
+						fieldId: taskCustomValue.fieldId,
+						value: taskCustomValue.value
+					})
+					.from(taskCustomValue)
+					.where(inArray(taskCustomValue.taskId, ids))
+			: [];
+
+		const payload = buildPayloadFromTask(parent, subtasks, cfValues);
+		const [proj] = await db
+			.select({ workspaceId: project.workspaceId })
+			.from(project)
+			.where(eq(project.id, params.id));
+		await createTemplate({
+			name,
+			scope,
+			projectId: params.id,
+			workspaceId: proj?.workspaceId ?? null,
+			payload,
+			createdBy: locals.user.id
+		});
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	createFromTemplate: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canAccessProject(locals.user, params.id)))
+			return fail(403, { message: 'No access to this project' });
+
+		const form = await request.formData();
+		const templateId = String(form.get('templateId') ?? '');
+		if (!templateId) return fail(400, { message: 'templateId is required' });
+
+		const newId = await instantiateTemplate(templateId, params.id, locals.user.id);
+		if (!newId) return fail(400, { message: 'Template could not be instantiated' });
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	deleteTemplate: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canAccessProject(locals.user, params.id)))
+			return fail(403, { message: 'No access to this project' });
+
+		const form = await request.formData();
+		const templateId = String(form.get('templateId') ?? '');
+		if (!templateId) return fail(400, { message: 'templateId is required' });
+
+		const [tpl] = await db.select().from(template).where(eq(template.id, templateId));
+		if (!tpl) return fail(400, { message: 'Unknown template' });
+		const [proj] = await db
+			.select({ workspaceId: project.workspaceId })
+			.from(project)
+			.where(eq(project.id, params.id));
+		const owned =
+			tpl.projectId === params.id ||
+			(!!tpl.workspaceId && !!proj?.workspaceId && tpl.workspaceId === proj.workspaceId);
+		if (!owned) return fail(403, { message: 'Cannot delete this template' });
+
+		await deleteTemplate(templateId);
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/* ------------------------- task cover image (BASDEV-12) ------------------------- */
+
+	setTaskCover: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const coverFileId = String(form.get('coverFileId') ?? '') || null;
+
+		const existing = await getTask(id);
+		if (!existing || existing.projectId !== params.id)
+			return fail(400, { message: 'Invalid task' });
+		if (!(await canEditTask(locals.user, existing)))
+			return fail(403, { message: 'No edit permission on this task' });
+
+		if (coverFileId) {
+			const [f] = await db.select().from(file).where(eq(file.id, coverFileId));
+			if (!f || f.taskId !== id || f.projectId !== params.id)
+				return fail(400, { message: 'Cover must be a file attached to this task' });
+			if (!f.mimeType.startsWith('image/'))
+				return fail(400, { message: 'Cover must be an image' });
+		}
+
+		await db
+			.update(task)
+			.set({ coverFileId, updatedAt: new Date() })
+			.where(eq(task.id, id));
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},

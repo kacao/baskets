@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { enhance, applyAction, deserialize } from '$app/forms';
 	import { onDestroy, tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
@@ -13,11 +13,22 @@
 	import Popover from '$lib/components/Popover.svelte';
 	import NewTaskPane from '$lib/components/NewTaskPane.svelte';
 	import NewMilestonePane from '$lib/components/NewMilestonePane.svelte';
+	import TemplatePicker from '$lib/components/TemplatePicker.svelte';
 	import TableView from '$lib/components/views/TableView.svelte';
 	import BoardView from '$lib/components/views/BoardView.svelte';
 	import ListView from '$lib/components/views/ListView.svelte';
+	import TimelineView from '$lib/components/views/TimelineView.svelte';
+	import CalendarView from '$lib/components/views/CalendarView.svelte';
 	import DashboardView from '$lib/components/views/DashboardView.svelte';
 	import MapView from '$lib/components/views/MapView.svelte';
+	import FilterBar from '$lib/components/FilterBar.svelte';
+	import SavedFilters from '$lib/components/SavedFilters.svelte';
+	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
+	import BudgetSummary from '$lib/components/BudgetSummary.svelte';
+	import { filterTasks } from '$lib/taskFilter';
+	import { sortTasks } from '$lib/taskSort';
+	import { selection } from '$lib/selection.svelte';
+	import { toast } from '$lib/toast.svelte';
 	import { t } from '$lib/i18n';
 	import { confirmDialog } from '$lib/confirm.svelte';
 
@@ -54,6 +65,69 @@
 	const viewConfig = $derived.by(() => parseConfig(activeView?.config));
 	const canEditActiveView = $derived(Boolean(activeView && data.perm.views[activeView.id]));
 	const ctxView = $derived(data.views.find((v) => v.id === ctx?.id) ?? null);
+
+	// --- Search + filtering (BASDEV-2) + sorting (BASDEV-7) ---
+	let searchText = $state('');
+	// reset the search box when switching view tabs
+	$effect(() => {
+		activeView?.id;
+		searchText = '';
+	});
+	const labelIdsOf = (taskId: string) =>
+		data.taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
+	const statusRankFn = (id: string) => {
+		const i = data.statuses.findIndex((s) => s.id === id);
+		return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+	};
+	const assigneeNameFn = (id: string | null) => data.users.find((u) => u.id === id)?.name ?? null;
+	// tasks after the active view's saved filters + the live search box, then sorted.
+	const filteredTasks = $derived(
+		sortTasks(
+			filterTasks(
+				data.tasks,
+				(viewConfig.filters as Record<string, unknown>) ?? undefined,
+				searchText,
+				{ labelIdsOf }
+			),
+			typeof viewConfig.sortBy === 'string' ? (viewConfig.sortBy as string) : null,
+			{ statusRank: statusRankFn, assigneeName: assigneeNameFn }
+		)
+	);
+
+	// Apply a saved filter's config onto the active view (BASDEV-7).
+	async function applySavedFilter(filterConfig: Record<string, unknown>) {
+		if (!activeView || !canEditActiveView) return;
+		const fd = new FormData();
+		fd.set('id', activeView.id);
+		fd.set('name', activeView.name);
+		fd.set('config', JSON.stringify({ ...viewConfig, ...filterConfig }));
+		await fetch(`${page.url.pathname}?/updateView`, { method: 'POST', body: fd });
+		await invalidateAll();
+	}
+
+	// Clear selection whenever the active project changes (and on unmount). (BASDEV-6)
+	$effect(() => {
+		void data.project.id;
+		return () => selection.clear();
+	});
+
+	async function bulkSubmit(action: string, fields: Record<string, string>) {
+		const body = new FormData();
+		for (const id of selection.ids) body.append('ids', id);
+		for (const [k, v] of Object.entries(fields)) body.set(k, v);
+		const res = await fetch(`?/${action}`, { method: 'POST', body });
+		const result = deserialize(await res.text());
+		if (result.type === 'failure') {
+			toast($t(String(result.data?.message ?? 'Bulk action failed')));
+			return;
+		}
+		await applyAction(result);
+		await invalidateAll();
+	}
+
+	// Template picker (BASDEV-8)
+	let templatePickerOpen = $state(false);
+	const openTemplatePicker = () => (templatePickerOpen = true);
 
 	function parseConfig(raw: string | undefined | null) {
 		try {
@@ -98,7 +172,15 @@
 	const SORT_BY_OPTIONS = [
 		['', 'None'],
 		['priority', 'Priority'],
-		['order', 'Order']
+		['order', 'Order'],
+		['title', 'Title (A–Z)'],
+		['title:desc', 'Title (Z–A)'],
+		['due', 'Due date (soonest)'],
+		['due:desc', 'Due date (latest)'],
+		['status', 'Status'],
+		['assignee', 'Assignee'],
+		['createdAt', 'Created (oldest)'],
+		['createdAt:desc', 'Created (newest)']
 	] as const;
 	const sortByValue = $derived(
 		typeof viewConfig.sortBy === 'string' ? (viewConfig.sortBy as string) : ''
@@ -216,11 +298,13 @@
 			.join('')
 			.toUpperCase();
 
-	const VIEW_TYPES = ['table', 'board', 'list', 'dashboard', 'map'] as const;
+	const VIEW_TYPES = ['table', 'board', 'list', 'timeline', 'calendar', 'dashboard', 'map'] as const;
 	const VIEW_ICONS: Record<string, string> = {
 		table: 'table',
 		board: 'view-grid',
 		list: 'list',
+		timeline: 'calendar',
+		calendar: 'calendar',
 		dashboard: 'dashboard-dots',
 		map: 'map-pin'
 	};
@@ -347,6 +431,15 @@
 							>
 								{$t('Milestone')}
 							</button>
+							<button
+								class="menu-item"
+								onclick={() => {
+									projMenuOpen = false;
+									openTemplatePicker();
+								}}
+							>
+								{$t('New from template')}
+							</button>
 						</div>
 					</div>
 
@@ -381,6 +474,14 @@
 
 					<a class="menu-item" href="/projects/{data.project.id}/settings">
 						{$t('Edit project…')}
+					</a>
+					<a
+						class="menu-item"
+						href="/api/projects/{data.project.id}/export?format=csv"
+						download
+						onclick={() => (projMenuOpen = false)}
+					>
+						{$t('Export CSV')}
 					</a>
 					<form
 						method="POST"
@@ -551,6 +652,16 @@
 			{#if mode !== 'icon'}{v.name}{/if}
 		</a>
 	{/each}
+	{#if activeView && (activeView.type === 'table' || activeView.type === 'list' || activeView.type === 'board')}
+		<div class="viewbar-filters">
+			<SavedFilters
+				savedFilters={data.savedFilters}
+				currentConfig={viewConfig}
+				canEdit={canEditActiveView}
+				onApply={applySavedFilter}
+			/>
+		</div>
+	{/if}
 	{#if data.perm.project}
 		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 		<div class="add-view" onclick={(e) => e.stopPropagation()}>
@@ -948,6 +1059,14 @@
 			</div>
 			<button class="btn btn-sm btn-primary" type="submit">{$t('Add milestone')}</button>
 		</form>
+		<BudgetSummary
+			tasks={data.tasks}
+			taskCustomValues={data.taskCustomValues}
+			customFields={data.customFields}
+			milestones={data.milestones}
+			estimatedCostFieldId={data.project.estimatedCostFieldId}
+			actualCostFieldId={data.project.actualCostFieldId}
+		/>
 	</SidePane>
 {/if}
 
@@ -970,10 +1089,25 @@
 	<NewMilestonePane onClose={() => (newMilestoneOpen = false)} />
 {/if}
 
+{#if activeView && ['table', 'board', 'list'].includes(activeView.type)}
+	<FilterBar
+		tasks={data.tasks}
+		statuses={data.statuses}
+		users={data.users}
+		milestones={data.milestones}
+		labels={projectLabels}
+		config={viewConfig}
+		bind:searchText
+		viewId={activeView.id}
+		viewName={activeView.name}
+		canEditView={canEditActiveView}
+	/>
+{/if}
+
 <!-- Active view -->
 {#if activeView?.type === 'table'}
 	<TableView
-		tasks={data.tasks}
+		tasks={filteredTasks}
 		users={data.users}
 		statuses={data.statuses}
 		milestones={data.milestones}
@@ -995,7 +1129,7 @@
 	/>
 {:else if activeView?.type === 'board'}
 	<BoardView
-		tasks={data.tasks}
+		tasks={filteredTasks}
 		statuses={data.statuses}
 		users={data.users}
 		labels={data.labels}
@@ -1017,7 +1151,7 @@
 	/>
 {:else if activeView?.type === 'list'}
 	<ListView
-		tasks={data.tasks}
+		tasks={filteredTasks}
 		statuses={data.statuses}
 		users={data.users}
 		labels={data.labels}
@@ -1033,10 +1167,77 @@
 		{statusDisplay}
 		{canEditTask}
 	/>
+{:else if activeView?.type === 'timeline'}
+	<TimelineView
+		tasks={filteredTasks}
+		statuses={data.statuses}
+		users={data.users}
+		labels={data.labels}
+		taskLabels={data.taskLabels}
+		taskDeps={data.taskDeps}
+		milestones={data.milestones}
+		locations={data.locations}
+		customFields={data.customFields}
+		customFieldOptions={data.customFieldOptions}
+		taskCustomValues={data.taskCustomValues}
+		files={data.files}
+		config={viewConfig}
+		viewId={activeView.id}
+		viewName={activeView.name}
+		canEditView={Boolean(activeView && data.perm.views[activeView.id])}
+		onNewTask={openNewTask}
+		{statusDisplay}
+		{canEditTask}
+	/>
+{:else if activeView?.type === 'calendar'}
+	<CalendarView
+		tasks={filteredTasks}
+		statuses={data.statuses}
+		users={data.users}
+		labels={data.labels}
+		taskLabels={data.taskLabels}
+		taskDeps={data.taskDeps}
+		milestones={data.milestones}
+		locations={data.locations}
+		customFields={data.customFields}
+		customFieldOptions={data.customFieldOptions}
+		taskCustomValues={data.taskCustomValues}
+		files={data.files}
+		config={viewConfig}
+		viewId={activeView.id}
+		viewName={activeView.name}
+		canEditView={Boolean(activeView && data.perm.views[activeView.id])}
+		onNewTask={openNewTask}
+		{statusDisplay}
+		{canEditTask}
+	/>
 {:else if activeView?.type === 'dashboard'}
 	<DashboardView tasks={data.tasks} statuses={data.statuses} milestones={data.milestones} />
 {:else if activeView?.type === 'map'}
 	<MapView tasks={data.tasks} locations={data.locations} />
+{/if}
+
+{#if templatePickerOpen}
+	<TemplatePicker templates={data.templates} onClose={() => (templatePickerOpen = false)} />
+{/if}
+
+{#if (activeView?.type === 'table' || activeView?.type === 'board' || activeView?.type === 'list') && selection.size > 0}
+	<BulkActionBar
+		count={selection.size}
+		statuses={data.statuses}
+		users={data.users}
+		milestones={data.milestones}
+		canEdit={canEditActiveView}
+		onSetStatus={(statusId) => bulkSubmit('bulkPatchTasks', { statusId })}
+		onSetAssignee={(assigneeId) => bulkSubmit('bulkPatchTasks', { assigneeId: assigneeId ?? '' })}
+		onSetMilestone={(milestoneId) => bulkSubmit('bulkPatchTasks', { milestoneId: milestoneId ?? '' })}
+		onSetPriority={(priority) => bulkSubmit('bulkPatchTasks', { priority })}
+		onDelete={async () => {
+			await bulkSubmit('bulkDeleteTasks', {});
+			selection.clear();
+		}}
+		onClear={() => selection.clear()}
+	/>
 {/if}
 
 </div>
