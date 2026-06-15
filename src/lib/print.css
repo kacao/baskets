@@ -1,0 +1,89 @@
+/* Print-friendly styles for project / table views (BASDEV-9).
+ * Import once globally (see wiring) so any view prints cleanly. Hides chrome
+ * (sidebars, toolbars, popovers, panes) and renders the task table as plain
+ * paper-friendly rows. Mark a printable region with `.print-area` and anything
+ * to drop with `.no-print`. */
+
+@media print {
+	/* hide interactive / navigational chrome */
+	.no-print,
+	nav,
+	aside,
+	.app-sidebar,
+	.app-topbar,
+	.view-toolbar,
+	.toolbar,
+	[role='dialog'],
+	.popover,
+	.side-pane,
+	button,
+	.btn {
+		display: none !important;
+	}
+
+	/* let content use the full page */
+	html,
+	body {
+		background: #fff !important;
+		color: #000 !important;
+		margin: 0 !important;
+		padding: 0 !important;
+	}
+
+	main,
+	.app-main,
+	.print-area {
+		display: block !important;
+		overflow: visible !important;
+		width: auto !important;
+		max-width: none !important;
+		height: auto !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		box-shadow: none !important;
+	}
+
+	/* collapse scroll containers so all rows print */
+	.overflow-auto,
+	.overflow-x-auto,
+	.overflow-y-auto,
+	.overflow-scroll {
+		overflow: visible !important;
+		max-height: none !important;
+		height: auto !important;
+	}
+
+	/* tables: plain borders, repeat header on each page, avoid row splits */
+	table {
+		width: 100% !important;
+		border-collapse: collapse !important;
+		font-size: 11px !important;
+	}
+
+	thead {
+		display: table-header-group !important;
+	}
+
+	tr {
+		break-inside: avoid !important;
+		page-break-inside: avoid !important;
+	}
+
+	th,
+	td {
+		border: 1px solid #999 !important;
+		padding: 4px 6px !important;
+		text-align: left !important;
+		color: #000 !important;
+		background: #fff !important;
+	}
+
+	a {
+		color: #000 !important;
+		text-decoration: none !important;
+	}
+
+	@page {
+		margin: 1.5cm;
+	}
+}

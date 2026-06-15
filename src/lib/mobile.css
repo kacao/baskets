@@ -1,0 +1,184 @@
+/* ==================================================================
+   MOBILE / FIELD-RESPONSIVE UX  (BASDEV-13)
+   Imported once from src/app.css. Targets only LITERAL class names that
+   appear in component markup (Svelte adds a scope-hash *attribute* but the
+   class name itself is still present, so these global rules match).
+
+   Layout & SidePane already ship their own drawer / overlay rules at
+   720px and 900px (sidebar -> off-canvas drawer, pane -> fixed overlay).
+   This file is purely additive polish: bigger touch targets, horizontally
+   scrollable viewbar/tables, and a tighter 375px tier. Nothing here
+   applies on desktop — every rule lives inside a max-width media query.
+   ================================================================== */
+
+/* ----------------------- <= 720px : phones/tablets ----------------- */
+@media (max-width: 720px) {
+	/* Prevent accidental page-level horizontal scroll from wide content. */
+	html,
+	body {
+		overflow-x: hidden;
+	}
+
+	/* --- Backdrop behind the open sidebar drawer ---------------------
+	   The layout toggles `.sidebar.open`. The sidebar itself becomes a
+	   fixed off-canvas drawer (defined in +layout.svelte). Add a dimming
+	   backdrop so the drawer reads as a modal overlay. The wiring snippet
+	   adds <div class="drawer-backdrop" class:open={menuOpen}> in the
+	   layout; this styles it. If the integrator skips that hook the rule
+	   is simply inert. */
+	.drawer-backdrop {
+		position: fixed;
+		inset: 59px 0 0 0;
+		background: color-mix(in oklab, var(--color-base-content) 28%, transparent);
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity var(--dur, 150ms) ease-out;
+		z-index: 8;
+	}
+
+	.drawer-backdrop.open {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	/* --- Touch targets ------------------------------------------------
+	   Comfortable hit areas (~40px) for the small interactive bits that
+	   are otherwise mouse-sized. min-height keeps text rows from growing
+	   too tall; we lift padding and tap area instead. */
+	.btn {
+		min-height: 40px;
+	}
+
+	.btn.btn-sm {
+		min-height: 36px;
+	}
+
+	.btn.btn-circle.btn-sm {
+		min-height: 0;
+	}
+
+	.pill,
+	.chip,
+	.status-pill,
+	.cf-pill,
+	.view-tab {
+		min-height: 36px;
+		display: inline-flex;
+		align-items: center;
+	}
+
+	/* keep inline "more/check" chips from being forced tall */
+	.chip.more,
+	.chip-check {
+		min-height: 0;
+	}
+
+	/* The pane close button is a small icon — enlarge its tap area. */
+	.pane-x {
+		min-width: 40px;
+		min-height: 40px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	/* --- Viewbar: horizontal scroll instead of wrapping --------------
+	   On desktop the tab strip wraps; on a phone that eats vertical space
+	   and pushes content down. Make it a single swipeable row. */
+	.viewbar {
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		overflow-y: hidden;
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none;
+		scroll-snap-type: x proximity;
+	}
+
+	.viewbar::-webkit-scrollbar {
+		display: none;
+	}
+
+	.viewbar .view-tab {
+		flex: 0 0 auto;
+		scroll-snap-align: start;
+		white-space: nowrap;
+	}
+
+	/* The add-view "+" affordance is hover-revealed on desktop; there is
+	   no hover on touch, so keep it visible. */
+	.viewbar .add-view {
+		opacity: 1;
+	}
+
+	/* --- Tables: horizontal scroll -----------------------------------
+	   TableView wraps its <table> in .table-wrap (overflow:visible on
+	   desktop because columns are user-resized). On a phone let the wrap
+	   scroll horizontally so wide tables don't blow out the layout. */
+	.table-wrap {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.table-wrap .table {
+		min-width: max-content;
+	}
+
+	/* --- SidePane full-screen overlay --------------------------------
+	   SidePane already becomes a fixed overlay at <=900px (inset 49px 0 0
+	   0). At phone widths take the full viewport height too so it reads as
+	   a full-screen sheet and the resizer stays hidden. */
+	.side-pane {
+		inset: 0 !important;
+		max-width: 100% !important;
+		z-index: 40;
+	}
+
+	.side-pane .pane-resizer {
+		display: none;
+	}
+
+	/* give the pane head a little more breathing room / safe-area */
+	.side-pane .pane-head {
+		padding-top: max(var(--sp-3), env(safe-area-inset-top));
+	}
+}
+
+/* ----------------------- <= 375px : small phones ------------------- */
+@media (max-width: 375px) {
+	/* Reclaim horizontal space: tighter content gutters. */
+	.content {
+		padding-left: var(--sp-2);
+		padding-right: var(--sp-2);
+	}
+
+	/* Drawer spans almost the whole screen on tiny devices. */
+	.sidebar {
+		width: 86vw;
+	}
+
+	/* Down-scale the largest headings so titles don't overflow. */
+	h1 {
+		font-size: 30px;
+	}
+
+	h2 {
+		font-size: 24px;
+	}
+
+	/* Topbar: hide the wordmark brand to leave room for actions. */
+	.topbar-brand {
+		display: none;
+	}
+
+	/* Tighter viewbar tab padding so more tabs are reachable per swipe. */
+	.viewbar .view-tab {
+		padding-left: var(--sp-1);
+		padding-right: var(--sp-1);
+	}
+
+	/* Pane gutters tighten as well. */
+	.side-pane .pane-body {
+		padding-left: var(--sp-2);
+		padding-right: var(--sp-2);
+	}
+}
