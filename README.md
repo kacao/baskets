@@ -33,6 +33,13 @@ Without seeding, register at `/register` — promote the first user to admin man
 - **Views** per project — table, board (drag-and-drop, split panel), list, dashboard, map (Leaflet/OSM). Multiple per type; add/hide/duplicate/delete via the viewbar "+" and per-tab right-click menu. The **table** view is a real table with a show/hide-columns menu, sub-task chevrons, and an inline new-task dialog.
 - **Tasks**: colored statuses (category-driven behavior; pill + popover picker), priority, assignee, milestone, workspace labels, due date, dependencies (cycle-checked), one level of sub-tasks (done-category parent completes subs). Editing opens a shared right-side pane (used for task, milestones, and view-customize editing alike)
 - **Realtime** (WebSockets, `/ws`): live updates — when anyone changes a project, open viewers auto-refresh — plus presence avatars showing who else is viewing
+- **Search & filter** across views (status/assignee/milestone/label/priority/due), saveable as named filters; expanded sorts (title/due/status/assignee/created)
+- **Timeline (Gantt)** and **Calendar** views (bars span start→due; month grid on due date)
+- **Comments + activity log** per task, **in-app notifications** (assignment, mentions, due reminders) with a topbar bell
+- **Bulk actions** (multi-select → set status/assignee/milestone/priority, move, delete) — in tables/lists and on sub-tasks
+- **Task templates** & simple **recurring tasks**; **CSV export** of a project
+- **Budget tracking**: designate estimated/actual cost fields → per-milestone & project variance rollup
+- **Photo/document capture** on tasks (drag-drop + camera), mobile-responsive for field use
 - Statuses: five fixed app-wide defaults + workspace- and project-scoped custom statuses, each with a color
 - REST API under `/api/{projects,tasks}` (session cookie or `Authorization: Bearer bsk_…`); see `/llms.txt`. Slack integration (incoming webhook) for project/task events
 - Light/dark DaisyUI themes (topbar toggle, cookie-persisted); responsive mobile sidebar; ≤200ms transitions, reduced-motion safe
