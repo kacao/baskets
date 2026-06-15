@@ -386,6 +386,13 @@
 	.bulk-check {
 		flex: 0 0 auto;
 		cursor: pointer;
+		opacity: 0;
+		transition: opacity var(--dur-fast) ease;
+	}
+
+	.row:hover .bulk-check,
+	.bulk-check:checked {
+		opacity: 1;
 	}
 
 	.chev {

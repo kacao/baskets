@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { page } from '$app/state';
+	import { invalidateAll } from '$app/navigation';
 	import SidePane from '$lib/components/SidePane.svelte';
 	import StatusSelect from '$lib/components/StatusSelect.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
@@ -135,6 +137,60 @@
 				matches(x.title, subQuery)
 		)
 	);
+
+	// --- sub-task multi-select + bulk edit ---
+	let subSel = $state<string[]>([]);
+	$effect(() => {
+		task.id; // reset selection when the open task changes
+		subSel = [];
+	});
+	const subChecked = (id: string) => subSel.includes(id);
+	function toggleSub(id: string) {
+		subSel = subSel.includes(id) ? subSel.filter((x) => x !== id) : [...subSel, id];
+	}
+	let subBusy = $state(false);
+	let moveQuery = $state('');
+	// move targets: any top-level task except this one (selected subs re-parent under it)
+	const moveTargets = $derived(
+		tasks.filter((x) => !x.parentId && x.id !== task.id && matches(x.title, moveQuery))
+	);
+	async function bulkSub(fields: Record<string, string>, close?: () => void) {
+		if (!subSel.length) return;
+		subBusy = true;
+		const fd = new FormData();
+		for (const id of subSel) fd.append('ids', id);
+		for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+		await fetch(`${page.url.pathname}?/bulkPatchTasks`, { method: 'POST', body: fd });
+		await invalidateAll();
+		subBusy = false;
+		close?.();
+		subSel = [];
+	}
+	async function bulkSubMoveNew(title: string, close?: () => void) {
+		if (!subSel.length || !title.trim()) return;
+		subBusy = true;
+		const fd = new FormData();
+		for (const id of subSel) fd.append('ids', id);
+		fd.set('title', title.trim());
+		await fetch(`${page.url.pathname}?/bulkReparentToNew`, { method: 'POST', body: fd });
+		await invalidateAll();
+		subBusy = false;
+		moveQuery = '';
+		close?.();
+		subSel = [];
+	}
+	async function bulkSubDelete() {
+		if (!subSel.length) return;
+		if (!(await confirmDialog($t('Delete the selected sub-tasks?'), { confirmLabel: $t('Delete'), danger: true })))
+			return;
+		subBusy = true;
+		const fd = new FormData();
+		for (const id of subSel) fd.append('ids', id);
+		await fetch(`${page.url.pathname}?/bulkDeleteTasks`, { method: 'POST', body: fd });
+		await invalidateAll();
+		subBusy = false;
+		subSel = [];
+	}
 
 	// order stepper: − / + mutate the live input (clamped ≥ 0)
 	let orderInput = $state<HTMLInputElement | null>(null);
@@ -554,13 +610,84 @@
 	{#if !task.parentId}
 		<div class="section">
 			<span class="label">{$t('Sub-tasks')}</span>
+			{#if subSel.length > 0 && editable}
+				<div class="sub-bulk">
+					<span class="sub-bulk-count">{$t('{n} selected', { n: subSel.length })}</span>
+					<!-- Move: re-parent under an existing task, or create one -->
+					<Popover ariaLabel={$t('Move')}>
+						{#snippet trigger()}
+							<span class="pill-val"><Icon name="data-transfer-both" size={12} /> {$t('Move')}</span>
+						{/snippet}
+						{#snippet panel(close)}
+							<!-- svelte-ignore a11y_autofocus -->
+							<input class="pop-search" placeholder={$t('Search or create…')} bind:value={moveQuery} autofocus />
+							{#each moveTargets as m (m.id)}
+								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ parentId: m.id }, close)}>{m.title}</button>
+							{/each}
+							{#if moveQuery.trim()}
+								<button class="opt opt--create" type="button" disabled={subBusy} onclick={() => bulkSubMoveNew(moveQuery, close)}>{$t('Create task')} “{moveQuery.trim()}”</button>
+							{:else if moveTargets.length === 0}
+								<span class="opt-empty">{$t('Type to search or create a task')}</span>
+							{/if}
+						{/snippet}
+					</Popover>
+					<!-- Status -->
+					<Popover ariaLabel={$t('Set status')}>
+						{#snippet trigger()}<span class="pill-val"><Icon name="circle" size={12} /> {$t('Status')}</span>{/snippet}
+						{#snippet panel(close)}
+							{#each statuses as s (s.id)}
+								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ statusId: s.id }, close)}>{s.name}</button>
+							{/each}
+						{/snippet}
+					</Popover>
+					<!-- Assignee -->
+					<Popover ariaLabel={$t('Set assignee')}>
+						{#snippet trigger()}<span class="pill-val"><Icon name="user" size={12} /> {$t('Assignee')}</span>{/snippet}
+						{#snippet panel(close)}
+							<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ assigneeId: '' }, close)}>{$t('Unassigned')}</button>
+							{#each users as u (u.id)}
+								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ assigneeId: u.id }, close)}>{u.name}</button>
+							{/each}
+						{/snippet}
+					</Popover>
+					<!-- Milestone -->
+					<Popover ariaLabel={$t('Set milestone')}>
+						{#snippet trigger()}<span class="pill-val"><Icon name="bookmark" size={12} /> {$t('Milestone')}</span>{/snippet}
+						{#snippet panel(close)}
+							<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ milestoneId: '' }, close)}>{$t('No milestone')}</button>
+							{#each milestones as m (m.id)}
+								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ milestoneId: m.id }, close)}>{m.name}</button>
+							{/each}
+						{/snippet}
+					</Popover>
+					<!-- Priority -->
+					<Popover ariaLabel={$t('Set priority')}>
+						{#snippet trigger()}<span class="pill-val"><Icon name="priority-high" size={12} /> {$t('Priority')}</span>{/snippet}
+						{#snippet panel(close)}
+							{#each PRIORITIES as p (p)}
+								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ priority: p }, close)}><PriorityIcon priority={p} /> {$t(p)}</button>
+							{/each}
+						{/snippet}
+					</Popover>
+					<button class="sub-bulk-del" type="button" disabled={subBusy} onclick={bulkSubDelete}><Icon name="trash" size={12} /> {$t('Delete')}</button>
+					<button class="sub-bulk-clear" type="button" aria-label={$t('Clear selection')} onclick={() => (subSel = [])}><Icon name="xmark" size={12} /></button>
+				</div>
+			{/if}
 			{#if subs.length > 0}
 				<div class="sub-list">
 					{#each subs as s (s.id)}
 						{@const sEdit = canEditTask(s)}
-						<div class="sub-item" class:is-done={cat(s.statusId) === 'completed'}>
+						<div class="sub-item" class:is-done={cat(s.statusId) === 'completed'} class:sub-item--sel={subChecked(s.id)}>
 							<div class="sub-head">
-								<StatusSelect taskId={s.id} statusId={s.statusId} {statuses} canEdit={sEdit} display={statusDisplay} />
+								{#if sEdit}
+									<input
+										class="sub-check"
+										type="checkbox"
+										aria-label={$t('Select sub-task')}
+										checked={subChecked(s.id)}
+										onclick={() => toggleSub(s.id)}
+									/>
+								{/if}
 								<button class="sub-title-btn" type="button" onclick={() => onSelectTask?.(s.id)}>{s.title}</button>
 								<span class="spacer"></span>
 								{#if sEdit}
@@ -580,6 +707,7 @@
 								{/if}
 							</div>
 							<div class="sub-pills">
+								<StatusSelect taskId={s.id} statusId={s.statusId} {statuses} canEdit={sEdit} display={statusDisplay} />
 								{@render subPriority(s, sEdit)}
 								{@render subAssignee(s, sEdit)}
 								{@render subMilestone(s, sEdit)}
@@ -1011,14 +1139,69 @@
 		gap: var(--sp-2);
 	}
 
-	/* property pills sit UNDER the title, indented past the status pill */
+	/* property pills (incl. status) sit UNDER the title */
 	.sub-pills {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--sp-1);
 		margin-top: 6px;
-		padding-left: 26px;
+	}
+
+	/* row checkbox: visible on row hover or when checked */
+	.sub-check {
+		flex: 0 0 auto;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity var(--dur-fast) ease;
+	}
+	.sub-item:hover .sub-check,
+	.sub-check:checked,
+	.sub-item--sel .sub-check {
+		opacity: 1;
+	}
+	.sub-item--sel {
+		background: color-mix(in oklab, var(--color-fg) 6%, var(--color-bg));
+	}
+
+	.sub-bulk {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--sp-1);
+		padding: var(--sp-1) var(--sp-2);
+		margin-bottom: var(--sp-2);
+		border: 1px solid var(--color-base-300);
+		border-radius: var(--radius-box, 0.5rem);
+		background: var(--color-base-100);
+	}
+	.sub-bulk-count {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--color-fg);
+		margin-right: var(--sp-1);
+		white-space: nowrap;
+	}
+	.sub-bulk-del,
+	.sub-bulk-clear {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		border: none;
+		background: none;
+		cursor: pointer;
+		font-size: 12px;
+		padding: 3px 8px;
+		border-radius: 999px;
+		color: var(--color-muted);
+	}
+	.sub-bulk-del:hover {
+		color: var(--color-error);
+		background: var(--color-surface-muted);
+	}
+	.sub-bulk-clear:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
 	}
 
 	.sub-title-btn {

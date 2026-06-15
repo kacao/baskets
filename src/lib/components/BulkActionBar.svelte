@@ -66,7 +66,7 @@
 
 		{#if canEdit}
 			<div class="bulk-actions">
-				<Popover ariaLabel={$i18n('Set status')}>
+				<Popover ariaLabel={$i18n('Set status')} up>
 					{#snippet trigger()}
 						<span class="bulk-trigger"><Icon name="circle" size={14} />{$i18n('Status')}</span>
 					{/snippet}
@@ -86,7 +86,7 @@
 					{/snippet}
 				</Popover>
 
-				<Popover ariaLabel={$i18n('Set assignee')}>
+				<Popover ariaLabel={$i18n('Set assignee')} up>
 					{#snippet trigger()}
 						<span class="bulk-trigger"><Icon name="user" size={14} />{$i18n('Assignee')}</span>
 					{/snippet}
@@ -104,7 +104,7 @@
 					{/snippet}
 				</Popover>
 
-				<Popover ariaLabel={$i18n('Set milestone')}>
+				<Popover ariaLabel={$i18n('Set milestone')} up>
 					{#snippet trigger()}
 						<span class="bulk-trigger"><Icon name="flag" size={14} />{$i18n('Milestone')}</span>
 					{/snippet}
@@ -122,7 +122,7 @@
 					{/snippet}
 				</Popover>
 
-				<Popover ariaLabel={$i18n('Set priority')}>
+				<Popover ariaLabel={$i18n('Set priority')} up>
 					{#snippet trigger()}
 						<span class="bulk-trigger"><Icon name="priority-high" size={14} />{$i18n('Priority')}</span>
 					{/snippet}
@@ -160,8 +160,8 @@
 		align-items: center;
 		gap: var(--sp-3);
 		padding: var(--sp-2) var(--sp-3);
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
+		background: var(--color-base-100);
+		border: 1px solid var(--color-base-300);
 		border-radius: var(--radius-lg, 10px);
 		box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
 		max-width: calc(100vw - 2 * var(--sp-4));

@@ -9,12 +9,14 @@
 		trigger,
 		panel,
 		ariaLabel,
-		align = 'left'
+		align = 'left',
+		up = false
 	}: {
 		trigger: Snippet;
 		panel: Snippet<[() => void]>;
 		ariaLabel?: string;
 		align?: 'left' | 'right';
+		up?: boolean;
 	} = $props();
 
 	let open = $state(false);
@@ -41,7 +43,7 @@
 		{@render trigger()}
 	</button>
 	{#if open}
-		<div class="pop" class:right={align === 'right'} role="dialog" transition:popover>
+		<div class="pop" class:right={align === 'right'} class:up role="dialog" transition:popover>
 			{@render panel(close)}
 		</div>
 	{/if}
@@ -100,5 +102,16 @@
 		left: auto;
 		right: 0;
 		transform-origin: top right;
+	}
+
+	/* open upward (e.g. a bottom-anchored bar) */
+	.pop.up {
+		top: auto;
+		bottom: calc(100% + 4px);
+		transform-origin: bottom left;
+	}
+
+	.pop.up.right {
+		transform-origin: bottom right;
 	}
 </style>

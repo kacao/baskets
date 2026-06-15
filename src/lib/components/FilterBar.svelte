@@ -139,13 +139,10 @@
 
 {#snippet facet(key: keyof TaskFilters, label: string, opts: [string, string][])}
 	{@const chosen = sel(key)}
+	<span class="facet" class:facet--on={chosen.length > 0}>
 	<Popover ariaLabel={label}>
 		{#snippet trigger()}
-			<span class="facet-btn" class:facet-btn--on={chosen.length > 0}>
-				{label}
-				{#if chosen.length > 0}<span class="facet-count">{chosen.length}</span>{/if}
-				<Icon name="nav-arrow-down" size={11} />
-			</span>
+			{label}{#if chosen.length > 0}<span class="facet-count">{chosen.length}</span>{/if}
 		{/snippet}
 		{#snippet panel()}
 			{#each opts as [val, lbl] (val)}
@@ -164,6 +161,7 @@
 			{/each}
 		{/snippet}
 	</Popover>
+	</span>
 {/snippet}
 
 <style>
@@ -204,30 +202,20 @@
 		min-width: 0;
 	}
 
-	.facet-btn {
+	.facet {
 		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		border: 1px solid var(--color-border-subtle);
-		background: var(--color-bg);
-		color: var(--color-muted);
+	}
+
+	/* style the Popover's own .pill trigger — no inner border (avoids double border) */
+	.facet :global(.pill) {
 		font-family: var(--font-mono);
 		font-size: 11px;
+		color: var(--color-muted);
+		gap: 4px;
 		padding: 2px 8px;
-		border-radius: var(--radius-field, 0.25rem);
-		cursor: pointer;
-		transition:
-			background var(--dur-fast) ease,
-			color var(--dur-fast) ease,
-			border-color var(--dur-fast) ease;
 	}
 
-	.facet-btn:hover {
-		border-color: var(--color-fg);
-		color: var(--color-fg);
-	}
-
-	.facet-btn--on {
+	.facet--on :global(.pill) {
 		background: color-mix(in oklab, var(--color-fg) 12%, var(--color-bg));
 		border-color: color-mix(in oklab, var(--color-fg) 30%, var(--color-bg));
 		color: var(--color-fg);

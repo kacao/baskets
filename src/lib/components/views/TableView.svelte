@@ -755,6 +755,9 @@
 	}
 
 	.group-add {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		border: none;
 		background: none;
 		color: var(--color-muted);
@@ -813,11 +816,15 @@
 		text-overflow: ellipsis;
 	}
 
-	/* cells hosting popovers (status pill, "…" column menu) must not clip them */
+	/* cells hosting popovers/controls (status pill, "…" menu, select checkbox) must
+	   not clip — and must not render an ellipsis for their (empty) text content */
 	.table.cols-fixed :global(th.col-actions),
 	.table.cols-fixed :global(td.col-actions),
-	.table.cols-fixed :global(td.col-status) {
+	.table.cols-fixed :global(td.col-status),
+	.table.cols-fixed :global(th.col-select),
+	.table.cols-fixed :global(td.col-select) {
 		overflow: visible;
+		text-overflow: clip;
 	}
 
 	.col-resize {
@@ -839,6 +846,22 @@
 		width: 1%;
 		white-space: nowrap;
 		text-align: center;
+		vertical-align: middle;
+	}
+
+	.col-select input {
+		display: block;
+		margin: 0 auto;
+	}
+
+	/* row checkbox shows on hover or when checked; header select-all always shows */
+	.task-row .col-select input {
+		opacity: 0;
+		transition: opacity var(--dur-fast) ease;
+	}
+	.task-row:hover .col-select input,
+	.task-row .col-select input:checked {
+		opacity: 1;
 	}
 
 	.row-cover {

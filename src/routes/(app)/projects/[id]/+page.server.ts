@@ -781,6 +781,19 @@ export const actions: Actions = {
 				return fail(400, { message: 'Invalid priority' });
 			set.priority = priority;
 		}
+		// Move: re-parent selected tasks under another top-level task ('' = promote to top-level)
+		if (form.has('parentId')) {
+			const parentId = String(form.get('parentId') ?? '') || null;
+			if (parentId) {
+				if (ids.includes(parentId))
+					return fail(400, { message: 'A task cannot be moved under itself' });
+				const [p] = await db.select().from(task).where(eq(task.id, parentId));
+				if (!p || p.projectId !== params.id)
+					return fail(400, { message: 'Parent must belong to this project' });
+				if (p.parentId) return fail(400, { message: 'Parent must be a top-level task' });
+			}
+			set.parentId = parentId;
+		}
 
 		if (Object.keys(set).length === 0) return fail(400, { message: 'No fields to update' });
 
@@ -792,6 +805,15 @@ export const actions: Actions = {
 		}
 		if (allowed.length === 0) return fail(403, { message: 'No editable tasks selected' });
 
+		// re-parenting only applies to childless tasks (one nesting level)
+		if (set.parentId !== undefined && set.parentId !== null) {
+			const kids = await db
+				.select({ parentId: task.parentId })
+				.from(task)
+				.where(inArray(task.parentId, allowed));
+			if (kids.length) return fail(400, { message: 'Cannot move a task that has sub-tasks' });
+		}
+
 		await db
 			.update(task)
 			.set({ ...set, updatedAt: new Date() })
@@ -799,6 +821,53 @@ export const actions: Actions = {
 
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true, updated: allowed.length };
+	},
+
+	/** Creates a new top-level task and re-parents the selected tasks under it (Move → create). */
+	bulkReparentToNew: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canAccessProject(locals.user, params.id)))
+			return fail(403, { message: 'No access to this project' });
+
+		const form = await request.formData();
+		const title = String(form.get('title') ?? '').trim();
+		const ids = [...new Set(form.getAll('ids').map(String).filter(Boolean))];
+		if (!title) return fail(400, { message: 'Task title is required' });
+		if (title.length > 240) return fail(400, { message: 'Title too long (max 240)' });
+		if (ids.length === 0) return fail(400, { message: 'No tasks selected' });
+
+		const eligible = await listProjectStatuses(params.id);
+		const defaultStatus = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
+		if (!defaultStatus) return fail(400, { message: 'Project has no eligible statuses' });
+
+		const rows = await db.select().from(task).where(inArray(task.id, ids));
+		const allowed: string[] = [];
+		for (const t of rows) {
+			if (t.projectId !== params.id) continue;
+			if (await canEditTask(locals.user, t)) allowed.push(t.id);
+		}
+		if (allowed.length === 0) return fail(403, { message: 'No editable tasks selected' });
+		const kids = await db.select({ id: task.id }).from(task).where(inArray(task.parentId, allowed));
+		if (kids.length) return fail(400, { message: 'Cannot move a task that has sub-tasks' });
+
+		const now = new Date();
+		const newId = crypto.randomUUID();
+		await db.insert(task).values({
+			id: newId,
+			projectId: params.id,
+			parentId: null,
+			title,
+			priority: 'none',
+			statusId: defaultStatus.id,
+			createdBy: locals.user.id,
+			position: now.getTime(),
+			createdAt: now,
+			updatedAt: now
+		});
+		await db.update(task).set({ parentId: newId, updatedAt: now }).where(inArray(task.id, allowed));
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true, parentId: newId, moved: allowed.length };
 	},
 
 	bulkDeleteTasks: async ({ request, params, locals }) => {
