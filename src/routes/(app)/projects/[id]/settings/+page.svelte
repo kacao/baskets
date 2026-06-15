@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import Icon from '$lib/components/Icon.svelte';
+	import StatusEditor from '$lib/components/StatusEditor.svelte';
+	import CustomFieldEditor from '$lib/components/CustomFieldEditor.svelte';
 	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
 
-	let editingStatus = $state<string | null>(null);
+	let editingLocation = $state<string | null>(null);
 
 	const dependsOn = $derived(
 		data.allProjects.filter((p) => data.projectDependsOn.includes(p.id))
@@ -21,13 +24,13 @@
 <svelte:head><title>{data.project.name} — {$t('Settings')} — Baskets</title></svelte:head>
 
 <p class="u-tiny" style="margin-bottom: var(--sp-2);">
-	<a href="/projects/{data.project.id}">← {data.project.name}</a>
+	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"><Icon name="arrow-left" size={12} /> {data.project.name}</a>
 </p>
 
 <h2 style="margin-bottom: var(--sp-4);">{$t('Project settings')}</h2>
 
 {#if form?.message}
-	<div class="alert alert--error" role="alert">{form.message}</div>
+	<div class="alert alert-error" role="alert">{form.message}</div>
 {/if}
 
 <!-- General -->
@@ -44,7 +47,7 @@
 				>{data.project.description ?? ''}</textarea
 			>
 		</div>
-		<button class="btn btn--sm btn--primary" type="submit">{$t('Save')}</button>
+		<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
 	</form>
 </div>
 
@@ -52,13 +55,29 @@
 <div class="card section">
 	<h4 style="margin-bottom: var(--sp-2);">{$t('Statuses')}</h4>
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
-		{$t('Pick which app-wide statuses this project uses, and add statuses that only exist in this project.')}
+		{$t('Pick which default and workspace statuses this project uses, and add statuses that only exist in this project.')}
 	</p>
+
+	<div class="u-flex" style="margin-bottom: var(--sp-3); gap: var(--sp-2);">
+		<span class="label" style="margin: 0;">{$t('Status display')}</span>
+		<form method="POST" action="?/setStatusDisplay" use:enhance>
+			<select
+				name="statusDisplay"
+				class="select"
+				style="width: auto;"
+				onchange={(e) => e.currentTarget.form?.requestSubmit()}
+			>
+				<option value="text" selected={data.project.statusDisplay === 'text'}>{$t('Text only')}</option>
+				<option value="icon" selected={data.project.statusDisplay === 'icon'}>{$t('Icon only')}</option>
+				<option value="text-icon" selected={data.project.statusDisplay === 'text-icon'}>{$t('Text & icon')}</option>
+			</select>
+		</form>
+	</div>
 
 	<form method="POST" action="?/updateProjectStatuses" use:enhance>
 		<span class="label">{$t('Eligible statuses')}</span>
 		<div class="chips-row">
-			{#each [...data.globalStatuses, ...data.customStatuses] as s (s.id)}
+			{#each [...data.globalStatuses, ...data.workspaceStatuses, ...data.customStatuses] as s (s.id)}
 				<label class="chip-check">
 					<input
 						type="checkbox"
@@ -69,69 +88,35 @@
 					{s.name}
 					{#if 'inUse' in s}
 						<span class="u-tiny u-muted">({$t('project')})</span>
+					{:else if s.workspaceId}
+						<span class="u-tiny u-muted">({$t('workspace')})</span>
 					{/if}
 				</label>
 			{/each}
 		</div>
-		<button class="btn btn--sm" type="submit">{$t('Save statuses')}</button>
+		<button class="btn btn-sm" type="submit">{$t('Save statuses')}</button>
 	</form>
 
 	<hr class="rule" />
 
 	<span class="label">{$t('Project statuses')}</span>
-	{#each data.customStatuses as s (s.id)}
-		<div class="row">
-			{#if editingStatus === s.id}
-				<form
-					method="POST"
-					action="?/updateStatus"
-					use:enhance={() =>
-						({ update }) => {
-							editingStatus = null;
-							update();
-						}}
-					class="u-flex"
-					style="flex: 1; flex-wrap: wrap;"
-				>
-					<input type="hidden" name="id" value={s.id} />
-					<input name="name" class="input" value={s.name} style="flex: 1; min-width: 120px;" required maxlength="40" />
-					<select name="category" class="select" style="width: auto;">
-						{#each data.categories as c (c)}
-							<option value={c} selected={s.category === c}>{$t(c)}</option>
-						{/each}
-					</select>
-					<button class="btn btn--sm btn--primary" type="submit">{$t('Save')}</button>
-					<button class="btn btn--sm" type="button" onclick={() => (editingStatus = null)}>
-						{$t('Cancel')}
-					</button>
-				</form>
-			{:else}
-				<span class="name">{s.name}</span>
-				<span class="badge">{$t(s.category)}</span>
-				<span class="u-tiny u-muted">{$t('{n} task(s)', { n: s.inUse })}</span>
-				<span style="flex: 1;"></span>
-				<button class="btn btn--sm" onclick={() => (editingStatus = s.id)}>{$t('Edit')}</button>
-				<form method="POST" action="?/deleteStatus" use:enhance>
-					<input type="hidden" name="id" value={s.id} />
-					<button class="btn btn--sm btn--danger" type="submit" disabled={s.inUse > 0}>
-						{$t('Delete')}
-					</button>
-				</form>
-			{/if}
-		</div>
-	{:else}
-		<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">{$t('No project statuses yet.')}</p>
-	{/each}
+	<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">
+		{$t('Statuses that only exist in this project. Default and workspace statuses are shown for context and managed elsewhere.')}
+	</p>
+	<StatusEditor
+		categories={data.categories}
+		inherited={[...data.globalStatuses, ...data.workspaceStatuses]}
+		statuses={data.customStatuses}
+	/>
+</div>
 
-	<form method="POST" action="?/createStatus" use:enhance class="u-flex" style="flex-wrap: wrap; margin-top: var(--sp-2);">
-		<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder={$t('New status…')} required maxlength="40" />
-		<select name="category" class="select" style="width: auto;">
-			{#each data.categories as c (c)}
-				<option value={c}>{$t(c)}</option>
-			{/each}
-		</select>
-		<button class="btn btn--sm btn--primary" type="submit">{$t('Add')}</button>
-	</form>
+<!-- Custom fields -->
+<div class="card section">
+	<h4 style="margin-bottom: var(--sp-2);">{$t('Custom fields')}</h4>
+	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
+		{$t('Project-specific fields shown on every task. Type is fixed once a field is created.')}
+	</p>
+	<CustomFieldEditor fields={data.customFields} options={data.customFieldOptions} fieldTypes={data.fieldTypes} />
 </div>
 
 <!-- Labels -->
@@ -145,7 +130,7 @@
 				<button class="chip" class:chip--on={on} type="submit">{l.name}</button>
 			</form>
 		{:else}
-			<span class="u-tiny u-muted">{$t('No labels yet — create them in Settings → Labels.')}</span>
+			<span class="u-tiny u-muted">{$t('No labels yet — create them in the workspace settings.')}</span>
 		{/each}
 	</div>
 </div>
@@ -184,7 +169,7 @@
 	<h4 style="margin-bottom: var(--sp-2);">{$t('Milestones')}</h4>
 	{#each data.milestones as m (m.id)}
 		<div class="u-flex" style="margin-bottom: var(--sp-1);">
-			<span class="u-small">◇ {m.name}</span>
+			<span class="u-small">{m.name}</span>
 			{#if m.targetDate}
 				<span class="u-tiny u-muted mono">{new Date(m.targetDate).toISOString().slice(0, 10)}</span>
 			{/if}
@@ -197,7 +182,58 @@
 	<form method="POST" action="?/createMilestone" use:enhance class="u-flex" style="flex-wrap: wrap;">
 		<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder={$t('New milestone…')} required />
 		<input name="targetDate" type="date" class="input" style="width: auto;" />
-		<button class="btn btn--sm" type="submit">{$t('Add')}</button>
+		<button class="btn btn-sm" type="submit">{$t('Add')}</button>
+	</form>
+</div>
+
+<!-- Locations -->
+<div class="card section">
+	<h4 style="margin-bottom: var(--sp-2);">{$t('Locations')}</h4>
+	{#each data.locations as l (l.id)}
+		<div class="row">
+			{#if editingLocation === l.id}
+				<form
+					method="POST"
+					action="?/updateLocation"
+					use:enhance={() =>
+						({ update }) => {
+							editingLocation = null;
+							update();
+						}}
+					class="u-flex"
+					style="flex: 1; flex-wrap: wrap;"
+				>
+					<input type="hidden" name="id" value={l.id} />
+					<input name="title" class="input" value={l.title} placeholder={$t('Title')} required style="flex: 1; min-width: 120px;" />
+					<input name="address" class="input" value={l.address ?? ''} placeholder={$t('Address (optional)')} style="flex: 1; min-width: 120px;" />
+					<input name="latitude" class="input mono" value={l.latitude ?? ''} placeholder={$t('Latitude')} style="width: 90px;" />
+					<input name="longitude" class="input mono" value={l.longitude ?? ''} placeholder={$t('Longitude')} style="width: 90px;" />
+					<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
+					<button class="btn btn-sm" type="button" onclick={() => (editingLocation = null)}>{$t('Cancel')}</button>
+				</form>
+			{:else}
+				<span class="name">{l.title}</span>
+				{#if l.address}<span class="u-tiny u-muted">{l.address}</span>{/if}
+				{#if l.latitude != null && l.longitude != null}
+					<span class="u-tiny u-muted mono">{l.latitude}, {l.longitude}</span>
+				{/if}
+				<span style="flex: 1;"></span>
+				<button class="btn btn-sm" onclick={() => (editingLocation = l.id)}>{$t('Edit')}</button>
+				<form method="POST" action="?/deleteLocation" use:enhance>
+					<input type="hidden" name="id" value={l.id} />
+					<button class="btn btn-sm btn-error" type="submit">{$t('Delete')}</button>
+				</form>
+			{/if}
+		</div>
+	{:else}
+		<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">{$t('No locations yet.')}</p>
+	{/each}
+	<form method="POST" action="?/createLocation" use:enhance class="u-flex" style="flex-wrap: wrap; margin-top: var(--sp-2);">
+		<input name="title" class="input" style="flex: 1; min-width: 120px;" placeholder={$t('Location name…')} required />
+		<input name="address" class="input" style="flex: 1; min-width: 120px;" placeholder={$t('Address (optional)')} />
+		<input name="latitude" class="input mono" style="width: 90px;" placeholder={$t('Latitude')} />
+		<input name="longitude" class="input mono" style="width: 90px;" placeholder={$t('Longitude')} />
+		<button class="btn btn-sm" type="submit">{$t('Add')}</button>
 	</form>
 </div>
 
@@ -234,7 +270,7 @@
 					<option value={v.id}>{$t('view')}: {v.name}</option>
 				{/each}
 			</select>
-			<button class="btn btn--sm" type="submit">{$t('Grant')}</button>
+			<button class="btn btn-sm" type="submit">{$t('Grant')}</button>
 		</form>
 	</div>
 {/if}
@@ -245,12 +281,12 @@
 	<form
 		method="POST"
 		action="?/deleteProject"
-		use:enhance
-		onsubmit={(e) => {
-			if (!confirm($t('Delete this project and all its tasks?'))) e.preventDefault();
+		use:enhance={({ cancel }) => {
+			if (!confirm($t('Delete this project and all its tasks?'))) cancel();
+			return async ({ update }) => update();
 		}}
 	>
-		<button class="btn btn--sm btn--danger" type="submit">{$t('Delete project')}</button>
+		<button class="btn btn-sm btn-error" type="submit">{$t('Delete project')}</button>
 	</form>
 </div>
 

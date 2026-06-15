@@ -1,93 +1,204 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { popover } from '$lib/transitions';
 	import { t } from '$lib/i18n';
+	import Icon from '$lib/components/Icon.svelte';
+	import EntityIcon from '$lib/components/EntityIcon.svelte';
 
-	type Status = { id: string; name: string; category: string };
+	type Status = {
+		id: string;
+		name: string;
+		category: string;
+		color?: string | null;
+		icon?: string | null;
+	};
 
 	let {
 		taskId,
 		statusId,
 		statuses,
-		canEdit = true
-	}: { taskId: string; statusId: string; statuses: Status[]; canEdit?: boolean } = $props();
+		canEdit = true,
+		display = 'text'
+	}: {
+		taskId: string;
+		statusId: string;
+		statuses: Status[];
+		canEdit?: boolean;
+		display?: 'text' | 'icon' | 'text-icon';
+	} = $props();
 
 	const current = $derived(statuses.find((s) => s.id === statusId));
+	const colorOf = (s?: Status | null) => s?.color || 'var(--color-muted)';
 
-	const glyph: Record<string, string> = {
-		todo: '○',
-		active: '◐',
-		done: '●',
-		canceled: '⊘'
-	};
+	// icon-only display with an actual icon = just the glyph, no pill chrome
+	const bare = $derived(display === 'icon' && Boolean(current?.icon));
+
+	let open = $state(false);
 </script>
 
+{#snippet pill(s: Status | undefined)}
+	{@const hasIcon = Boolean(s?.icon)}
+	{#if display !== 'text' && hasIcon}<EntityIcon value={s?.icon} size={14} />{/if}
+	{#if display === 'text' || display === 'text-icon' || !hasIcon}
+		<span class="pill-name">{s?.name ?? '—'}</span>
+	{/if}
+{/snippet}
+
+<svelte:window onclick={() => (open = false)} />
+
 {#if canEdit}
-	<form method="POST" action="?/setStatus" use:enhance class="status-form">
-		<input type="hidden" name="id" value={taskId} />
-		<span class="glyph" class:done={current?.category === 'done'} aria-hidden="true">
-			{glyph[current?.category ?? 'todo']}
-		</span>
-		<select
-			class="status-select"
-			name="statusId"
-			value={statusId}
+	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+	<div class="status-wrap" onclick={(e) => e.stopPropagation()}>
+		<button
+			class="status-pill"
+			class:bare
+			style="--c: {colorOf(current)}"
+			aria-haspopup="listbox"
+			aria-expanded={open}
 			aria-label={$t('Status')}
-			onchange={(e) => e.currentTarget.form?.requestSubmit()}
+			onclick={() => (open = !open)}
 		>
-			{#each statuses as s (s.id)}
-				<option value={s.id}>{s.name}</option>
-			{/each}
-		</select>
-	</form>
+			{@render pill(current)}
+		</button>
+		{#if open}
+			<div class="status-pop" role="listbox" transition:popover>
+				{#each statuses as s (s.id)}
+					<form
+						method="POST"
+						action="?/setStatus"
+						use:enhance={() => {
+							open = false;
+							return async ({ update }) => update();
+						}}
+					>
+						<input type="hidden" name="id" value={taskId} />
+						<input type="hidden" name="statusId" value={s.id} />
+						<button class="status-opt" class:active={s.id === statusId} style="--c: {colorOf(s)}">
+							{#if s.icon}<EntityIcon value={s.icon} size={14} />{:else}<span class="dot" aria-hidden="true"></span>{/if}
+							<span class="opt-name">{s.name}</span>
+							{#if s.id === statusId}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
+						</button>
+					</form>
+				{/each}
+			</div>
+		{/if}
+	</div>
 {:else}
-	<span class="status-readonly">
-		<span class="glyph" aria-hidden="true">{glyph[current?.category ?? 'todo']}</span>
-		{current?.name ?? '—'}
+	<span class="status-pill readonly" class:bare style="--c: {colorOf(current)}">
+		{@render pill(current)}
 	</span>
 {/if}
 
 <style>
-	.status-form {
+	.status-wrap {
+		position: relative;
 		display: inline-flex;
-		align-items: center;
-		gap: 4px;
 		flex: 0 0 auto;
 	}
 
-	.glyph {
-		font-size: 12px;
-		line-height: 1;
-		color: var(--color-muted);
-	}
-
-	.glyph.done {
-		color: var(--color-fg);
-	}
-
-	.status-select {
-		border: 1px solid var(--color-border-subtle);
-		background: var(--color-bg);
-		color: var(--color-fg);
-		font-family: var(--font-body);
-		font-size: 12px;
-		font-weight: 400;
-		padding: 2px 4px;
-		cursor: pointer;
-		transition: border-color 0.15s ease;
-	}
-
-	.status-select:hover,
-	.status-select:focus {
-		border-color: var(--color-fg);
-		outline: none;
-	}
-
-	.status-readonly {
+	.status-pill {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
+		gap: 6px;
+		border: 1px solid color-mix(in oklab, var(--c) 35%, transparent);
+		background: color-mix(in oklab, var(--c) 12%, transparent);
+		color: color-mix(in oklab, var(--c) 75%, var(--color-fg));
+		border-radius: 999px;
 		font-size: 12px;
-		color: var(--color-muted);
+		font-weight: 500;
+		line-height: 1;
+		padding: 4px 10px;
+		cursor: pointer;
 		white-space: nowrap;
+		transition:
+			background var(--dur) ease,
+			border-color var(--dur) ease;
+	}
+
+	.status-pill:hover {
+		background: color-mix(in oklab, var(--c) 20%, transparent);
+		border-color: color-mix(in oklab, var(--c) 55%, transparent);
+	}
+
+	.status-pill.readonly {
+		cursor: default;
+	}
+
+	/* icon-only: drop the pill chrome, keep just the (status-colored) glyph */
+	.status-pill.bare {
+		border-color: transparent;
+		background: none;
+		padding: 2px;
+		gap: 0;
+	}
+
+	.status-pill.bare:hover {
+		background: var(--color-surface-muted);
+		border-color: transparent;
+	}
+
+	.status-pill.readonly.bare:hover {
+		background: none;
+	}
+
+	.dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 999px;
+		background: var(--c);
+		flex: 0 0 auto;
+	}
+
+	.status-pop {
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 30;
+		min-width: 160px;
+		/* scroll the list itself rather than overflowing the (scrollable) pane it
+		   sits in — wheel events have nowhere to go otherwise (status popover bug). */
+		max-height: min(280px, 60vh);
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		background: var(--color-base-100);
+		border: 1px solid var(--color-base-300);
+		border-radius: var(--radius-box, 0.5rem);
+		box-shadow: var(--shadow);
+		padding: 4px;
+		transform-origin: top left;
+	}
+
+	.status-opt {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		border: none;
+		background: none;
+		color: var(--color-fg);
+		font-size: 13px;
+		text-align: left;
+		padding: 6px 8px;
+		border-radius: var(--radius-field, 0.25rem);
+		cursor: pointer;
+		transition: background var(--dur-fast) ease;
+	}
+
+	.status-opt:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.opt-name {
+		flex: 1;
+		white-space: nowrap;
+	}
+
+	.status-opt.active {
+		font-weight: 600;
+	}
+
+	.check {
+		color: var(--color-muted);
+		font-size: 11px;
 	}
 </style>

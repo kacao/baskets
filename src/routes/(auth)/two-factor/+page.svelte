@@ -38,7 +38,7 @@
 </p>
 
 {#if error}
-	<div class="alert alert--error" role="alert">{error}</div>
+	<div class="alert alert-error" role="alert">{error}</div>
 {/if}
 
 <form onsubmit={submit}>
@@ -55,13 +55,13 @@
 			bind:value={code}
 		/>
 	</div>
-	<button class="btn btn--primary" type="submit" disabled={loading} style="width: 100%;">
+	<button class="btn btn-primary" type="submit" disabled={loading} style="width: 100%;">
 		{loading ? $t('Verifying…') : $t('Verify')}
 	</button>
 </form>
 
 <button
-	class="btn btn--sm"
+	class="btn btn-sm"
 	style="margin-top: var(--sp-3);"
 	onclick={() => {
 		useBackup = !useBackup;

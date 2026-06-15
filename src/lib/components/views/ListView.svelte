@@ -4,7 +4,9 @@
 	import StatusSelect from '$lib/components/StatusSelect.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { t as i18n } from '$lib/i18n';
+	import { fieldAggregations } from '$lib/customFields';
 
 	type Task = {
 		id: string;
@@ -15,12 +17,17 @@
 		priority: string;
 		assigneeId: string | null;
 		milestoneId: string | null;
+		locationId: string | null;
 		location: string | null;
 		order: number | null;
 		position: number;
 		dueDate: Date | string | null;
 	};
 	type Status = { id: string; name: string; category: string };
+	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
+	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; position?: number };
+	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
+	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
 
 	let {
 		tasks,
@@ -30,7 +37,14 @@
 		taskLabels,
 		taskDeps,
 		milestones,
-		canEditTask
+		locations,
+		customFields = [],
+		customFieldOptions = [],
+		taskCustomValues = [],
+		files = [],
+		config = {},
+		canEditTask,
+		statusDisplay = 'text'
 	}: {
 		tasks: Task[];
 		statuses: Status[];
@@ -39,12 +53,19 @@
 		taskLabels: { taskId: string; labelId: string }[];
 		taskDeps: { taskId: string; dependsOnId: string }[];
 		milestones: { id: string; name: string }[];
+		locations: Location[];
+		customFields?: CustomFieldDef[];
+		customFieldOptions?: CustomFieldOption[];
+		taskCustomValues?: { taskId: string; fieldId: string; value: string }[];
+		files?: FileRef[];
+		config?: Record<string, unknown>;
 		canEditTask: (t: { id: string; parentId: string | null }) => boolean;
+		statusDisplay?: 'text' | 'icon' | 'text-icon';
 	} = $props();
 
 	let expanded = $state<Record<string, boolean>>({});
 	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
-	const selected = $derived(tasks.find((t) => t.id === selectedId && !t.parentId) ?? null);
+	const selected = $derived(tasks.find((t) => t.id === selectedId) ?? null);
 
 	// order rank first (nulls last), then board position as tiebreaker
 	const ordered = $derived(
@@ -59,7 +80,7 @@
 	);
 
 	const subsOf = (id: string) => tasks.filter((t) => t.parentId === id);
-	const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'todo';
+	const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'backlog';
 	const userName = (id: string | null) => users.find((u) => u.id === id)?.name ?? null;
 	const milestoneName = (id: string | null) => milestones.find((m) => m.id === id)?.name ?? null;
 	const labelsOf = (taskId: string) =>
@@ -67,92 +88,104 @@
 			.filter((l) => l.taskId === taskId)
 			.map((l) => labels.find((x) => x.id === l.labelId))
 			.filter(Boolean);
+	const taskLabelIds = (taskId: string) => taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
 
 	function fmtDate(d: Date | string | null) {
 		if (!d) return null;
 		return new Date(d).toISOString().slice(0, 10);
 	}
+
+	// Group by (config.groupBy): one section per group, like the table view.
+	const groupBy = $derived(typeof config.groupBy === 'string' ? (config.groupBy as string) : null);
+	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
+	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
+	type Group = { key: string; title: string; tasks: Task[] };
+
+	function dueBuckets(rows: Task[]): Group[] {
+		const start = new Date();
+		start.setHours(0, 0, 0, 0);
+		const today = start.getTime();
+		const week = today + 7 * 86400000;
+		const b: Record<string, Task[]> = { overdue: [], today: [], week: [], later: [], none: [] };
+		for (const t of rows) {
+			if (!t.dueDate) {
+				b.none.push(t);
+				continue;
+			}
+			const ts = new Date(new Date(t.dueDate).setHours(0, 0, 0, 0)).getTime();
+			if (ts < today) b.overdue.push(t);
+			else if (ts === today) b.today.push(t);
+			else if (ts < week) b.week.push(t);
+			else b.later.push(t);
+		}
+		return [
+			{ key: 'overdue', title: $i18n('Overdue'), tasks: b.overdue },
+			{ key: 'today', title: $i18n('Today'), tasks: b.today },
+			{ key: 'week', title: $i18n('Next 7 days'), tasks: b.week },
+			{ key: 'later', title: $i18n('Later'), tasks: b.later },
+			{ key: 'none', title: $i18n('No due date'), tasks: b.none }
+		];
+	}
+
+	const groups = $derived.by((): Group[] => {
+		const rows = ordered;
+		let g: Group[];
+		if (groupBy === 'status')
+			g = statuses.map((s) => ({ key: s.id, title: s.name, tasks: rows.filter((t) => t.statusId === s.id) }));
+		else if (groupBy === 'milestone')
+			g = [
+				...milestones.map((m) => ({ key: m.id, title: m.name, tasks: rows.filter((t) => t.milestoneId === m.id) })),
+				{ key: '_none', title: $i18n('No milestone'), tasks: rows.filter((t) => !t.milestoneId) }
+			];
+		else if (groupBy === 'assignee')
+			g = [
+				...users.map((u) => ({ key: u.id, title: u.name, tasks: rows.filter((t) => t.assigneeId === u.id) })),
+				{ key: '_none', title: $i18n('Unassigned'), tasks: rows.filter((t) => !t.assigneeId) }
+			];
+		else if (groupBy === 'due') g = dueBuckets(rows);
+		else if (groupBy === 'label')
+			g = [
+				...labels.map((l) => ({ key: l.id, title: l.name, tasks: rows.filter((t) => taskLabelIds(t.id).includes(l.id)) })),
+				{ key: '_none', title: $i18n('No label'), tasks: rows.filter((t) => taskLabelIds(t.id).length === 0) }
+			];
+		else return [{ key: '_all', title: '', tasks: rows }];
+		return g.filter((x) => x.tasks.length > 0);
+	});
+	let collapsed = $state<Record<string, boolean>>({});
 </script>
 
-<div class="list-wrap" class:with-panel={Boolean(selected)}>
+<div class="list-wrap">
 	{#if ordered.length === 0}
 		<div class="card" style="text-align: center;">
 			<p class="u-muted">{$i18n('No tasks yet.')}</p>
 		</div>
+	{:else if groupBy}
+		{#each groups as grp (grp.key)}
+			<div class="list-group-head">
+				<button
+					class="chev"
+					type="button"
+					aria-expanded={!collapsed[grp.key]}
+					aria-label={$i18n('Toggle group')}
+					onclick={() => (collapsed[grp.key] = !collapsed[grp.key])}
+				>
+					<Icon name={collapsed[grp.key] ? 'nav-arrow-right' : 'nav-arrow-down'} size={14} />
+				</button>
+				<span class="group-title">{grp.title}</span>
+				<span class="group-count">{grp.tasks.length}</span>
+				{#each fieldAggregations(aggFieldIds, customFields, grp.tasks, taskCustomValues, tasks) as a (a.id)}
+					<span class="group-agg" title={a.name}>({a.text})</span>
+				{/each}
+			</div>
+			{#if !collapsed[grp.key]}
+				<ul class="rows">
+					{#each grp.tasks as t (t.id)}{@render rowItem(t)}{/each}
+				</ul>
+			{/if}
+		{/each}
 	{:else}
 		<ul class="rows">
-			{#each ordered as t (t.id)}
-				{@const subs = subsOf(t.id)}
-				{@const doneSubs = subs.filter((s) => cat(s.statusId) === 'done').length}
-				<li class="item">
-					<div class="row" class:is-done={cat(t.statusId) === 'done'}>
-						{#if subs.length > 0}
-							<button
-								class="chev"
-								aria-expanded={expanded[t.id] ?? false}
-								aria-label={$i18n('Toggle sub-tasks')}
-								onclick={() => (expanded[t.id] = !expanded[t.id])}
-							>
-								{expanded[t.id] ? '▾' : '▸'}
-							</button>
-						{:else}
-							<span class="chev chev--blank"></span>
-						{/if}
-						{#if t.order !== null}
-							<span class="order mono">{t.order}</span>
-						{:else}
-							<span class="order"></span>
-						{/if}
-						<StatusSelect taskId={t.id} statusId={t.statusId} {statuses} canEdit={canEditTask(t)} />
-						<button
-							class="row-title"
-							class:selected={selectedId === t.id}
-							onclick={() => (selectedId = selectedId === t.id ? null : t.id)}
-						>
-							<span class="title-text">{t.title}</span>
-						</button>
-						<div class="row-meta">
-							<PriorityBadge priority={t.priority} />
-							{#each labelsOf(t.id) as l (l!.id)}
-								<span class="badge">{l!.name}</span>
-							{/each}
-							{#if milestoneName(t.milestoneId)}
-								<span class="badge">◇ {milestoneName(t.milestoneId)}</span>
-							{/if}
-							{#if subs.length > 0}
-								<span class="badge">{doneSubs}/{subs.length}</span>
-							{/if}
-							{#if userName(t.assigneeId)}
-								<span class="badge badge--inverted">{userName(t.assigneeId)}</span>
-							{/if}
-							{#if t.dueDate}
-								<span class="badge mono">{fmtDate(t.dueDate)}</span>
-							{/if}
-						</div>
-					</div>
-
-					{#if expanded[t.id] && subs.length > 0}
-						<ul class="subs" transition:slide={{ duration: 120 }}>
-							{#each subs as s (s.id)}
-								<li class="row sub" class:is-done={cat(s.statusId) === 'done'}>
-									<span class="chev chev--blank"></span>
-									<span class="order"></span>
-									<StatusSelect
-										taskId={s.id}
-										statusId={s.statusId}
-										{statuses}
-										canEdit={canEditTask(s)}
-									/>
-									<span class="title-text sub-title">{s.title}</span>
-									<div class="row-meta">
-										<PriorityBadge priority={s.priority} />
-									</div>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</li>
-			{/each}
+			{#each ordered as t (t.id)}{@render rowItem(t)}{/each}
 		</ul>
 	{/if}
 
@@ -163,24 +196,129 @@
 			{users}
 			{statuses}
 			{milestones}
+			{locations}
 			{labels}
 			{taskLabels}
 			{taskDeps}
+			{customFields}
+			{customFieldOptions}
+			{taskCustomValues}
+			{files}
 			{canEditTask}
+			{statusDisplay}
 			onClose={() => (selectedId = null)}
+			onSelectTask={(id) => (selectedId = id)}
 		/>
 	{/if}
 </div>
 
+{#snippet rowItem(t: Task)}
+	{@const subs = subsOf(t.id)}
+	{@const doneSubs = subs.filter((s) => cat(s.statusId) === 'completed').length}
+	<li class="item">
+		<div class="row" class:is-done={cat(t.statusId) === 'completed'}>
+			{#if subs.length > 0}
+				<button
+					class="chev"
+					aria-expanded={expanded[t.id] ?? false}
+					aria-label={$i18n('Toggle sub-tasks')}
+					onclick={() => (expanded[t.id] = !expanded[t.id])}
+				>
+					{#if expanded[t.id]}
+						<Icon name="nav-arrow-down" size={12} />
+					{:else}
+						<Icon name="nav-arrow-right" size={12} />
+					{/if}
+				</button>
+			{/if}
+			{#if t.order !== null}
+				<span class="order mono">{t.order}</span>
+			{:else}
+				<span class="order"></span>
+			{/if}
+			<StatusSelect taskId={t.id} statusId={t.statusId} {statuses} canEdit={canEditTask(t)} display={statusDisplay} />
+			<button
+				class="row-title"
+				class:selected={selectedId === t.id}
+				onclick={() => (selectedId = selectedId === t.id ? null : t.id)}
+			>
+				<span class="title-text">{t.title}</span>
+			</button>
+			<div class="row-meta">
+				<PriorityBadge priority={t.priority} />
+				{#each labelsOf(t.id) as l (l!.id)}
+					<span class="badge">{l!.name}</span>
+				{/each}
+				{#if milestoneName(t.milestoneId)}
+					<span class="badge">{milestoneName(t.milestoneId)}</span>
+				{/if}
+				{#if subs.length > 0}
+					<span class="badge">{doneSubs}/{subs.length}</span>
+				{/if}
+				{#if userName(t.assigneeId)}
+					<span class="badge badge-neutral">{userName(t.assigneeId)}</span>
+				{/if}
+				{#if t.dueDate}
+					<span class="badge mono">{fmtDate(t.dueDate)}</span>
+				{/if}
+			</div>
+		</div>
+
+		{#if expanded[t.id] && subs.length > 0}
+			<ul class="subs" transition:slide={{ duration: 120 }}>
+				{#each subs as s (s.id)}
+					<li class="row sub" class:is-done={cat(s.statusId) === 'completed'}>
+						<span class="chev chev--blank"></span>
+						<span class="order"></span>
+						<StatusSelect
+							taskId={s.id}
+							statusId={s.statusId}
+							{statuses}
+							canEdit={canEditTask(s)}
+							display={statusDisplay}
+						/>
+						<span class="title-text sub-title">{s.title}</span>
+						<div class="row-meta">
+							<PriorityBadge priority={s.priority} />
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</li>
+{/snippet}
+
 <style>
-	.list-wrap.with-panel {
-		padding-right: 416px;
+	.list-wrap {
+		max-width: 1200px;
 	}
 
-	@media (max-width: 900px) {
-		.list-wrap.with-panel {
-			padding-right: 0;
-		}
+	.list-group-head {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-1);
+		margin: var(--sp-3) 0 var(--sp-1);
+	}
+
+	.list-group-head:first-child {
+		margin-top: 0;
+	}
+
+	.group-title {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--color-fg);
+	}
+
+	.group-count {
+		font-size: 12px;
+		color: var(--color-muted);
+	}
+
+	.group-agg {
+		font-size: 12px;
+		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.rows,

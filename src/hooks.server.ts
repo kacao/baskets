@@ -3,10 +3,25 @@ import { building } from '$app/environment';
 import { auth } from '$lib/server/auth';
 import { API_KEY_PREFIX, resolveApiKey } from '$lib/server/api-keys';
 import { ensureDefaultStatuses } from '$lib/server/statuses';
+import { ensureDefaultWorkspace } from '$lib/server/workspaces';
 import type { Handle } from '@sveltejs/kit';
 
+const THEMES = ['light', 'dark'];
+
 export const handle: Handle = async ({ event, resolve }) => {
-	if (!building) await ensureDefaultStatuses();
+	if (!building) {
+		await ensureDefaultStatuses();
+		await ensureDefaultWorkspace();
+	}
+
+	// DaisyUI theme: cookie-driven, applied to <html data-theme> at SSR (no flash)
+	const cookieTheme = event.cookies.get('theme');
+	const theme = cookieTheme && THEMES.includes(cookieTheme) ? cookieTheme : 'light';
+	const themed = (ev: typeof event) =>
+		resolve(ev, {
+			transformPageChunk: ({ html }) =>
+				html.replace('data-theme="light"', `data-theme="${theme}"`)
+		});
 
 	// Bearer API key (REST clients): Authorization: Bearer bsk_...
 	const authHeader = event.request.headers.get('authorization');
@@ -14,7 +29,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const apiUser = await resolveApiKey(authHeader.slice('Bearer '.length));
 		event.locals.user = (apiUser as App.Locals['user']) ?? null;
 		event.locals.session = null;
-		return svelteKitHandler({ event, resolve, auth, building });
+		return svelteKitHandler({ event, resolve: themed, auth, building });
 	}
 
 	// Browser session cookie
@@ -25,5 +40,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.session = session?.session ?? null;
 	event.locals.user = session?.user ?? null;
 
-	return svelteKitHandler({ event, resolve, auth, building });
+	return svelteKitHandler({ event, resolve: themed, auth, building });
 };

@@ -1,32 +1,91 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
+	customField,
+	file,
 	label,
 	labelGroup,
+	location,
 	milestone,
+	milestoneDependency,
 	permission,
 	project,
 	projectDependency,
 	projectLabel,
 	projectStatus,
 	task,
+	taskCustomValue,
 	taskDependency,
 	taskLabel,
 	user,
 	view
 } from '$lib/server/db/schema';
 import { dispatchEvent } from '$lib/server/integrations';
-import { canEditProject, canEditTask, canEditView, isAdmin } from '$lib/server/permissions';
-import { listProjectStatuses } from '$lib/server/statuses';
+import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import {
+	listCustomFieldOptions,
+	listProjectCustomFields,
+	writeTaskCustomValues
+} from '$lib/server/customFields';
+import {
+	accessibleWorkspaceIds,
+	canAccessProject,
+	canEditProject,
+	canEditTask,
+	canEditView,
+	grantedProjectIds,
+	isAdmin
+} from '$lib/server/permissions';
+import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
+import { ICONOIR_NAMES } from '$lib/iconoirNames';
 import { VIEW_TYPES, type ViewType } from '$lib/server/projects';
 import type { Actions, PageServerLoad } from './$types';
 
+/** Statuses assignable to the PROJECT itself: defaults + its workspace's. */
+async function projectStatusOptions(workspaceId: string | null) {
+	return [
+		...(await listStatuses()),
+		...(workspaceId ? await listWorkspaceStatuses(workspaceId) : [])
+	];
+}
+
 const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const;
+
+/** Pull custom-field values from a task form: keys `cf_<fieldId>` (one per field). */
+function cfEntries(form: FormData): { fieldId: string; raw: string }[] {
+	const seen = new Set<string>();
+	const out: { fieldId: string; raw: string }[] = [];
+	for (const key of form.keys()) {
+		if (!key.startsWith('cf_') || seen.has(key)) continue;
+		seen.add(key);
+		out.push({ fieldId: key.slice(3), raw: String(form.get(key) ?? '') });
+	}
+	return out;
+}
 
 async function getTask(id: string) {
 	const [t] = await db.select().from(task).where(eq(task.id, id));
 	return t ?? null;
+}
+
+/** Parse the optional latitude/longitude form fields (blank ⇒ null), range-checked. */
+function parseCoords(form: FormData): { lat: number | null; lng: number | null } | { error: string } {
+	const latRaw = String(form.get('latitude') ?? '').trim();
+	const lngRaw = String(form.get('longitude') ?? '').trim();
+	let lat: number | null = null;
+	let lng: number | null = null;
+	if (latRaw !== '') {
+		lat = Number(latRaw);
+		if (!Number.isFinite(lat) || lat < -90 || lat > 90)
+			return { error: 'Latitude must be between -90 and 90' };
+	}
+	if (lngRaw !== '') {
+		lng = Number(lngRaw);
+		if (!Number.isFinite(lng) || lng < -180 || lng > 180)
+			return { error: 'Longitude must be between -180 and 180' };
+	}
+	return { lat, lng };
 }
 
 /** True if adding edge from -> to creates a cycle (graph: id -> dependsOn ids). */
@@ -46,6 +105,8 @@ function createsCycle(edges: Map<string, string[]>, from: string, to: string) {
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) error(404, 'Project not found');
+	// ADR-019: inaccessible projects are indistinguishable from missing ones
+	if (!(await canAccessProject(locals.user, params.id))) error(404, 'Project not found');
 
 	const [
 		tasks,
@@ -58,7 +119,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		projLabels,
 		projDeps,
 		allProjects,
-		taskDeps
+		taskDeps,
+		milestoneDeps
 	] = await Promise.all([
 		db
 			.select()
@@ -77,19 +139,39 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.from(milestone)
 			.where(eq(milestone.projectId, params.id))
 			.orderBy(asc(milestone.position), asc(milestone.createdAt)),
-		db.select().from(label).orderBy(asc(label.position), asc(label.name)),
-		db.select().from(labelGroup).orderBy(asc(labelGroup.position), asc(labelGroup.name)),
+		proj.workspaceId
+			? db
+					.select()
+					.from(label)
+					.where(eq(label.workspaceId, proj.workspaceId))
+					.orderBy(asc(label.position), asc(label.name))
+			: Promise.resolve([]),
+		proj.workspaceId
+			? db
+					.select()
+					.from(labelGroup)
+					.where(eq(labelGroup.workspaceId, proj.workspaceId))
+					.orderBy(asc(labelGroup.position), asc(labelGroup.name))
+			: Promise.resolve([]),
 		db.select().from(projectLabel).where(eq(projectLabel.projectId, params.id)),
 		db.select().from(projectDependency).where(eq(projectDependency.projectId, params.id)),
 		db
-			.select({ id: project.id, name: project.name })
+			.select({ id: project.id, name: project.name, workspaceId: project.workspaceId })
 			.from(project)
 			.orderBy(asc(project.name)),
 		db
 			.select({ taskId: taskDependency.taskId, dependsOnId: taskDependency.dependsOnId })
 			.from(taskDependency)
 			.innerJoin(task, eq(taskDependency.taskId, task.id))
-			.where(eq(task.projectId, params.id))
+			.where(eq(task.projectId, params.id)),
+		db
+			.select({
+				milestoneId: milestoneDependency.milestoneId,
+				dependsOnId: milestoneDependency.dependsOnId
+			})
+			.from(milestoneDependency)
+			.innerJoin(milestone, eq(milestoneDependency.milestoneId, milestone.id))
+			.where(eq(milestone.projectId, params.id))
 	]);
 
 	const taskIds = tasks.map((t) => t.id);
@@ -98,12 +180,55 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			? await db.select().from(taskLabel).where(inArray(taskLabel.taskId, taskIds))
 			: [];
 
+	const locations = await db
+		.select()
+		.from(location)
+		.where(eq(location.projectId, params.id))
+		.orderBy(asc(location.position), asc(location.title));
+
+	const customFields = await listProjectCustomFields(params.id);
+	const [customFieldOptions, taskCustomValues, files] = await Promise.all([
+		listCustomFieldOptions(customFields.map((f) => f.id)),
+		taskIds.length > 0
+			? db
+					.select()
+					.from(taskCustomValue)
+					.where(inArray(taskCustomValue.taskId, taskIds))
+			: Promise.resolve([]),
+		db
+			.select({
+				id: file.id,
+				taskId: file.taskId,
+				fieldId: file.fieldId,
+				filename: file.filename,
+				mimeType: file.mimeType,
+				size: file.size
+			})
+			.from(file)
+			.where(eq(file.projectId, params.id))
+	]);
+
 	const admin = isAdmin(locals.user);
 	const canEditProj = await canEditProject(locals.user, params.id);
 
-	// Per-view edit rights (project grant covers all views)
+	// ADR-019: dependency picker offers only accessible projects
+	const [wsAccess, projGrants] = await Promise.all([
+		accessibleWorkspaceIds(locals.user),
+		grantedProjectIds(locals.user)
+	]);
+	const visibleProjects =
+		wsAccess === 'all'
+			? allProjects
+			: allProjects.filter(
+					(p) =>
+						(p.workspaceId && wsAccess.has(p.workspaceId)) ||
+						projGrants.has(p.id) ||
+						projDeps.some((d) => d.dependsOnId === p.id)
+				);
+
+	// Per-view edit rights (project grant covers all views); hidden views are never rendered
 	const editableViews: Record<string, boolean> = {};
-	for (const v of views) {
+	for (const v of views.filter((v) => !v.hidden)) {
 		editableViews[v.id] = canEditProj || (await canEditView(locals.user, v.id));
 	}
 
@@ -113,14 +238,21 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		users,
 		views,
 		statuses: eligibleStatuses,
+		projectStatuses: await projectStatusOptions(proj.workspaceId),
 		milestones,
+		locations,
 		labels,
 		labelGroups,
 		projectLabelIds: projLabels.map((l) => l.labelId),
 		taskLabels: tLabels,
 		projectDependsOn: projDeps.map((d) => d.dependsOnId),
-		allProjects,
+		allProjects: visibleProjects,
 		taskDeps,
+		milestoneDeps,
+		customFields,
+		customFieldOptions,
+		taskCustomValues,
+		files,
 		perm: { admin, project: canEditProj, views: editableViews }
 	};
 };
@@ -130,6 +262,8 @@ export const actions: Actions = {
 
 	createTask: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canAccessProject(locals.user, params.id)))
+			return fail(403, { message: 'No access to this project' });
 
 		const form = await request.formData();
 		const title = String(form.get('title') ?? '').trim();
@@ -156,22 +290,56 @@ export const actions: Actions = {
 			: undefined;
 		if (requestedStatusId && !defaultStatus)
 			return fail(400, { message: 'Status not eligible for this project' });
-		defaultStatus ??= eligible.find((s) => s.category === 'todo') ?? eligible[0];
+		defaultStatus ??= eligible.find((s) => s.category === 'backlog') ?? eligible[0];
 		if (!defaultStatus) return fail(400, { message: 'Project has no eligible statuses' });
 
+		// optional prefilled fields (new-task pane: milestone / assignee / due date)
+		const assigneeId = String(form.get('assigneeId') ?? '') || null;
+		if (assigneeId) {
+			const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
+			if (!u) return fail(400, { message: 'Unknown assignee' });
+		}
+		const milestoneId = String(form.get('milestoneId') ?? '') || null;
+		if (milestoneId) {
+			const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
+			if (!m || m.projectId !== params.id)
+				return fail(400, { message: 'Milestone must belong to this project' });
+		}
+		const dueRaw = String(form.get('dueDate') ?? '');
+		const dueDate = dueRaw ? new Date(dueRaw + 'T00:00:00') : null;
+
 		const now = new Date();
+		const taskId = crypto.randomUUID();
 		await db.insert(task).values({
-			id: crypto.randomUUID(),
+			id: taskId,
 			projectId: params.id,
 			parentId,
 			title,
 			priority,
 			statusId: defaultStatus.id,
+			assigneeId,
+			milestoneId,
+			dueDate,
 			createdBy: locals.user.id,
 			position: now.getTime(),
 			createdAt: now,
 			updatedAt: now
 		});
+
+		const cfRes = await writeTaskCustomValues(taskId, params.id, cfEntries(form));
+		if (cfRes.error) {
+			await db.delete(task).where(eq(task.id, taskId));
+			return fail(400, { message: cfRes.error });
+		}
+
+		// optional label prefill (label-grouped quick-add); silently skip an invalid one
+		const labelId = String(form.get('labelId') ?? '') || null;
+		if (labelId) {
+			const [l] = await db.select().from(label).where(eq(label.id, labelId));
+			const [proj0] = await db.select({ workspaceId: project.workspaceId }).from(project).where(eq(project.id, params.id));
+			if (l && proj0 && l.workspaceId === proj0.workspaceId)
+				await db.insert(taskLabel).values({ taskId, labelId }).onConflictDoNothing();
+		}
 
 		const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 		void dispatchEvent({
@@ -181,6 +349,7 @@ export const actions: Actions = {
 			taskTitle: title
 		});
 
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
@@ -204,15 +373,15 @@ export const actions: Actions = {
 		await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.id, id));
 
 		// Completing a parent completes its sub-tasks
-		if (target.category === 'done') {
+		if (target.category === 'completed') {
 			await db
 				.update(task)
 				.set({ statusId, updatedAt: new Date() })
 				.where(eq(task.parentId, id));
 		}
 
-		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'done';
-		if (target.category === 'done' && !wasDone) {
+		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+		if (target.category === 'completed' && !wasDone) {
 			const [proj] = await db.select().from(project).where(eq(project.id, existing.projectId));
 			void dispatchEvent({
 				type: 'task.completed',
@@ -222,6 +391,7 @@ export const actions: Actions = {
 			});
 		}
 
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
@@ -288,14 +458,14 @@ export const actions: Actions = {
 			.set({ statusId, position, updatedAt: new Date() })
 			.where(eq(task.id, id));
 
-		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'done';
-		if (target.category === 'done') {
+		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+		if (target.category === 'completed') {
 			await db
 				.update(task)
 				.set({ statusId, updatedAt: new Date() })
 				.where(eq(task.parentId, id));
 		}
-		if (target.category === 'done' && !wasDone) {
+		if (target.category === 'completed' && !wasDone) {
 			const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 			void dispatchEvent({
 				type: 'task.completed',
@@ -305,70 +475,109 @@ export const actions: Actions = {
 			});
 		}
 
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
-	updateTask: async ({ request, params, locals }) => {
+	/** Patch only the task fields present in the form (the task-pane pills + title/desc). */
+	patchTask: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
 		const form = await request.formData();
 		const id = String(form.get('id') ?? '');
-		const title = String(form.get('title') ?? '').trim();
-		const description = String(form.get('description') ?? '').trim();
-		const priority = String(form.get('priority') ?? 'none');
-		const assigneeId = String(form.get('assigneeId') ?? '') || null;
-		const milestoneId = String(form.get('milestoneId') ?? '') || null;
-		const location = String(form.get('location') ?? '').trim() || null;
-		const dueDateRaw = String(form.get('dueDate') ?? '');
-
 		const existing = await getTask(id);
 		if (!existing || existing.projectId !== params.id)
 			return fail(400, { message: 'Invalid task' });
 		if (!(await canEditTask(locals.user, existing)))
 			return fail(403, { message: 'No edit permission on this task' });
 
-		if (!title) return fail(400, { message: 'Task title is required' });
-		if (!PRIORITIES.includes(priority as (typeof PRIORITIES)[number]))
-			return fail(400, { message: 'Invalid priority' });
+		const set: Partial<typeof task.$inferInsert> = {};
 
-		if (milestoneId) {
-			const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-			if (!m || m.projectId !== params.id)
-				return fail(400, { message: 'Milestone must belong to this project' });
+		if (form.has('title')) {
+			const title = String(form.get('title') ?? '').trim();
+			if (!title) return fail(400, { message: 'Task title is required' });
+			if (title.length > 240) return fail(400, { message: 'Title too long (max 240)' });
+			set.title = title;
 		}
-
-		if (location && !/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(location))
-			return fail(400, { message: 'Location must be "lat, lng"' });
-
-		const dueDate = dueDateRaw ? new Date(dueDateRaw + 'T00:00:00') : null;
-
-		// order only updates when the form includes it (older forms don't)
-		let order: number | null | undefined = undefined;
+		if (form.has('description')) {
+			set.description = String(form.get('description') ?? '').trim() || null;
+		}
+		if (form.has('priority')) {
+			const priority = String(form.get('priority') ?? 'none');
+			if (!PRIORITIES.includes(priority as (typeof PRIORITIES)[number]))
+				return fail(400, { message: 'Invalid priority' });
+			set.priority = priority;
+		}
+		if (form.has('assigneeId')) {
+			const assigneeId = String(form.get('assigneeId') ?? '') || null;
+			if (assigneeId) {
+				const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
+				if (!u) return fail(400, { message: 'Unknown assignee' });
+			}
+			set.assigneeId = assigneeId;
+		}
+		if (form.has('milestoneId')) {
+			const milestoneId = String(form.get('milestoneId') ?? '') || null;
+			if (milestoneId) {
+				const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
+				if (!m || m.projectId !== params.id)
+					return fail(400, { message: 'Milestone must belong to this project' });
+			}
+			set.milestoneId = milestoneId;
+		}
+		if (form.has('locationId')) {
+			const locationId = String(form.get('locationId') ?? '') || null;
+			if (locationId) {
+				const [l] = await db.select().from(location).where(eq(location.id, locationId));
+				if (!l || l.projectId !== params.id)
+					return fail(400, { message: 'Location must belong to this project' });
+			}
+			set.locationId = locationId;
+		}
 		if (form.has('order')) {
-			const orderRaw = String(form.get('order') ?? '').trim();
-			if (orderRaw === '') {
-				order = null;
-			} else {
-				order = Number(orderRaw);
+			const raw = String(form.get('order') ?? '').trim();
+			if (raw === '') set.order = null;
+			else {
+				const order = Number(raw);
 				if (!Number.isInteger(order)) return fail(400, { message: 'Order must be a whole number' });
+				set.order = order;
 			}
 		}
+		if (form.has('dueDate')) {
+			const raw = String(form.get('dueDate') ?? '');
+			set.dueDate = raw ? new Date(raw + 'T00:00:00') : null;
+		}
+		// re-parent: nest this task under another (make it a sub-task). Depth-1 only.
+		if (form.has('parentId')) {
+			const parentId = String(form.get('parentId') ?? '') || null;
+			if (parentId) {
+				if (parentId === id) return fail(400, { message: 'A task cannot be its own parent' });
+				const parent = await getTask(parentId);
+				if (!parent || parent.projectId !== params.id)
+					return fail(400, { message: 'Parent must belong to this project' });
+				if (parent.parentId) return fail(400, { message: 'Sub-tasks cannot have sub-tasks' });
+				const [{ n }] = await db
+					.select({ n: count(task.id) })
+					.from(task)
+					.where(eq(task.parentId, id));
+				if (n > 0) return fail(400, { message: 'Move or remove this task’s sub-tasks first' });
+			}
+			set.parentId = parentId;
+		}
+
+		const cf = cfEntries(form);
+		if (Object.keys(set).length === 0 && cf.length === 0)
+			return fail(400, { message: 'No fields to update' });
 
 		await db
 			.update(task)
-			.set({
-				title,
-				description: description || null,
-				priority,
-				assigneeId,
-				milestoneId,
-				location,
-				...(order !== undefined ? { order } : {}),
-				dueDate,
-				updatedAt: new Date()
-			})
+			.set({ ...set, updatedAt: new Date() })
 			.where(eq(task.id, id));
-
+		if (cf.length > 0) {
+			const res = await writeTaskCustomValues(id, params.id, cf);
+			if (res.error) return fail(400, { message: res.error });
+		}
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
@@ -385,6 +594,7 @@ export const actions: Actions = {
 
 		await db.delete(task).where(eq(task.parentId, id)); // sub-tasks first
 		await db.delete(task).where(eq(task.id, id));
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
@@ -411,9 +621,12 @@ export const actions: Actions = {
 				.where(and(eq(taskLabel.taskId, taskId), eq(taskLabel.labelId, labelId)));
 		} else {
 			const [l] = await db.select().from(label).where(eq(label.id, labelId));
-			if (!l) return fail(400, { message: 'Unknown label' });
+			const [proj] = await db.select().from(project).where(eq(project.id, params.id));
+			if (!l || !proj || l.workspaceId !== proj.workspaceId)
+				return fail(400, { message: 'Unknown label' });
 			await db.insert(taskLabel).values({ taskId, labelId });
 		}
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
@@ -454,6 +667,7 @@ export const actions: Actions = {
 			.insert(taskDependency)
 			.values({ taskId, dependsOnId })
 			.onConflictDoNothing();
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
@@ -472,12 +686,13 @@ export const actions: Actions = {
 		await db
 			.delete(taskDependency)
 			.where(and(eq(taskDependency.taskId, taskId), eq(taskDependency.dependsOnId, dependsOnId)));
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
 	/* ------------------------------ views ------------------------------ */
 
-	/** Enables a view type for the project (one view per type; Table is on by default). */
+	/** Adds a view of the given type (multiple views per type allowed, ADR-020). */
 	createView: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		if (!(await canEditProject(locals.user, params.id)))
@@ -489,18 +704,19 @@ export const actions: Actions = {
 		if (!VIEW_TYPES.includes(type as ViewType)) return fail(400, { message: 'Invalid view type' });
 
 		const existing = await db
-			.select({ id: view.id, type: view.type })
+			.select({ name: view.name })
 			.from(view)
 			.where(eq(view.projectId, params.id));
-		if (existing.some((v) => v.type === type))
-			return fail(400, { message: 'That view is already enabled' });
+		const base = type[0].toUpperCase() + type.slice(1);
+		let name = base;
+		for (let n = 2; existing.some((v) => v.name === name); n++) name = `${base} ${n}`;
 
 		const now = new Date();
 		const id = crypto.randomUUID();
 		await db.insert(view).values({
 			id,
 			projectId: params.id,
-			name: type[0].toUpperCase() + type.slice(1),
+			name,
 			type,
 			config: '{}',
 			position: now.getTime(),
@@ -509,40 +725,61 @@ export const actions: Actions = {
 			updatedAt: now
 		});
 
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true, viewId: id };
 	},
 
-	updateView: async ({ request, params, locals }) => {
+	/** Re-enables a hidden view, keeping its config. */
+	unhideView: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
 		const form = await request.formData();
 		const id = String(form.get('id') ?? '');
-		const name = String(form.get('name') ?? '').trim();
-		const configRaw = String(form.get('config') ?? '{}');
 
 		const [v] = await db.select().from(view).where(eq(view.id, id));
 		if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
 		if (!(await canEditView(locals.user, id)))
 			return fail(403, { message: 'No edit permission on this view' });
 
-		if (!name) return fail(400, { message: 'View name is required' });
+		await db.update(view).set({ hidden: false, updatedAt: new Date() }).where(eq(view.id, id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true, viewId: id };
+	},
 
-		let config = '{}';
-		try {
-			const parsed = JSON.parse(configRaw);
-			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
-				config = JSON.stringify(parsed);
-		} catch {
-			return fail(400, { message: 'Invalid view config' });
-		}
+	duplicateView: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
 
-		// type is fixed at enablement — one view per type per project
-		await db
-			.update(view)
-			.set({ name, config, updatedAt: new Date() })
-			.where(eq(view.id, id));
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
 
-		return { success: true };
+		const [v] = await db.select().from(view).where(eq(view.id, id));
+		if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
+
+		const existing = await db
+			.select({ name: view.name })
+			.from(view)
+			.where(eq(view.projectId, params.id));
+		let name = `${v.name} copy`;
+		for (let n = 2; existing.some((x) => x.name === name); n++) name = `${v.name} copy ${n}`;
+
+		const now = new Date();
+		const newId = crypto.randomUUID();
+		await db.insert(view).values({
+			id: newId,
+			projectId: params.id,
+			name,
+			type: v.type,
+			config: v.config,
+			position: v.position + 1,
+			createdBy: locals.user.id,
+			createdAt: now,
+			updatedAt: now
+		});
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true, viewId: newId };
 	},
 
 	deleteView: async ({ request, params, locals }) => {
@@ -556,12 +793,465 @@ export const actions: Actions = {
 		if (!(await canEditView(locals.user, id)))
 			return fail(403, { message: 'No edit permission on this view' });
 
-		const views = await db.select({ id: view.id }).from(view).where(eq(view.projectId, params.id));
-		if (views.length <= 1)
-			return fail(400, { message: 'A project must have at least one view' });
+		const visible = await db
+			.select({ id: view.id })
+			.from(view)
+			.where(and(eq(view.projectId, params.id), eq(view.hidden, false)));
+		if (!v.hidden && visible.length <= 1)
+			return fail(400, { message: 'A project must keep at least one view' });
 
 		await db.delete(view).where(eq(view.id, id));
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
+	/** Updates a view's name and/or config (config untouched when not posted). */
+	updateView: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const name = String(form.get('name') ?? '').trim();
+		const configRaw = form.get('config');
+
+		const [v] = await db.select().from(view).where(eq(view.id, id));
+		if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
+		if (!(await canEditView(locals.user, id)))
+			return fail(403, { message: 'No edit permission on this view' });
+
+		if (!name) return fail(400, { message: 'View name is required' });
+
+		let config: string | undefined;
+		if (configRaw !== null) {
+			try {
+				const parsed = JSON.parse(String(configRaw));
+				if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+					config = JSON.stringify(parsed);
+				else return fail(400, { message: 'Invalid view config' });
+			} catch {
+				return fail(400, { message: 'Invalid view config' });
+			}
+		}
+
+		// type is fixed at creation
+		await db
+			.update(view)
+			.set({ name, ...(config !== undefined ? { config } : {}), updatedAt: new Date() })
+			.where(eq(view.id, id));
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/** Reorders the project's views (drag-and-drop tabs). Body: `ids` = comma-separated view ids. */
+	reorderView: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const ids = String((await request.formData()).get('ids') ?? '')
+			.split(',')
+			.map((s) => s.trim())
+			.filter(Boolean);
+
+		const rows = await db.select({ id: view.id }).from(view).where(eq(view.projectId, params.id));
+		const projectIds = new Set(rows.map((r) => r.id));
+		// the posted set must reference only this project's views
+		if (!ids.length || !ids.every((id) => projectIds.has(id)))
+			return fail(400, { message: 'Invalid order' });
+		if (!(await canEditView(locals.user, ids[0])))
+			return fail(403, { message: 'No edit permission on this view' });
+
+		for (let i = 0; i < ids.length; i++)
+			await db.update(view).set({ position: i * 10 }).where(eq(view.id, ids[i]));
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/* ------------------------- project "…" menu ------------------------- */
+
+	pinProject: async ({ params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const [proj] = await db.select().from(project).where(eq(project.id, params.id));
+		if (!proj) return fail(404, { message: 'Project not found' });
+
+		await db
+			.update(project)
+			.set({ pinned: !proj.pinned, updatedAt: new Date() })
+			.where(eq(project.id, params.id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	setProjectIcon: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const raw = String(form.get('icon') ?? '').trim();
+		let icon: string | null;
+		if (raw.startsWith('iconoir:')) {
+			if (!ICONOIR_NAMES.includes(raw.slice(8))) return fail(400, { message: 'Unknown icon' });
+			icon = raw;
+		} else {
+			icon = raw.slice(0, 8) || null; // emoji or legacy glyph
+		}
+
+		await db
+			.update(project)
+			.set({ icon, updatedAt: new Date() })
+			.where(eq(project.id, params.id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	setProjectStatus: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const statusId = String(form.get('statusId') ?? '') || null;
+
+		const [proj] = await db.select().from(project).where(eq(project.id, params.id));
+		if (!proj) return fail(404, { message: 'Project not found' });
+
+		if (statusId) {
+			const options = await projectStatusOptions(proj.workspaceId);
+			if (!options.some((s) => s.id === statusId))
+				return fail(400, { message: 'Status not available to this project' });
+		}
+
+		await db
+			.update(project)
+			.set({ statusId, updatedAt: new Date() })
+			.where(eq(project.id, params.id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	toggleProjectLabel: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const labelId = String(form.get('labelId') ?? '');
+
+		const [has] = await db
+			.select()
+			.from(projectLabel)
+			.where(and(eq(projectLabel.projectId, params.id), eq(projectLabel.labelId, labelId)));
+		if (has) {
+			await db
+				.delete(projectLabel)
+				.where(and(eq(projectLabel.projectId, params.id), eq(projectLabel.labelId, labelId)));
+		} else {
+			const [l] = await db.select().from(label).where(eq(label.id, labelId));
+			const [proj] = await db.select().from(project).where(eq(project.id, params.id));
+			if (!l || !proj || l.workspaceId !== proj.workspaceId)
+				return fail(400, { message: 'Unknown label' });
+			await db.insert(projectLabel).values({ projectId: params.id, labelId });
+		}
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/* ----------------------------- milestones ----------------------------- */
+
+	createMilestone: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const name = String(form.get('name') ?? '').trim();
+		const targetDateRaw = String(form.get('targetDate') ?? '');
+
+		if (!name) return fail(400, { message: 'Milestone name is required' });
+
+		const now = new Date();
+		const msId = crypto.randomUUID();
+		await db.insert(milestone).values({
+			id: msId,
+			projectId: params.id,
+			name,
+			targetDate: targetDateRaw ? new Date(targetDateRaw + 'T00:00:00') : null,
+			position: now.getTime(),
+			createdAt: now,
+			updatedAt: now
+		});
+
+		// optionally assign the new milestone to a task in one step (task-pane create)
+		const assignTaskId = String(form.get('taskId') ?? '') || null;
+		if (assignTaskId) {
+			const t = await getTask(assignTaskId);
+			if (t && t.projectId === params.id && (await canEditTask(locals.user, t)))
+				await db.update(task).set({ milestoneId: msId, updatedAt: now }).where(eq(task.id, assignTaskId));
+		}
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true, milestoneId: msId };
+	},
+
+	/* ----------------------------- locations ----------------------------- */
+
+	createLocation: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const title = String(form.get('title') ?? '').trim();
+		const address = String(form.get('address') ?? '').trim() || null;
+		const assignTaskId = String(form.get('taskId') ?? '') || null;
+
+		if (!title) return fail(400, { message: 'Location title is required' });
+		const coords = parseCoords(form);
+		if ('error' in coords) return fail(400, { message: coords.error });
+		const { lat, lng } = coords;
+
+		const now = new Date();
+		const locId = crypto.randomUUID();
+		await db.insert(location).values({
+			id: locId,
+			projectId: params.id,
+			title,
+			address,
+			latitude: lat,
+			longitude: lng,
+			position: now.getTime(),
+			createdAt: now,
+			updatedAt: now
+		});
+
+		if (assignTaskId) {
+			const t = await getTask(assignTaskId);
+			if (t && t.projectId === params.id && (await canEditTask(locals.user, t)))
+				await db
+					.update(task)
+					.set({ locationId: locId, updatedAt: now })
+					.where(eq(task.id, assignTaskId));
+		}
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true, locationId: locId };
+	},
+
+	updateLocation: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const title = String(form.get('title') ?? '').trim();
+		const address = String(form.get('address') ?? '').trim() || null;
+
+		const [loc] = await db.select().from(location).where(eq(location.id, id));
+		if (!loc || loc.projectId !== params.id) return fail(400, { message: 'Invalid location' });
+		if (!title) return fail(400, { message: 'Location title is required' });
+		const coords = parseCoords(form);
+		if ('error' in coords) return fail(400, { message: coords.error });
+
+		await db
+			.update(location)
+			.set({ title, address, latitude: coords.lat, longitude: coords.lng, updatedAt: new Date() })
+			.where(eq(location.id, id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	deleteLocation: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		await db.delete(location).where(and(eq(location.id, id), eq(location.projectId, params.id)));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	updateMilestone: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const [ms] = await db.select().from(milestone).where(eq(milestone.id, id));
+		if (!ms || ms.projectId !== params.id) return fail(400, { message: 'Invalid milestone' });
+
+		const patch: { name?: string; targetDate?: Date | null } = {};
+		if (form.has('name')) {
+			const name = String(form.get('name') ?? '').trim();
+			if (!name) return fail(400, { message: 'Milestone name is required' });
+			patch.name = name;
+		}
+		if (form.has('targetDate')) {
+			const raw = String(form.get('targetDate') ?? '').trim();
+			patch.targetDate = raw ? new Date(raw + 'T00:00:00') : null;
+		}
+		if (!('name' in patch) && !('targetDate' in patch))
+			return fail(400, { message: 'No fields to update' });
+
+		await db.update(milestone).set({ ...patch, updatedAt: new Date() }).where(eq(milestone.id, id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	deleteMilestone: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		await db.delete(milestone).where(and(eq(milestone.id, id), eq(milestone.projectId, params.id)));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	addMilestoneDep: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const milestoneId = String(form.get('milestoneId') ?? '');
+		const dependsOnId = String(form.get('dependsOnId') ?? '');
+
+		if (milestoneId === dependsOnId)
+			return fail(400, { message: 'A milestone cannot depend on itself' });
+
+		const [m, dep] = await Promise.all([
+			db.select().from(milestone).where(eq(milestone.id, milestoneId)),
+			db.select().from(milestone).where(eq(milestone.id, dependsOnId))
+		]);
+		if (!m[0] || !dep[0] || m[0].projectId !== params.id || dep[0].projectId !== params.id)
+			return fail(400, { message: 'Both milestones must belong to this project' });
+
+		const all = await db
+			.select({ milestoneId: milestoneDependency.milestoneId, dependsOnId: milestoneDependency.dependsOnId })
+			.from(milestoneDependency)
+			.innerJoin(milestone, eq(milestoneDependency.milestoneId, milestone.id))
+			.where(eq(milestone.projectId, params.id));
+		const edges = new Map<string, string[]>();
+		for (const e of all) edges.set(e.milestoneId, [...(edges.get(e.milestoneId) ?? []), e.dependsOnId]);
+		if (createsCycle(edges, milestoneId, dependsOnId))
+			return fail(400, { message: 'That dependency would create a cycle' });
+
+		await db
+			.insert(milestoneDependency)
+			.values({ milestoneId, dependsOnId })
+			.onConflictDoNothing();
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/** Replaces a milestone's full dependency set. Body: `milestoneId` + repeated `dependsOnId`. */
+	setMilestoneDeps: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const milestoneId = String(form.get('milestoneId') ?? '');
+		const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
+		if (!m || m.projectId !== params.id) return fail(400, { message: 'Invalid milestone' });
+
+		const projectMs = await db
+			.select({ id: milestone.id })
+			.from(milestone)
+			.where(eq(milestone.projectId, params.id));
+		const validIds = new Set(projectMs.map((r) => r.id));
+		const desired = [...new Set(form.getAll('dependsOnId').map(String))].filter(
+			(id) => id && id !== milestoneId && validIds.has(id)
+		);
+
+		// edges minus this milestone's current deps; re-add desired one by one, skipping cycles
+		const all = await db
+			.select({ milestoneId: milestoneDependency.milestoneId, dependsOnId: milestoneDependency.dependsOnId })
+			.from(milestoneDependency)
+			.innerJoin(milestone, eq(milestoneDependency.milestoneId, milestone.id))
+			.where(eq(milestone.projectId, params.id));
+		const edges = new Map<string, string[]>();
+		for (const e of all)
+			if (e.milestoneId !== milestoneId)
+				edges.set(e.milestoneId, [...(edges.get(e.milestoneId) ?? []), e.dependsOnId]);
+
+		const accepted: string[] = [];
+		for (const dep of desired) {
+			if (createsCycle(edges, milestoneId, dep)) continue;
+			accepted.push(dep);
+			edges.set(milestoneId, [...(edges.get(milestoneId) ?? []), dep]);
+		}
+
+		await db.delete(milestoneDependency).where(eq(milestoneDependency.milestoneId, milestoneId));
+		if (accepted.length)
+			await db
+				.insert(milestoneDependency)
+				.values(accepted.map((dependsOnId) => ({ milestoneId, dependsOnId })))
+				.onConflictDoNothing();
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	removeMilestoneDep: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const milestoneId = String(form.get('milestoneId') ?? '');
+		const dependsOnId = String(form.get('dependsOnId') ?? '');
+		await db
+			.delete(milestoneDependency)
+			.where(
+				and(
+					eq(milestoneDependency.milestoneId, milestoneId),
+					eq(milestoneDependency.dependsOnId, dependsOnId)
+				)
+			);
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	deleteProject: async ({ params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+		await db.delete(project).where(eq(project.id, params.id));
+		broadcastProjectChange(params.id, locals.user.id);
+		redirect(303, '/projects');
+	},
+
+	/** Hides a view (config kept; the "+" menu re-enables it). */
+	hideView: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+
+		const [v] = await db.select().from(view).where(eq(view.id, id));
+		if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
+		if (!(await canEditView(locals.user, id)))
+			return fail(403, { message: 'No edit permission on this view' });
+
+		const visible = await db
+			.select({ id: view.id })
+			.from(view)
+			.where(and(eq(view.projectId, params.id), eq(view.hidden, false)));
+		if (visible.length <= 1)
+			return fail(400, { message: 'A project must keep at least one view' });
+
+		await db.update(view).set({ hidden: true, updatedAt: new Date() }).where(eq(view.id, id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	}
 };

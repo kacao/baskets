@@ -16,7 +16,7 @@ const ADMIN_PASSWORD = 'admin-baskets-2026';
 const DEMO_EMAIL = 'demo@baskets.local';
 const DEMO_PASSWORD = 'demo-baskets-2026';
 
-const sqlite = new Database(process.env.DATABASE_URL ?? './baskets.db');
+const sqlite = new Database(process.env.DATABASE_URL ?? './data/baskets.db');
 try {
 	sqlite.pragma('journal_mode = WAL');
 } catch {
@@ -69,15 +69,28 @@ await db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.i
 console.log('Creating default statuses…');
 const now = new Date();
 const statuses = [
-	{ id: 'status-backlog', name: 'Backlog', category: 'todo' },
-	{ id: 'status-planned', name: 'Planned', category: 'todo' },
-	{ id: 'status-in-progress', name: 'In progress', category: 'active' },
-	{ id: 'status-completed', name: 'Completed', category: 'done' },
-	{ id: 'status-canceled', name: 'Canceled', category: 'canceled' }
+	{ id: 'status-backlog', name: 'Backlog', category: 'backlog', color: '#71717a', icon: 'iconoir:circle' },
+	{ id: 'status-planned', name: 'Planned', category: 'planned', color: '#3b82f6', icon: 'iconoir:clock' },
+	{ id: 'status-in-progress', name: 'In progress', category: 'in-progress', color: '#f59e0b', icon: 'iconoir:half-moon' },
+	{ id: 'status-completed', name: 'Completed', category: 'completed', color: '#16a34a', icon: 'iconoir:check-circle' },
+	{ id: 'status-canceled', name: 'Canceled', category: 'canceled', color: '#a1a1aa', icon: 'iconoir:xmark-circle' }
 ];
 await db
 	.insert(schema.status)
 	.values(statuses.map((s, i) => ({ ...s, position: i * 10, builtIn: true, createdAt: now })))
+	.onConflictDoNothing();
+
+console.log('Creating default workspace…');
+const WORKSPACE_ID = 'workspace-default';
+await db
+	.insert(schema.workspace)
+	.values({
+		id: WORKSPACE_ID,
+		name: 'Default',
+		ownerId: adminId,
+		createdAt: now,
+		updatedAt: now
+	})
 	.onConflictDoNothing();
 
 console.log('Creating sample projects…');
@@ -89,6 +102,7 @@ await db.insert(schema.project).values([
 		id: pid(1),
 		name: 'Website Relaunch',
 		description: 'Rebuild the marketing site with the new brutalist brand.',
+		workspaceId: WORKSPACE_ID,
 		createdBy: adminId,
 		createdAt: now,
 		updatedAt: now
@@ -97,6 +111,7 @@ await db.insert(schema.project).values([
 		id: pid(2),
 		name: 'Q3 Operations',
 		description: 'Recurring ops work for the third quarter.',
+		workspaceId: WORKSPACE_ID,
 		createdBy: adminId,
 		createdAt: now,
 		updatedAt: now
@@ -138,13 +153,14 @@ await db.insert(schema.milestone).values({
 await db.insert(schema.labelGroup).values({
 	id: 'seed-label-group-1',
 	name: 'Area',
+	workspaceId: WORKSPACE_ID,
 	position: 0,
 	createdAt: now
 });
 await db.insert(schema.label).values([
-	{ id: 'seed-label-1', name: 'design', groupId: 'seed-label-group-1', position: 0, createdAt: now },
-	{ id: 'seed-label-2', name: 'engineering', groupId: 'seed-label-group-1', position: 1, createdAt: now },
-	{ id: 'seed-label-3', name: 'urgent-review', groupId: null, position: 2, createdAt: now }
+	{ id: 'seed-label-1', name: 'design', workspaceId: WORKSPACE_ID, groupId: 'seed-label-group-1', position: 0, createdAt: now },
+	{ id: 'seed-label-2', name: 'engineering', workspaceId: WORKSPACE_ID, groupId: 'seed-label-group-1', position: 1, createdAt: now },
+	{ id: 'seed-label-3', name: 'urgent-review', workspaceId: WORKSPACE_ID, groupId: null, position: 2, createdAt: now }
 ]);
 
 // Demo user can edit project 1 (admins implicitly edit everything)
@@ -209,6 +225,21 @@ await db.insert(schema.taskLabel).values([
 	{ taskId: tid(3), labelId: 'seed-label-2' }
 ]);
 await db.insert(schema.projectLabel).values([{ projectId: pid(1), labelId: 'seed-label-1' }]);
+
+// Sample custom fields on project 1: a Select (Severity) + a currency Number (Estimate).
+await db.insert(schema.customField).values([
+	{ id: 'seed-cf-1', projectId: pid(1), name: 'Severity', type: 'select', config: JSON.stringify({ multi: false, displayOption: 'text-icon' }), position: 0, createdAt: now },
+	{ id: 'seed-cf-2', projectId: pid(1), name: 'Estimate', type: 'number', config: JSON.stringify({ numberFormat: 'currency', currencyCode: 'USD' }), position: 10, createdAt: now }
+]);
+await db.insert(schema.customFieldOption).values([
+	{ id: 'seed-cfo-1', fieldId: 'seed-cf-1', title: 'Low', color: '#16a34a', icon: 'iconoir:circle', position: 0, createdAt: now },
+	{ id: 'seed-cfo-2', fieldId: 'seed-cf-1', title: 'Medium', color: '#f59e0b', icon: 'iconoir:half-moon', position: 10, createdAt: now },
+	{ id: 'seed-cfo-3', fieldId: 'seed-cf-1', title: 'High', color: '#dc2626', icon: 'iconoir:fire-flame', position: 20, createdAt: now }
+]);
+await db.insert(schema.taskCustomValue).values([
+	{ taskId: tid(1), fieldId: 'seed-cf-1', value: JSON.stringify(['seed-cfo-3']) },
+	{ taskId: tid(1), fieldId: 'seed-cf-2', value: '1500' }
+]);
 
 console.log(`
 Seed complete.

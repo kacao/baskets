@@ -1,0 +1,170 @@
+# Baskets
+
+> Single-tenant project management app (workspaces → projects → tasks → sub-tasks).
+> This file documents the REST API so agents can drive Baskets programmatically.
+> Base URL = this deployment's origin (e.g. http://localhost:5173). All API paths below are relative to it.
+
+## Authentication
+
+Every `/api/*` endpoint requires auth. Use a per-user API key as a bearer token:
+
+```
+Authorization: Bearer bsk_<token>
+```
+
+- The header must start literally with `Bearer bsk_`; anything else is treated as unauthenticated → `401`.
+- Create keys in the web UI at `/settings` (API keys section). The plaintext key is shown exactly ONCE at creation; only its SHA-256 hash is stored. Format: `bsk_` + random token.
+- A key inherits its owner's access. Banned users are rejected.
+- The browser session cookie is also accepted (used by the web UI); agents should use a bearer key.
+
+## Conventions
+
+- Request bodies are JSON objects (`Content-Type: application/json`). A non-object body → `400 {"error":"Invalid JSON body"}`.
+- All errors: `{ "error": "<message>" }` with the documented status code.
+- `401 {"error":"Unauthorized"}` when auth is missing/invalid.
+- Visibility: a project (or its tasks) the caller cannot access returns `404` — identical to a truly missing resource (never `403` on read), so inaccessible and nonexistent are indistinguishable.
+- Timestamps in responses are Unix epoch milliseconds (integers). Booleans are `0`/`1`.
+- Priority enum: `none | low | medium | high | urgent` (default `none`).
+- Status category (drives behavior, not the name): `backlog | planned | in-progress | completed | canceled` (`completed` = the "done" bucket that completes sub-tasks; `backlog` = new-task default).
+
+## Session
+
+### GET /api/me
+Identity of the current session/key holder.
+- 200: `{ "user": { "id": string, "name": string } }`
+- 401 if unauthenticated.
+
+## Realtime
+
+The web UI receives live updates and presence over a WebSocket at `/ws` (same origin), authenticated by the **browser session cookie** only — it is not part of the bearer-key REST surface. After any mutation through the API or UI, connected viewers of the affected project auto-refresh. Agents using a bearer key don't need to connect; just poll the REST endpoints. Messages are JSON: client→server `{type:'subscribe',projectId}` / `{type:'unsubscribe'}` / `{type:'ping'}`; server→client `{type:'changed',projectId}` (refetch) and `{type:'presence',projectId,users:[{id,name}]}`.
+
+## Projects
+
+### GET /api/projects
+List accessible projects, newest first.
+- 200: `{ "projects": [ <project>, ... ] }`
+
+### POST /api/projects
+Create a project.
+- Body:
+  - `name` string, required. Trimmed, non-empty, max 120.
+  - `description` string|null, optional.
+  - `workspaceId` string|null, optional. Must exist if given (`400 "unknown workspaceId"`); if omitted, defaults to the OLDEST workspace. Requires edit rights on the chosen workspace (`403 "No permission to create projects in this workspace"`).
+- 201: `{ "project": <project> }`
+- Errors: 400 (name/description/workspaceId), 401, 403.
+
+### GET /api/projects/{id}
+Fetch one project with nested resources.
+- 200: `{ "project": <project>, "tasks": [<task>...], "views": [<view>...], "milestones": [<milestone>...], "locations": [<location>...], "statuses": [<status>...], "customFields": [<customField>...], "customFieldOptions": [<customFieldOption>...] }` (`statuses` = the project's eligible statuses; each task carries its decoded `customFields` map — see Object shapes).
+- 404 if missing or inaccessible.
+
+### PATCH /api/projects/{id}
+Update project metadata. At least one field required (else `400 "No fields to update"`).
+- Body: `name` (string, trimmed non-empty, max 120), `description` (string|null).
+- Requires project edit rights: `404` if missing, `403 "No edit permission on this project"` if forbidden.
+- 200: `{ "project": <project> }`
+
+### DELETE /api/projects/{id}
+Delete a project (cascades to its tasks, views, milestones).
+- `404` if missing, `403` if forbidden.
+- 204: empty body.
+
+## Tasks
+
+### GET /api/tasks?projectId={id}
+List a project's tasks (top-level + sub-tasks), ordered by position.
+- `projectId` query param required (`400` if absent). `404` if the project is inaccessible/missing.
+- 200: `{ "tasks": [<task>...] }`
+
+### POST /api/tasks
+Create a task or sub-task.
+- Body:
+  - `projectId` string, required.
+  - `title` string, required. Trimmed, non-empty, max 240.
+  - `priority` string, optional, default `none`. Must be in the priority enum.
+  - `parentId` string|null, optional. If set, the parent must be a top-level task in the same project. Only one nesting level — sub-tasks cannot have children.
+  - `statusId` string, optional — an eligible status id. Takes precedence over `status`.
+  - `status` string, optional — an eligible status NAME (case-insensitive). Use this OR `statusId`.
+    If neither is given, defaults to the first `backlog`-category status.
+  - `description` string|null, optional.
+  - `assigneeId` string|null, optional — must reference a valid user.
+  - `milestoneId` string|null, optional — must reference a milestone of the same project.
+  - `locationId` string|null, optional — must reference a saved location of the same project.
+  - `dueDate` string|null, optional — `YYYY-MM-DD` (treated as midnight) or full ISO datetime.
+  - `location` string|null, optional — free text `"lat, lng"` (plotted by map views).
+  - `order` integer|null, optional — user rank for list views; null = unranked.
+  - `customFields` object, optional — a `{ "<fieldId>": value }` map (see Custom fields). Each value is validated against its field's type; invalid → `400` (task not created).
+- 201: `{ "task": <task> }` (the task includes its decoded `customFields` map).
+- Any signed-in user with project access can create tasks.
+
+### GET /api/tasks/{id}
+Fetch one task and its sub-tasks.
+- 200: `{ "task": <task>, "subTasks": [<task>...] }` (the task includes its decoded `customFields` map).
+- `404` if missing or its project is inaccessible.
+
+### PATCH /api/tasks/{id}
+Update a task. At least one field (else `400 "No fields to update"`).
+- Body: any of `title` (non-empty, max 240), `statusId` or `status` (name), `priority`, `description`, `assigneeId` (string|null), `milestoneId` (string|null, same project), `locationId` (string|null, same project), `location` (string|null, legacy text), `order` (integer|null), `dueDate` (string|null), `customFields` (`{ "<fieldId>": value }` map; see Custom fields — an empty/null value clears the field).
+- Done-cascade: setting a parent to a `completed`-category status cascades that status to all its sub-tasks.
+- 200: `{ "task": <task> }`
+
+### DELETE /api/tasks/{id}
+Delete a task and its sub-tasks.
+- `404` if missing, `403` if forbidden.
+- 204: empty body.
+
+## Custom fields
+
+Projects define custom fields (created/edited in the project settings UI — no field-definition REST write endpoints). Each task stores a value per field. Field definitions + their select options are returned by `GET /api/projects/{id}`; task values appear as the per-task `customFields` map on task responses and are written via the `customFields` map on POST/PATCH `/api/tasks`.
+
+Value encoding in the `customFields` map (key = field id):
+- `text` / `email` / `phone` / `url`: string. (email/phone/url are format-validated.)
+- `number`: number (or numeric string). Stored canonically; rendered per the field's number format.
+- `checkbox`: boolean.
+- `date`: ISO string (`YYYY-MM-DD`, or full ISO datetime when the field shows time).
+- `select`: array of option ids (single-select = 1-element array). Option ids must belong to the field.
+- `person`: array of user ids.
+- `place`: array of `location` ids (same project).
+- `task`: a single task id (same project).
+- `files`: array of `file` ids (upload first via `/api/files`).
+- An empty array / null / "" clears the value.
+
+Type is immutable after a field is created. There is no sort/group/filter by custom fields via the API (display only).
+
+## Files
+
+Files for `files`-type custom fields are stored on the server's local disk and served only through these endpoints.
+
+### POST /api/files
+Upload a file (multipart/form-data, NOT JSON).
+- Form parts: `fieldId` (required, a `files`-type field), `file` (required), `taskId` (optional — must belong to the field's project, else `400`). The project is derived from the field.
+- Limits: max 10 MB (`413`); executable + active-markup extensions (svg, html, xml, js, exe, …) are rejected (`415`). The stored `mimeType` is **server-derived from the extension** (the client-claimed MIME is ignored).
+- 201: `{ "file": { "id": string, "filename": string, "mimeType": string, "size": number } }`. Add the returned `id` to the task's `files` field value (PATCH `/api/tasks/{id}` with `customFields`).
+- `404` if the field's project is inaccessible.
+
+### GET /api/files/{id}
+Download the file bytes (access-gated by the file's project; `404` otherwise). Sent with `X-Content-Type-Options: nosniff` + `Content-Security-Policy: sandbox`; raster images stream `inline`, everything else `attachment`.
+
+### DELETE /api/files/{id}
+Delete a file (row + disk bytes) and strip its id from any task value referencing it. `404` if missing/inaccessible.
+
+## Object shapes
+
+- project: `id, name, description, workspaceId, statusId, pinned, createdBy, createdAt, updatedAt`
+- task: `id, projectId, parentId, title, description, statusId, priority, assigneeId, milestoneId, locationId, location, order, position, dueDate, createdBy, createdAt, updatedAt`, plus `customFields` (a `{ "<fieldId>": decodedValue }` map on API task responses). `locationId` → a saved project `location` (below; settable via POST/PATCH /api/tasks); `location` is the legacy freeform `"lat, lng"` text (still accepted; map views prefer `locationId`).
+- location: `id, projectId, title, address, latitude, longitude, position, createdAt, updatedAt` — project-scoped saved places (`title` required; `address`/`latitude`/`longitude` nullable). Plotted by map views only when both lat+lng are set. Listed under `GET /api/projects/{id}`; reference one from a task via `locationId`. The records are created/edited/deleted in the project settings UI (no location write REST endpoints).
+- status: `id, name, description, category, color, icon, projectId, workspaceId, position, builtIn, createdAt`. Built-in ids → category: `status-backlog` (backlog), `status-planned` (planned), `status-in-progress` (in-progress), `status-completed` (completed), `status-canceled` (canceled).
+- customField: `id, projectId, name, type, config (JSON object), appliesTo, position, createdAt`. `type` ∈ `text|number|select|date|person|files|task|checkbox|email|phone|place|url`. `appliesTo` ∈ `all | tasks (top-level only) | subtasks` — a value can only be set on a task at the matching level (else `400`). `config` is type-specific: number `{numberFormat, currencyCode?, formatString?}`; select `{multi, displayOption}`; date `{dateFormat, timeFormat}`; person/place/files `{multi}`.
+- customFieldOption: `id, fieldId, title, color, icon, position, createdAt` — members of a `select` field.
+- file: `id, projectId, fieldId, taskId, filename, mimeType, size, createdBy, createdAt` (the on-disk path is never exposed; fetch bytes via `GET /api/files/{id}`).
+- view: `id, projectId, name, type (table|board|list|dashboard|map), config (JSON string), position, isDefault, hidden, createdBy, createdAt, updatedAt`. `config` is schemaless per-view JSON; known **table/list** keys: `groupBy` (`status|milestone|assignee|due|label`; omit = ungrouped), `sortBy` (`priority|order`; omit = natural order; table only), column toggles `priority|assignee|milestone|due|labels` and per-custom-field `cf:<fieldId>` (boolean; absent = shown; table only), `colWidths` (table only — `{ "<colKey>": px }`, colKey ∈ `status|title|priority|assignee|milestone|due|labels|cf:<fieldId>|actions`; presence switches the table to fixed-width columns), `statusIds` (array of status ids to show; absent = all). **board** key: `groupBy` (`status` default `|milestone|assignee|label` — non-status values become swimlanes). `display` (`text|text-icon|icon`) applies to any view's tab.
+- milestone: `id, projectId, name, description, targetDate, position, createdAt, updatedAt`
+
+## Example
+
+```
+curl -X POST https://YOUR_HOST/api/tasks \
+  -H "Authorization: Bearer bsk_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"projectId":"<id>","title":"Write the spec","priority":"high","status":"In progress"}'
+```

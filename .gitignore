@@ -7,8 +7,10 @@ node_modules
 .env.*
 !.env.example
 *.db
+*.db.bak*
 *.db-journal
 vite.config.ts.timestamp-*
 .screenshots/
 *.db-shm
 *.db-wal
+data/uploads/

@@ -4,8 +4,10 @@
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import { t } from '$lib/i18n';
+	import { fieldAggregations } from '$lib/customFields';
 
 	type Task = {
 		id: string;
@@ -16,12 +18,17 @@
 		priority: string;
 		assigneeId: string | null;
 		milestoneId: string | null;
+		locationId: string | null;
 		location: string | null;
 		order: number | null;
 		position: number;
 		dueDate: Date | string | null;
 	};
 	type Status = { id: string; name: string; category: string };
+	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
+	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; position?: number };
+	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
+	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
 
 	let {
 		tasks,
@@ -31,7 +38,18 @@
 		taskLabels,
 		taskDeps,
 		milestones,
-		canEditTask
+		locations,
+		customFields = [],
+		customFieldOptions = [],
+		taskCustomValues = [],
+		files = [],
+		config = {},
+		canEditTask,
+		statusDisplay = 'text',
+		viewId,
+		viewName = '',
+		canEditView = false,
+		onNewTask
 	}: {
 		tasks: Task[];
 		statuses: Status[];
@@ -40,19 +58,81 @@
 		taskLabels: { taskId: string; labelId: string }[];
 		taskDeps: { taskId: string; dependsOnId: string }[];
 		milestones: { id: string; name: string }[];
+		locations: Location[];
+		customFields?: CustomFieldDef[];
+		customFieldOptions?: CustomFieldOption[];
+		taskCustomValues?: { taskId: string; fieldId: string; value: string }[];
+		files?: FileRef[];
+		config?: Record<string, unknown>;
 		canEditTask: (t: { id: string; parentId: string | null }) => boolean;
+		statusDisplay?: 'text' | 'icon' | 'text-icon';
+		viewId?: string;
+		viewName?: string;
+		canEditView?: boolean;
+		onNewTask?: (prefill?: Record<string, string>) => void;
 	} = $props();
 
+	// Columns are ALWAYS statuses. "Group by" milestone/assignee instead splits the
+	// board into horizontal swimlanes (rows) — one per value (+ a `_none` lane) —
+	// each containing the full status-column board.
+	const groupBy = $derived(
+		config.groupBy === 'milestone' || config.groupBy === 'assignee' || config.groupBy === 'label'
+			? (config.groupBy as 'milestone' | 'assignee' | 'label')
+			: 'status'
+	);
+
+	type Lane = { key: string; name: string };
+	const lanes = $derived.by((): Lane[] => {
+		if (groupBy === 'milestone')
+			return [
+				...milestones.map((m) => ({ key: m.id, name: m.name })),
+				{ key: '_none', name: $t('No milestone') }
+			];
+		if (groupBy === 'assignee')
+			return [
+				...users.map((u) => ({ key: u.id, name: u.name })),
+				{ key: '_none', name: $t('Unassigned') }
+			];
+		if (groupBy === 'label')
+			return [
+				...labels.map((l) => ({ key: l.id, name: l.name })),
+				{ key: '_none', name: $t('No label') }
+			];
+		return [{ key: '', name: '' }]; // a single implicit lane for status boards
+	});
+
+	const laneField = (t: Task) =>
+		groupBy === 'milestone' ? t.milestoneId : groupBy === 'assignee' ? t.assigneeId : null;
+	const taskHasLabel = (t: Task, labelId: string) =>
+		taskLabels.some((tl) => tl.taskId === t.id && tl.labelId === labelId);
+	const inLane = (t: Task, laneKey: string) =>
+		groupBy === 'status'
+			? true
+			: groupBy === 'label'
+				? laneKey === '_none'
+					? labelsOf(t.id).length === 0
+					: taskHasLabel(t, laneKey)
+				: laneKey === '_none'
+					? !laneField(t)
+					: laneField(t) === laneKey;
+
 	let dragId = $state<string | null>(null);
-	let over = $state<{ statusId: string; index: number } | null>(null);
+	let over = $state<{ lane: string; statusId: string; index: number } | null>(null);
 	let addingTo = $state<string | null>(null);
+	let collapsedLanes = $state<Record<string, boolean>>({}); // lane.key → collapsed
 	let addInput = $state<HTMLInputElement | null>(null);
 	let justDragged = $state(false);
 	// split pane: ?task= deep-links a task open
 	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
-	const selected = $derived(tasks.find((t) => t.id === selectedId && !t.parentId) ?? null);
+	const selected = $derived(tasks.find((t) => t.id === selectedId) ?? null);
 
-	const glyph: Record<string, string> = { todo: '○', active: '◐', done: '●', canceled: '⊘' };
+	const glyph: Record<string, string> = {
+		backlog: '○',
+		planned: '◔',
+		'in-progress': '◐',
+		completed: '●',
+		canceled: '⊘'
+	};
 
 	const topTasks = $derived(
 		tasks
@@ -60,7 +140,50 @@
 			.slice()
 			.sort((a, b) => a.position - b.position)
 	);
-	const inColumn = (statusId: string) => topTasks.filter((t) => t.statusId === statusId);
+	const cellTasks = (laneKey: string, statusId: string) =>
+		topTasks.filter((t) => t.statusId === statusId && inLane(t, laneKey));
+	const laneTasks = (laneKey: string) => topTasks.filter((t) => inLane(t, laneKey));
+	const laneCount = (laneKey: string) => laneTasks(laneKey).length;
+	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
+	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
+
+	// Status columns shown (config.statusIds): absent = all, in project order.
+	const shownStatusIds = $derived(
+		Array.isArray(config.statusIds) ? (config.statusIds as string[]) : null
+	);
+	const visibleStatuses = $derived(
+		shownStatusIds ? statuses.filter((s) => shownStatusIds.includes(s.id)) : statuses
+	);
+
+	// Right-click column header → [Create task… | Hide]. Hide removes the status from config.statusIds.
+	let colMenu = $state<{ statusId: string; lane: string; x: number; y: number } | null>(null);
+	function openColMenu(e: MouseEvent, lane: string, statusId: string) {
+		if (!canEditView) return;
+		e.preventDefault();
+		colMenu = { statusId, lane, x: e.clientX, y: e.clientY };
+	}
+	function lanePrefill(lane: string): Record<string, string> {
+		if (groupBy === 'status' || lane === '_none') return {};
+		if (groupBy === 'milestone') return { milestoneId: lane };
+		if (groupBy === 'assignee') return { assigneeId: lane };
+		if (groupBy === 'label') return { labelId: lane };
+		return {};
+	}
+	async function saveConfig(next: Record<string, unknown>) {
+		if (!canEditView || !viewId) return;
+		const fd = new FormData();
+		fd.set('id', viewId);
+		fd.set('name', viewName);
+		fd.set('config', JSON.stringify(next));
+		await fetch(`${page.url.pathname}?/updateView`, { method: 'POST', body: fd });
+		await invalidateAll();
+	}
+	function hideStatus(statusId: string) {
+		const ids = (shownStatusIds ?? statuses.map((s) => s.id)).filter((id) => id !== statusId);
+		colMenu = null;
+		// keep undefined when all are shown so the config stays clean
+		void saveConfig({ ...config, statusIds: ids.length === statuses.length ? undefined : ids });
+	}
 	const userName = (id: string | null) => users.find((u) => u.id === id)?.name ?? null;
 	const initials = (name: string) =>
 		name
@@ -82,45 +205,59 @@
 
 	const dragged = $derived(topTasks.find((t) => t.id === dragId) ?? null);
 
-	function onCardDragOver(e: DragEvent, statusId: string, index: number) {
+	function onCardDragOver(e: DragEvent, lane: string, statusId: string, index: number) {
 		if (!dragId) return;
 		e.preventDefault();
 		e.stopPropagation();
 		const el = e.currentTarget as HTMLElement;
 		const before = e.offsetY < el.offsetHeight / 2;
-		over = { statusId, index: before ? index : index + 1 };
+		over = { lane, statusId, index: before ? index : index + 1 };
 	}
 
-	function onColumnDragOver(e: DragEvent, statusId: string) {
+	function onColumnDragOver(e: DragEvent, lane: string, statusId: string) {
 		if (!dragId) return;
 		e.preventDefault();
-		over = { statusId, index: inColumn(statusId).length };
+		over = { lane, statusId, index: cellTasks(lane, statusId).length };
 	}
 
 	async function onDrop() {
 		if (!dragId || !over || !dragged) return;
-		const col = inColumn(over.statusId);
-		const without = col.filter((t) => t.id !== dragId);
-		// translate visual index (includes dragged card) to index in `without`
+		const id = dragId;
+		const laneChanged = groupBy !== 'status' && !inLane(dragged, over.lane);
+		const statusChanged = dragged.statusId !== over.statusId;
+
+		// position within the target cell (lane × status)
+		const cell = cellTasks(over.lane, over.statusId);
+		const without = cell.filter((t) => t.id !== id);
 		let idx = over.index;
-		const dragIdx = col.findIndex((t) => t.id === dragId);
+		const dragIdx = cell.findIndex((t) => t.id === id);
 		if (dragIdx !== -1 && dragIdx < idx) idx -= 1;
 		const before = without[idx]?.id ?? '';
 
-		// no-op move
-		if (over.statusId === dragged.statusId && without[idx - 1]?.id !== dragId) {
-			const cur = col.findIndex((t) => t.id === dragId);
-			if (cur === idx || (before === '' && cur === col.length - 1)) {
+		// no-op: same lane + same status + same slot
+		if (!laneChanged && !statusChanged && without[idx - 1]?.id !== id) {
+			const cur = cell.findIndex((t) => t.id === id);
+			if (cur === idx || (before === '' && cur === cell.length - 1)) {
 				reset();
 				return;
 			}
 		}
 
+		reset();
+		// reassign the swimlane field first (milestone/assignee), then move/reorder.
+		// label lanes are multi-value — dragging across them changes status/position
+		// only (labels are toggled in the task pane), so skip the field patch.
+		if (laneChanged && (groupBy === 'milestone' || groupBy === 'assignee')) {
+			const field = groupBy === 'milestone' ? 'milestoneId' : 'assigneeId';
+			const fd = new FormData();
+			fd.set('id', id);
+			fd.set(field, over.lane === '_none' ? '' : over.lane);
+			await fetch(`${page.url.pathname}?/patchTask`, { method: 'POST', body: fd });
+		}
 		const fd = new FormData();
-		fd.set('id', dragId);
+		fd.set('id', id);
 		fd.set('statusId', over.statusId);
 		fd.set('beforeId', before);
-		reset();
 		await fetch(`${page.url.pathname}?/moveTask`, { method: 'POST', body: fd });
 		await invalidateAll();
 	}
@@ -135,8 +272,8 @@
 		over = null;
 	}
 
-	async function openAdd(statusId: string) {
-		addingTo = statusId;
+	async function openAdd(lane: string, statusId: string) {
+		addingTo = `${lane}|${statusId}`;
 		await tick();
 		addInput?.focus();
 	}
@@ -146,110 +283,165 @@
 	}
 </script>
 
-<div class="board-wrap" class:with-panel={Boolean(selected)}>
-<div class="board">
-	{#each statuses as s (s.id)}
-		{@const col = inColumn(s.id)}
-		<div
-			class="column"
-			class:drop-target={over?.statusId === s.id}
-			role="list"
-			aria-label={$t('{name} column', { name: s.name })}
-			ondragover={(e) => onColumnDragOver(e, s.id)}
-			ondrop={onDrop}
-		>
-			<div class="col-head">
-				<span class="col-glyph" class:done={s.category === 'done'}>{glyph[s.category]}</span>
-				<span class="col-name">{s.name}</span>
-				<span class="col-count">{col.length}</span>
-				<span class="col-spacer"></span>
-				<button class="col-add" aria-label={$t('Add task to {name}', { name: s.name })} onclick={() => openAdd(s.id)}>
-					+
-				</button>
-			</div>
+<div class="board-wrap">
+{#each lanes as lane (lane.key)}
+	{#if groupBy !== 'status'}
+		<div class="lane-head">
+			<button
+				class="lane-toggle"
+				type="button"
+				aria-expanded={!collapsedLanes[lane.key]}
+				aria-label={$t('Toggle group')}
+				onclick={() => (collapsedLanes[lane.key] = !collapsedLanes[lane.key])}
+			>
+				<Icon name={collapsedLanes[lane.key] ? 'nav-arrow-right' : 'nav-arrow-down'} size={14} />
+			</button>
+			<span class="lane-name">{lane.name}</span>
+			<span class="lane-count">{laneCount(lane.key)}</span>
+			{#each fieldAggregations(aggFieldIds, customFields, laneTasks(lane.key), taskCustomValues, tasks) as a (a.id)}
+				<span class="lane-agg" title={a.name}>({a.text})</span>
+			{/each}
+		</div>
+	{/if}
+	{#if !collapsedLanes[lane.key]}
+	<div class="board">
+		{#each visibleStatuses as s (s.id)}
+			{@const col = cellTasks(lane.key, s.id)}
+			<div
+				class="column"
+				class:drop-target={over?.lane === lane.key && over?.statusId === s.id}
+				role="list"
+				aria-label={$t('{name} column', { name: s.name })}
+				ondragover={(e) => onColumnDragOver(e, lane.key, s.id)}
+				ondrop={onDrop}
+			>
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div class="col-head" oncontextmenu={(e) => openColMenu(e, lane.key, s.id)}>
+					<span class="col-glyph" class:done={s.category === 'completed'}>{glyph[s.category]}</span>
+					<span class="col-name">{s.name}</span>
+					<span class="col-count">{col.length}</span>
+					{#each fieldAggregations(aggFieldIds, customFields, col, taskCustomValues, tasks) as a (a.id)}
+						<span class="col-agg" title={a.name}>({a.text})</span>
+					{/each}
+					<span class="col-spacer"></span>
+					<button class="col-add" aria-label={$t('Add task to {name}', { name: s.name })} onclick={() => openAdd(lane.key, s.id)}>
+						+
+					</button>
+				</div>
 
-			<div class="col-body">
-				{#each col as t, i (t.id)}
-					{@const editable = canEditTask(t)}
-					{#if over?.statusId === s.id && over.index === i && dragId !== t.id}
+				<div class="col-body">
+					{#each col as t, i (t.id)}
+						{@const editable = canEditTask(t)}
+						{#if over?.lane === lane.key && over?.statusId === s.id && over.index === i && dragId !== t.id}
+							<div class="drop-line"></div>
+						{/if}
+						<!-- Whole card is draggable AND clickable; an inner button would block
+						     Chrome from initiating drag, so the card itself is the control. -->
+						<div
+							class="bcard"
+							class:dragging={dragId === t.id}
+							class:clickable={true}
+							class:selected={selectedId === t.id}
+							role="button"
+							tabindex="0"
+							aria-label={t.title}
+							draggable={editable}
+							ondragstart={(e) => {
+								dragId = t.id;
+								e.dataTransfer?.setData('text/plain', t.id);
+								if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+							}}
+							ondragend={reset}
+							ondragover={(e) => onCardDragOver(e, lane.key, s.id, i)}
+							ondrop={onDrop}
+							onclick={() => !justDragged && openDetail(t)}
+							onkeydown={(e) => e.key === 'Enter' && openDetail(t)}
+						>
+							<div class="bcard-top">
+								<PriorityIcon priority={t.priority} />
+								<span class="bcard-title">{t.title}</span>
+							</div>
+							{#if labelsOf(t.id).length > 0 || t.dueDate || t.assigneeId}
+								<div class="bcard-meta">
+									{#each labelsOf(t.id) as l (l!.id)}
+										<span class="bchip">{l!.name}</span>
+									{/each}
+									{#if t.dueDate}
+										<span class="bchip mono">{fmtDate(t.dueDate)}</span>
+									{/if}
+									<span class="bcard-spacer"></span>
+									{#if userName(t.assigneeId)}
+										<span class="avatar" title={userName(t.assigneeId)}>
+											{initials(userName(t.assigneeId)!)}
+										</span>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/each}
+					{#if over?.lane === lane.key && over?.statusId === s.id && over.index >= col.length}
 						<div class="drop-line"></div>
 					{/if}
-					<!-- Whole card is draggable AND clickable; an inner button would block
-					     Chrome from initiating drag, so the card itself is the control. -->
-					<div
-						class="bcard"
-						class:dragging={dragId === t.id}
-						class:clickable={true}
-						class:selected={selectedId === t.id}
-						role="button"
-						tabindex="0"
-						aria-label={t.title}
-						draggable={editable}
-						ondragstart={(e) => {
-							dragId = t.id;
-							e.dataTransfer?.setData('text/plain', t.id);
-							if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-						}}
-						ondragend={reset}
-						ondragover={(e) => onCardDragOver(e, s.id, i)}
-						ondrop={onDrop}
-						onclick={() => !justDragged && openDetail(t)}
-						onkeydown={(e) => e.key === 'Enter' && openDetail(t)}
-					>
-						<div class="bcard-top">
-							<PriorityIcon priority={t.priority} />
-							<span class="bcard-title">{t.title}</span>
-						</div>
-						{#if labelsOf(t.id).length > 0 || t.dueDate || t.assigneeId}
-							<div class="bcard-meta">
-								{#each labelsOf(t.id) as l (l!.id)}
-									<span class="bchip">{l!.name}</span>
-								{/each}
-								{#if t.dueDate}
-									<span class="bchip mono">{fmtDate(t.dueDate)}</span>
-								{/if}
-								<span class="bcard-spacer"></span>
-								{#if userName(t.assigneeId)}
-									<span class="avatar" title={userName(t.assigneeId)}>
-										{initials(userName(t.assigneeId)!)}
-									</span>
-								{/if}
-							</div>
-						{/if}
-					</div>
-				{/each}
-				{#if over?.statusId === s.id && over.index >= col.length}
-					<div class="drop-line"></div>
-				{/if}
 
-				{#if addingTo === s.id}
-					<form
-						method="POST"
-						action="?/createTask"
-						use:enhance={() =>
-							({ update }) => {
-								addingTo = null;
-								update();
-							}}
-						class="col-add-form"
-					>
-						<input type="hidden" name="statusId" value={s.id} />
-						<input
-							bind:this={addInput}
-							name="title"
-							class="input"
-							placeholder={$t('Task title…')}
-							required
-							maxlength="240"
-							autocomplete="off"
-							onkeydown={(e) => e.key === 'Escape' && (addingTo = null)}
-						/>
-					</form>
-				{/if}
+					{#if addingTo === `${lane.key}|${s.id}`}
+						<form
+							method="POST"
+							action="?/createTask"
+							use:enhance={() =>
+								({ update }) => {
+									addingTo = null;
+									update();
+								}}
+							class="col-add-form"
+						>
+							<input type="hidden" name="statusId" value={s.id} />
+							{#if groupBy !== 'status' && lane.key !== '_none'}
+								<input
+									type="hidden"
+									name={groupBy === 'milestone' ? 'milestoneId' : groupBy === 'assignee' ? 'assigneeId' : 'labelId'}
+									value={lane.key}
+								/>
+							{/if}
+							<input
+								bind:this={addInput}
+								name="title"
+								class="input"
+								placeholder={$t('Task title…')}
+								required
+								maxlength="240"
+								autocomplete="off"
+								onkeydown={(e) => e.key === 'Escape' && (addingTo = null)}
+							/>
+						</form>
+					{/if}
+				</div>
 			</div>
-		</div>
-	{/each}
-</div>
+		{/each}
+	</div>
+	{/if}
+{/each}
+
+{#if colMenu}
+	{@const cm = colMenu}
+	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+	<div class="ctx-backdrop" onclick={() => (colMenu = null)} oncontextmenu={(e) => (e.preventDefault(), (colMenu = null))}></div>
+	<div class="ctx-menu" style={`left:${cm.x}px; top:${cm.y}px`}>
+		{#if onNewTask}
+			<button
+				class="ctx-item"
+				type="button"
+				onclick={() => {
+					const sId = cm.statusId;
+					colMenu = null;
+					onNewTask?.({ statusId: sId, ...lanePrefill(cm.lane) });
+				}}
+			>
+				{$t('Create task…')}
+			</button>
+		{/if}
+		<button class="ctx-item" type="button" onclick={() => hideStatus(cm.statusId)}>{$t('Hide')}</button>
+	</div>
+{/if}
 
 {#if selected}
 	<TaskPanel
@@ -258,19 +450,55 @@
 		{users}
 		{statuses}
 		{milestones}
+		{locations}
 		{labels}
 		{taskLabels}
 		{taskDeps}
+		{customFields}
+		{customFieldOptions}
+		{taskCustomValues}
+		{files}
 		{canEditTask}
+		{statusDisplay}
 		onClose={() => (selectedId = null)}
+		onSelectTask={(id) => (selectedId = id)}
 	/>
 {/if}
 </div>
 
 <style>
-	.board-wrap.with-panel {
-		/* keep columns clear of the fixed task panel */
-		padding-right: 416px;
+	.ctx-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 40;
+	}
+
+	.ctx-menu {
+		position: fixed;
+		z-index: 41;
+		min-width: 150px;
+		background: var(--color-base-100);
+		border: 1px solid var(--color-base-300);
+		border-radius: var(--radius-box, 0.5rem);
+		box-shadow: var(--shadow);
+		padding: 4px;
+	}
+
+	.ctx-item {
+		display: block;
+		width: 100%;
+		text-align: left;
+		border: none;
+		background: none;
+		color: var(--color-fg);
+		font-size: 13px;
+		padding: 6px 10px;
+		border-radius: var(--radius-field, 0.25rem);
+		cursor: pointer;
+	}
+
+	.ctx-item:hover {
+		background: var(--color-surface-muted);
 	}
 
 	.board {
@@ -280,10 +508,52 @@
 		align-items: start;
 	}
 
-	@media (max-width: 900px) {
-		.board-wrap.with-panel {
-			padding-right: 0;
-		}
+	/* swimlanes (group by milestone/assignee): a labelled row per group */
+	.lane-head {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-1);
+		margin: var(--sp-4) 0 var(--sp-1);
+	}
+
+	.lane-head:first-child {
+		margin-top: 0;
+	}
+
+	.lane-toggle {
+		display: inline-flex;
+		align-items: center;
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		padding: 2px;
+		margin-left: -2px;
+		border-radius: var(--radius-field, 0.25rem);
+		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+	}
+
+	.lane-toggle:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
+	}
+
+	.lane-name {
+		font-size: 14px;
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	.lane-count {
+		font-size: 12px;
+		color: var(--color-muted);
+	}
+
+	.lane-agg,
+	.col-agg {
+		font-size: 12px;
+		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.column {

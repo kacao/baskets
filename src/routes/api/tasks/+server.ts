@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { milestone, project, task } from '$lib/server/db/schema';
+import { location, milestone, project, task, user } from '$lib/server/db/schema';
 import {
 	apiError,
 	readJson,
@@ -10,7 +10,14 @@ import {
 	PRIORITIES
 } from '$lib/server/api';
 import { dispatchEvent } from '$lib/server/integrations';
+import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import { canAccessProject } from '$lib/server/permissions';
 import { listProjectStatuses } from '$lib/server/statuses';
+import {
+	apiCustomFieldEntries,
+	customValuesByTask,
+	writeTaskCustomValues
+} from '$lib/server/customFields';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
@@ -18,6 +25,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 
 	const projectId = url.searchParams.get('projectId');
 	if (!projectId) return apiError(400, 'projectId query parameter is required');
+	// ADR-019: inaccessible projects are indistinguishable from missing ones
+	if (!(await canAccessProject(locals.user, projectId)))
+		return apiError(404, 'Project not found');
 
 	const tasks = await db
 		.select()
@@ -25,7 +35,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		.where(eq(task.projectId, projectId))
 		.orderBy(asc(task.position), asc(task.createdAt));
 
-	return json({ tasks });
+	const values = await customValuesByTask(projectId, tasks.map((t) => t.id));
+	return json({ tasks: tasks.map((t) => ({ ...t, customFields: values[t.id] ?? {} })) });
 };
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -47,6 +58,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	const [proj] = await db.select().from(project).where(eq(project.id, projectId));
 	if (!proj) return apiError(404, 'Project not found');
+	if (!(await canAccessProject(locals.user, projectId)))
+		return apiError(404, 'Project not found');
 
 	if (parentId) {
 		const [parent] = await db.select().from(task).where(eq(task.id, parentId));
@@ -69,7 +82,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return apiError(400, `status must be one of: ${eligible.map((s) => s.name).join(', ')}`);
 		statusId = requested.id;
 	} else {
-		const fallback = eligible.find((s) => s.category === 'todo') ?? eligible[0];
+		const fallback = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
 		if (!fallback) return apiError(400, 'Project has no eligible statuses');
 		statusId = fallback.id;
 	}
@@ -79,6 +92,19 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const [m] = await db.select().from(milestone).where(eq(milestone.id, body.milestoneId));
 		if (!m || m.projectId !== projectId)
 			return apiError(400, 'milestoneId must reference a milestone of the same project');
+	}
+
+	if (body.locationId !== undefined && body.locationId !== null) {
+		if (typeof body.locationId !== 'string') return apiError(400, 'locationId must be a string');
+		const [l] = await db.select().from(location).where(eq(location.id, body.locationId));
+		if (!l || l.projectId !== projectId)
+			return apiError(400, 'locationId must reference a location of the same project');
+	}
+
+	if (body.assigneeId !== undefined && body.assigneeId !== null) {
+		if (typeof body.assigneeId !== 'string') return apiError(400, 'assigneeId must be a string');
+		const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, body.assigneeId));
+		if (!u) return apiError(400, 'assigneeId must reference a valid user');
 	}
 
 	let description: string | null;
@@ -113,7 +139,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			description,
 			priority,
 			statusId,
+			assigneeId: typeof body.assigneeId === 'string' ? body.assigneeId : null,
 			milestoneId: typeof body.milestoneId === 'string' ? body.milestoneId : null,
+			locationId: typeof body.locationId === 'string' ? body.locationId : null,
 			location: typeof body.location === 'string' ? body.location.trim() || null : null,
 			order,
 			dueDate,
@@ -124,12 +152,26 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		})
 		.returning();
 
+	if (body.customFields && typeof body.customFields === 'object' && !Array.isArray(body.customFields)) {
+		const res = await writeTaskCustomValues(
+			created.id,
+			projectId,
+			apiCustomFieldEntries(body.customFields as Record<string, unknown>)
+		);
+		if (res.error) {
+			await db.delete(task).where(eq(task.id, created.id));
+			return apiError(400, res.error);
+		}
+	}
+
 	void dispatchEvent({
 		type: 'task.created',
 		actor: locals.user.name,
 		projectName: proj.name,
 		taskTitle: title
 	});
+	broadcastProjectChange(projectId, locals.user.id);
 
-	return json({ task: created }, { status: 201 });
+	const values = await customValuesByTask(projectId, [created.id]);
+	return json({ task: { ...created, customFields: values[created.id] ?? {} } }, { status: 201 });
 };

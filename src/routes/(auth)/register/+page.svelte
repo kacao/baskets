@@ -37,7 +37,7 @@
 <p class="u-small u-muted" style="margin-bottom: var(--sp-4);">{$t('Create your account.')}</p>
 
 {#if error}
-	<div class="alert alert--error" role="alert">{error}</div>
+	<div class="alert alert-error" role="alert">{error}</div>
 {/if}
 
 <form onsubmit={submit}>
@@ -69,7 +69,7 @@
 		/>
 		<div class="hint">{$t('Minimum 8 characters')}</div>
 	</div>
-	<button class="btn btn--primary" type="submit" disabled={loading} style="width: 100%;">
+	<button class="btn btn-primary" type="submit" disabled={loading} style="width: 100%;">
 		{loading ? $t('Creating…') : $t('Create account')}
 	</button>
 </form>

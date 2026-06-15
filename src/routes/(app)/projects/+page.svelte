@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { fly } from 'svelte/transition';
+	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
@@ -11,13 +12,13 @@
 
 <div class="u-between" style="margin-bottom: var(--sp-4); flex-wrap: wrap;">
 	<h2>{$t('Projects')}</h2>
-	<button class="btn btn--primary" onclick={() => (showCreate = !showCreate)}>
+	<button class="btn btn-primary" onclick={() => (showCreate = !showCreate)}>
 		{showCreate ? $t('Cancel') : $t('+ New project')}
 	</button>
 </div>
 
 {#if form?.message}
-	<div class="alert alert--error" role="alert">{form.message}</div>
+	<div class="alert alert-error" role="alert">{form.message}</div>
 {/if}
 
 {#if showCreate}
@@ -31,7 +32,21 @@
 				<label class="label" for="description">{$t('Description')}</label>
 				<textarea id="description" name="description" class="textarea" rows="2"></textarea>
 			</div>
-			<button class="btn btn--primary" type="submit">{$t('Create project')}</button>
+			<div class="field">
+				<label class="label" for="pworkspace">{$t('Workspace')}</label>
+				<select id="pworkspace" name="workspaceId" class="select" required>
+					{#each data.workspaces.filter((w) => w.creatable) as w (w.id)}
+						<option value={w.id}>{w.name}</option>
+					{/each}
+				</select>
+				{#if data.workspaces.every((w) => !w.creatable)}
+					<p class="u-tiny u-muted" style="margin-top: var(--sp-1);">
+						{$t('You can only create projects in workspaces you own or were granted — create one first.')}
+						<a href="/workspaces">{$t('Workspaces')}</a>
+					</p>
+				{/if}
+			</div>
+			<button class="btn btn-primary" type="submit">{$t('Create project')}</button>
 		</form>
 	</div>
 {/if}
@@ -49,14 +64,22 @@
 				class="project-card"
 				transition:fly={{ y: 10, duration: 150, delay: i * 30 }}
 			>
-				<h4 class="project-name">{p.name}</h4>
+				<h4 class="project-name">
+					{#if p.icon}<EntityIcon value={p.icon} size={18} /> {/if}{p.name}
+				</h4>
 				{#if p.description}
 					<p class="u-small u-muted desc">{p.description}</p>
 				{/if}
 				<div class="meta">
+					{#if data.workspaces.length > 1}
+						{@const ws = data.workspaces.find((w) => w.id === p.workspaceId)}
+						{#if ws}
+							<span class="badge">{ws.name}</span>
+						{/if}
+					{/if}
 					<span class="badge">{$t('{n} tasks', { n: p.taskCount })}</span>
 					{#if p.taskCount > 0}
-						<span class="badge" class:badge--success={p.doneCount === p.taskCount}>
+						<span class="badge" class:badge-success={p.doneCount === p.taskCount}>
 							{$t('{done}/{total} done', { done: p.doneCount, total: p.taskCount })}
 						</span>
 					{/if}

@@ -4,7 +4,6 @@
 	import { slide } from 'svelte/transition';
 	import QRCode from 'qrcode';
 	import { authClient } from '$lib/auth-client';
-	import LanguageCard from './LanguageCard.svelte';
 	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
@@ -111,7 +110,7 @@
 <div class="card" style="max-width: 560px;">
 	<div class="u-between" style="margin-bottom: var(--sp-2);">
 		<h4>{$t('Two-factor authentication')}</h4>
-		<span class="badge" class:badge--success={twoFactorOn}>
+		<span class="badge" class:badge-success={twoFactorOn}>
 			{twoFactorOn ? $t('ON') : $t('OFF')}
 		</span>
 	</div>
@@ -120,19 +119,19 @@
 	</p>
 
 	{#if error}
-		<div class="alert alert--error" role="alert">{error}</div>
+		<div class="alert alert-error" role="alert">{error}</div>
 	{/if}
 	{#if success}
-		<div class="alert alert--success" role="status">{success}</div>
+		<div class="alert alert-success" role="status">{success}</div>
 	{/if}
 
 	{#if step === 'idle'}
 		{#if twoFactorOn}
-			<button class="btn btn--danger" onclick={() => { step = 'disable'; success = ''; }}>
+			<button class="btn btn-error" onclick={() => { step = 'disable'; success = ''; }}>
 				{$t('Disable 2FA')}
 			</button>
 		{:else}
-			<button class="btn btn--primary" onclick={() => { step = 'password'; success = ''; }}>
+			<button class="btn btn-primary" onclick={() => { step = 'password'; success = ''; }}>
 				{$t('Enable 2FA')}
 			</button>
 		{/if}
@@ -155,7 +154,7 @@
 				/>
 			</div>
 			<div class="u-flex">
-				<button class="btn btn--primary" type="submit" disabled={loading}>
+				<button class="btn btn-primary" type="submit" disabled={loading}>
 					{loading ? $t('Working…') : $t('Continue')}
 				</button>
 				<button class="btn" type="button" onclick={() => { step = 'idle'; error = ''; }}>
@@ -200,7 +199,7 @@
 					/>
 				</div>
 				<div class="u-flex">
-					<button class="btn btn--primary" type="submit" disabled={loading}>
+					<button class="btn btn-primary" type="submit" disabled={loading}>
 						{loading ? $t('Verifying…') : $t('Verify & enable')}
 					</button>
 					<button class="btn" type="button" onclick={() => { step = 'idle'; error = ''; }}>
@@ -220,7 +219,7 @@
 	</p>
 
 	{#if form?.message}
-		<div class="alert alert--error" role="alert">{form.message}</div>
+		<div class="alert alert-error" role="alert">{form.message}</div>
 	{/if}
 
 	{#if form?.token}
@@ -228,7 +227,7 @@
 			<p class="u-small"><strong>{form.keyName}</strong> {$t('created. Copy the key now — it will not be shown again:')}</p>
 			<div class="u-flex" style="margin-top: var(--sp-1);">
 				<code class="mono token">{form.token}</code>
-				<button class="btn btn--sm" type="button" onclick={copyToken}>
+				<button class="btn btn-sm" type="button" onclick={copyToken}>
 					{copied ? $t('Copied') : $t('Copy')}
 				</button>
 			</div>
@@ -253,7 +252,7 @@
 								use:enhance={() => async ({ update }) => update()}
 							>
 								<input type="hidden" name="id" value={key.id} />
-								<button class="btn btn--sm btn--danger" type="submit">{$t('Revoke')}</button>
+								<button class="btn btn-sm btn-error" type="submit">{$t('Revoke')}</button>
 							</form>
 						</td>
 					</tr>
@@ -285,13 +284,11 @@
 				required
 			/>
 		</div>
-		<button class="btn btn--primary" type="submit" disabled={keyLoading}>
+		<button class="btn btn-primary" type="submit" disabled={keyLoading}>
 			{keyLoading ? $t('Creating…') : $t('Create API key')}
 		</button>
 	</form>
 </div>
-
-<LanguageCard />
 
 <style>
 	.token-reveal {

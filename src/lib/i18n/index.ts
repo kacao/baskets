@@ -1,18 +1,13 @@
 import { derived, writable } from 'svelte/store';
 
 /**
- * Minimal i18n: English strings ARE the keys (en = passthrough), other
- * locales map key → translation. Untranslated keys fall back to English.
+ * Minimal i18n: English strings ARE the keys (en = passthrough). The app is
+ * English-only; the `$t()` wrapper is kept so UI strings stay greppable and a
+ * second locale can be reintroduced by adding a dictionary.
  * Usage: {$t('Sign out')} or $t('{n} task(s)', { n: 3 }).
- *
- * DB-driven content (status/label/project/task names, user names) is NOT
- * translated — UI chrome only.
  */
 
-export const LOCALES = [
-	{ code: 'en', label: 'English' },
-	{ code: 'vi', label: 'Tiếng Việt' }
-] as const;
+export const LOCALES = [{ code: 'en', label: 'English' }] as const;
 
 export type Locale = (typeof LOCALES)[number]['code'];
 
@@ -23,9 +18,7 @@ export function isLocale(value: string): value is Locale {
 }
 
 /** Dictionaries for non-English locales. Keys are the English strings. */
-const dictionaries: Record<string, Record<string, string>> = {
-	vi: {}
-};
+const dictionaries: Record<string, Record<string, string>> = {};
 
 export function registerDictionary(code: string, dict: Record<string, string>) {
 	dictionaries[code] = { ...dictionaries[code], ...dict };
