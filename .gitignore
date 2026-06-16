@@ -14,3 +14,6 @@ vite.config.ts.timestamp-*
 *.db-shm
 *.db-wal
 data/uploads/
+test-results/
+playwright-report/
+.playwright/

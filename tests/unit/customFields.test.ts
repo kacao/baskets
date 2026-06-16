@@ -1,0 +1,233 @@
+import { describe, expect, it } from 'vitest';
+import {
+	decodeValue,
+	defaultConfig,
+	sanitizeConfig,
+	formatNumber,
+	formatDate,
+	fieldAppliesTo,
+	MULTI_CAPABLE
+} from '$lib/customFields';
+
+describe('decodeValue', () => {
+	it('returns null for empty scalar values', () => {
+		expect(decodeValue({ type: 'text' }, null)).toBeNull();
+		expect(decodeValue({ type: 'text' }, undefined)).toBeNull();
+		expect(decodeValue({ type: 'text' }, '')).toBeNull();
+	});
+
+	it('returns empty array for empty multi-capable values', () => {
+		for (const type of MULTI_CAPABLE) {
+			expect(decodeValue({ type }, null)).toEqual([]);
+			expect(decodeValue({ type }, '')).toEqual([]);
+		}
+	});
+
+	it('decodes a scalar text value as the raw string', () => {
+		expect(decodeValue({ type: 'text' }, 'hello')).toBe('hello');
+	});
+
+	it('decodes a number value as its raw string (no coercion)', () => {
+		expect(decodeValue({ type: 'number' }, '42')).toBe('42');
+	});
+
+	it('decodes checkbox to a boolean', () => {
+		expect(decodeValue({ type: 'checkbox' }, 'true')).toBe(true);
+		expect(decodeValue({ type: 'checkbox' }, 'false')).toBe(false);
+		expect(decodeValue({ type: 'checkbox' }, 'anything')).toBe(false);
+	});
+
+	it('decodes a JSON id-array for multi-capable types', () => {
+		expect(decodeValue({ type: 'select' }, '["a","b"]')).toEqual(['a', 'b']);
+		expect(decodeValue({ type: 'person' }, '["u1"]')).toEqual(['u1']);
+		expect(decodeValue({ type: 'place' }, '[]')).toEqual([]);
+		expect(decodeValue({ type: 'files' }, '["f1","f2","f3"]')).toEqual(['f1', 'f2', 'f3']);
+	});
+
+	it('returns [] when a multi-capable value is malformed JSON', () => {
+		expect(decodeValue({ type: 'select' }, 'not-json')).toEqual([]);
+	});
+
+	it('returns [] when a multi-capable value is valid JSON but not an array', () => {
+		expect(decodeValue({ type: 'select' }, '{"x":1}')).toEqual([]);
+		expect(decodeValue({ type: 'person' }, '"u1"')).toEqual([]);
+	});
+});
+
+describe('defaultConfig', () => {
+	it('builds a number default config', () => {
+		expect(defaultConfig('number')).toEqual({ numberFormat: 'number', currencyCode: 'USD', formatString: '' });
+	});
+
+	it('builds a select default config', () => {
+		expect(defaultConfig('select')).toEqual({ multi: false, displayOption: 'text' });
+	});
+
+	it('builds a date default config', () => {
+		expect(defaultConfig('date')).toEqual({ dateFormat: 'full', timeFormat: 'hidden' });
+	});
+
+	it('builds a multi:false config for person/place/files', () => {
+		expect(defaultConfig('person')).toEqual({ multi: false });
+		expect(defaultConfig('place')).toEqual({ multi: false });
+		expect(defaultConfig('files')).toEqual({ multi: false });
+	});
+
+	it('returns an empty config for plain scalar types', () => {
+		for (const type of ['text', 'task', 'checkbox', 'email', 'phone', 'url']) {
+			expect(defaultConfig(type)).toEqual({});
+		}
+	});
+});
+
+describe('sanitizeConfig', () => {
+	it('coerces a non-object raw to the type default', () => {
+		expect(sanitizeConfig('select', null)).toEqual({ multi: false, displayOption: 'text' });
+		expect(sanitizeConfig('select', 'garbage')).toEqual({ multi: false, displayOption: 'text' });
+	});
+
+	it('falls back invalid number format to "number" and drops currency/formatString', () => {
+		expect(sanitizeConfig('number', { numberFormat: 'bogus' })).toEqual({ numberFormat: 'number' });
+	});
+
+	it('keeps and uppercases/truncates currencyCode for currency-style formats', () => {
+		expect(sanitizeConfig('number', { numberFormat: 'currency', currencyCode: 'eur' })).toEqual({
+			numberFormat: 'currency',
+			currencyCode: 'EUR'
+		});
+		expect(sanitizeConfig('number', { numberFormat: 'accounting', currencyCode: '  usdx ' })).toEqual({
+			numberFormat: 'accounting',
+			currencyCode: 'USD'
+		});
+	});
+
+	it('defaults currencyCode to USD when missing/blank', () => {
+		expect(sanitizeConfig('number', { numberFormat: 'financial' })).toEqual({
+			numberFormat: 'financial',
+			currencyCode: 'USD'
+		});
+	});
+
+	it('keeps and caps formatString only for custom format', () => {
+		const long = 'x'.repeat(100);
+		const out = sanitizeConfig('number', { numberFormat: 'custom', formatString: long });
+		expect(out.numberFormat).toBe('custom');
+		expect((out.formatString as string).length).toBe(80);
+	});
+
+	it('sanitizes select multi + displayOption', () => {
+		expect(sanitizeConfig('select', { multi: true, displayOption: 'icon' })).toEqual({
+			multi: true,
+			displayOption: 'icon'
+		});
+		expect(sanitizeConfig('select', { multi: 'yes', displayOption: 'nope' })).toEqual({
+			multi: false,
+			displayOption: 'text'
+		});
+	});
+
+	it('sanitizes date formats with fallbacks', () => {
+		expect(sanitizeConfig('date', { dateFormat: 'mdy', timeFormat: '24h' })).toEqual({
+			dateFormat: 'mdy',
+			timeFormat: '24h'
+		});
+		expect(sanitizeConfig('date', { dateFormat: 'bad', timeFormat: 'bad' })).toEqual({
+			dateFormat: 'full',
+			timeFormat: 'hidden'
+		});
+	});
+
+	it('sanitizes person/place/files to a multi boolean only', () => {
+		expect(sanitizeConfig('person', { multi: true, junk: 1 })).toEqual({ multi: true });
+		expect(sanitizeConfig('place', {})).toEqual({ multi: false });
+		expect(sanitizeConfig('files', { multi: 'x' })).toEqual({ multi: false });
+	});
+
+	it('returns an empty config for scalar types with no settings', () => {
+		expect(sanitizeConfig('text', { anything: true })).toEqual({});
+		expect(sanitizeConfig('checkbox', { x: 1 })).toEqual({});
+	});
+});
+
+describe('formatNumber', () => {
+	it('returns empty string for non-finite input', () => {
+		expect(formatNumber(NaN, { numberFormat: 'number' })).toBe('');
+		expect(formatNumber(Infinity, { numberFormat: 'number' })).toBe('');
+	});
+
+	it('formats a plain number with grouping', () => {
+		expect(formatNumber(1234, { numberFormat: 'number' })).toBe('1,234');
+	});
+
+	it('passes the raw number through for custom format (not interpreted in v1)', () => {
+		expect(formatNumber(1234.5, { numberFormat: 'custom', formatString: '0.00%' })).toBe('1234.5');
+	});
+
+	it('formats currency with the configured currency code', () => {
+		const out = formatNumber(5, { numberFormat: 'currency', currencyCode: 'USD' });
+		expect(out).toContain('5');
+		expect(out).toMatch(/\$|USD/);
+	});
+
+	it('defaults to plain grouping when numberFormat is absent', () => {
+		expect(formatNumber(1000, {})).toBe('1,000');
+	});
+});
+
+describe('formatDate', () => {
+	it('returns the raw string for an unparseable date', () => {
+		expect(formatDate('not-a-date', { dateFormat: 'mdy' })).toBe('not-a-date');
+	});
+
+	// Use a date+time ISO so the source's LOCAL getters (getMonth/getDate/getFullYear)
+	// land on the same calendar day regardless of the test runner's timezone.
+	const iso = '2026-01-05T12:00:00';
+
+	it('formats mdy as zero-padded M/D/Y', () => {
+		expect(formatDate(iso, { dateFormat: 'mdy' })).toBe('01/05/2026');
+	});
+
+	it('formats dmy as zero-padded D/M/Y', () => {
+		expect(formatDate(iso, { dateFormat: 'dmy' })).toBe('05/01/2026');
+	});
+
+	it('formats ymd as Y/M/D', () => {
+		expect(formatDate(iso, { dateFormat: 'ymd' })).toBe('2026/01/05');
+	});
+
+	it('appends a time part when timeFormat is set and the iso has a T', () => {
+		const out = formatDate(iso, { dateFormat: 'mdy', timeFormat: '24h' });
+		expect(out).toMatch(/^01\/05\/2026 \d{2}:\d{2}$/);
+	});
+
+	it('omits the time part when the iso has no T component', () => {
+		// date-only string: no time appended even when timeFormat is set
+		const out = formatDate('2026-01-05', { dateFormat: 'ymd', timeFormat: '24h' });
+		expect(out).not.toContain(':');
+	});
+
+	it('produces a relative string for the relative format', () => {
+		const out = formatDate(new Date().toISOString(), { dateFormat: 'relative' });
+		expect(typeof out).toBe('string');
+		expect(out.length).toBeGreaterThan(0);
+	});
+});
+
+describe('fieldAppliesTo', () => {
+	it('applies to both levels when appliesTo is "all" or unset', () => {
+		expect(fieldAppliesTo({ appliesTo: 'all' }, false)).toBe(true);
+		expect(fieldAppliesTo({ appliesTo: 'all' }, true)).toBe(true);
+		expect(fieldAppliesTo({}, false)).toBe(true);
+		expect(fieldAppliesTo({ appliesTo: null }, true)).toBe(true);
+	});
+
+	it('applies only to top-level tasks when appliesTo is "tasks"', () => {
+		expect(fieldAppliesTo({ appliesTo: 'tasks' }, false)).toBe(true);
+		expect(fieldAppliesTo({ appliesTo: 'tasks' }, true)).toBe(false);
+	});
+
+	it('applies only to sub-tasks when appliesTo is "subtasks"', () => {
+		expect(fieldAppliesTo({ appliesTo: 'subtasks' }, true)).toBe(true);
+		expect(fieldAppliesTo({ appliesTo: 'subtasks' }, false)).toBe(false);
+	});
+});
