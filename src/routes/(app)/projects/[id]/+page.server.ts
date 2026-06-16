@@ -35,6 +35,8 @@ import { listSavedFilters, createSavedFilter, deleteSavedFilter } from '$lib/ser
 import {
 	listTemplatesForProject,
 	createTemplate,
+	updateTemplatePayload,
+	getTemplate,
 	deleteTemplate,
 	instantiateTemplate,
 	buildPayloadFromTask
@@ -964,10 +966,9 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const taskId = String(form.get('taskId') ?? '');
+		const templateId = String(form.get('templateId') ?? '').trim();
 		const name = String(form.get('name') ?? '').trim();
 		const scope = String(form.get('scope') ?? 'project') === 'workspace' ? 'workspace' : 'project';
-		if (!name) return fail(400, { message: 'Template name is required' });
-		if (name.length > 120) return fail(400, { message: 'Name too long (max 120)' });
 
 		const parent = await getTask(taskId);
 		if (!parent || parent.projectId !== params.id)
@@ -978,12 +979,7 @@ export const actions: Actions = {
 			.from(project)
 			.where(eq(project.id, params.id));
 
-		// Workspace-scoped templates are workspace structure — require workspace edit rights.
-		if (scope === 'workspace') {
-			if (!proj?.workspaceId || !(await canEditWorkspace(locals.user, proj.workspaceId)))
-				return fail(403, { message: 'No edit permission on this workspace' });
-		}
-
+		// Capture the task tree (parent + sub-tasks + their custom-field values).
 		const subtasks = await db.select().from(task).where(eq(task.parentId, taskId));
 		const ids = [parent.id, ...subtasks.map((s) => s.id)];
 		const cfValues = ids.length
@@ -996,8 +992,31 @@ export const actions: Actions = {
 					.from(taskCustomValue)
 					.where(inArray(taskCustomValue.taskId, ids))
 			: [];
-
 		const payload = buildPayloadFromTask(parent, subtasks, cfValues);
+
+		// Update path: overwrite an existing (in-scope) template's contents.
+		if (templateId) {
+			const tpl = await getTemplate(templateId);
+			if (!tpl) return fail(400, { message: 'Unknown template' });
+			// Editing a workspace-scoped template is workspace structure.
+			if (tpl.scope === 'workspace') {
+				if (!tpl.workspaceId || !(await canEditWorkspace(locals.user, tpl.workspaceId)))
+					return fail(403, { message: 'No edit permission on this workspace' });
+			}
+			const updated = await updateTemplatePayload(templateId, params.id, payload);
+			if (!updated) return fail(400, { message: 'Template not in this project' });
+			broadcastProjectChange(params.id, locals.user.id);
+			return { success: true };
+		}
+
+		// Create path: a new template needs a name.
+		if (!name) return fail(400, { message: 'Template name is required' });
+		if (name.length > 120) return fail(400, { message: 'Name too long (max 120)' });
+		// Workspace-scoped templates are workspace structure — require workspace edit rights.
+		if (scope === 'workspace') {
+			if (!proj?.workspaceId || !(await canEditWorkspace(locals.user, proj.workspaceId)))
+				return fail(403, { message: 'No edit permission on this workspace' });
+		}
 		await createTemplate({
 			name,
 			scope,

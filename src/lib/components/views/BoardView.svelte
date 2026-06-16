@@ -46,6 +46,7 @@
 		files = [],
 		config = {},
 		canEditTask,
+		templates = [],
 		statusDisplay = 'text',
 		viewId,
 		viewName = '',
@@ -66,6 +67,7 @@
 		files?: FileRef[];
 		config?: Record<string, unknown>;
 		canEditTask: (t: { id: string; parentId: string | null }) => boolean;
+		templates?: { id: string; name: string }[];
 		statusDisplay?: 'text' | 'icon' | 'text-icon';
 		viewId?: string;
 		viewName?: string;
@@ -463,6 +465,7 @@
 		{taskCustomValues}
 		{files}
 		{canEditTask}
+		{templates}
 		{statusDisplay}
 		onClose={() => (selectedId = null)}
 		onSelectTask={(id) => (selectedId = id)}

@@ -1203,6 +1203,7 @@
 		onNewTask={openNewTask}
 		{statusDisplay}
 		{canEditTask}
+		templates={data.templates}
 	/>
 {:else if activeView?.type === 'board'}
 	<BoardView
@@ -1225,6 +1226,7 @@
 		onNewTask={openNewTask}
 		{statusDisplay}
 		{canEditTask}
+		templates={data.templates}
 	/>
 {:else if activeView?.type === 'list'}
 	<ListView
@@ -1243,6 +1245,7 @@
 		config={viewConfig}
 		{statusDisplay}
 		{canEditTask}
+		templates={data.templates}
 	/>
 {:else if activeView?.type === 'timeline'}
 	<TimelineView
@@ -1265,6 +1268,7 @@
 		onNewTask={openNewTask}
 		{statusDisplay}
 		{canEditTask}
+		templates={data.templates}
 	/>
 {:else if activeView?.type === 'calendar'}
 	<CalendarView
@@ -1287,6 +1291,7 @@
 		onNewTask={openNewTask}
 		{statusDisplay}
 		{canEditTask}
+		templates={data.templates}
 	/>
 {:else if activeView?.type === 'dashboard'}
 	<DashboardView tasks={data.tasks} statuses={data.statuses} milestones={data.milestones} />

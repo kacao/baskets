@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
@@ -52,7 +53,8 @@
 		canEditTask,
 		onClose,
 		onSelectTask,
-		statusDisplay = 'text'
+		statusDisplay = 'text',
+		templates = []
 	}: {
 		task: Task;
 		tasks: Task[];
@@ -71,6 +73,7 @@
 		onClose: () => void;
 		onSelectTask?: (id: string) => void;
 		statusDisplay?: 'text' | 'icon' | 'text-icon';
+		templates?: { id: string; name: string }[];
 	} = $props();
 
 	const parent = $derived(task.parentId ? (tasks.find((t) => t.id === task.parentId) ?? null) : null);
@@ -79,6 +82,29 @@
 
 	const editable = $derived(canEditTask(task));
 	const subs = $derived(tasks.filter((t) => t.parentId === task.id));
+
+	// Save-as-template footer control: a button that morphs into a search field.
+	// Typing filters the project's templates; clicking a result overwrites that
+	// template with this task; the check creates a new template named by the query.
+	let savingTpl = $state(false);
+	let tplQuery = $state('');
+	let tplTargetId = $state(''); // '' = create new; else overwrite this template id
+	let tplForm = $state<HTMLFormElement | null>(null);
+	const matchTemplates = $derived(
+		templates.filter((t) => t.name.toLowerCase().includes(tplQuery.trim().toLowerCase()))
+	);
+	function openSaveTpl() {
+		tplQuery = task.title;
+		tplTargetId = '';
+		savingTpl = true;
+	}
+	async function submitTpl(templateId: string) {
+		// nothing to create when the query is blank and we're not targeting a template
+		if (!templateId && !tplQuery.trim()) return;
+		tplTargetId = templateId;
+		await tick();
+		tplForm?.requestSubmit();
+	}
 	const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'backlog';
 	const labelsOf = (taskId: string) =>
 		taskLabels
@@ -505,25 +531,6 @@
 			>
 		</form>
 
-		<form
-			method="POST"
-			action="?/saveTaskAsTemplate"
-			use:enhance={() => async ({ update }) => update({ reset: false })}
-			class="field save-tpl"
-		>
-			<input type="hidden" name="taskId" value={task.id} />
-			<input
-				name="name"
-				class="input"
-				placeholder={$t('Template name…')}
-				maxlength="120"
-				value={task.title}
-			/>
-			<button class="opt opt--create" type="submit">
-				<Icon name="bookmark" size={14} />
-				{$t('Save as template')}
-			</button>
-		</form>
 	{:else}
 		<h3 style="margin-bottom: var(--sp-2); overflow-wrap: anywhere;">{task.title}</h3>
 		{#if task.description}
@@ -784,6 +791,80 @@
 			</form>
 		{/if}
 		<button class="btn btn-sm" type="button" onclick={onClose}>{$t('Close')}</button>
+
+		{#if editable}
+			<div class="save-tpl-slot">
+				{#if savingTpl}
+					<div class="save-tpl-edit">
+						<!-- svelte-ignore a11y_autofocus -->
+						<input
+							class="input save-tpl-search"
+							bind:value={tplQuery}
+							placeholder={$t('Save to template…')}
+							maxlength="120"
+							autocomplete="off"
+							autofocus
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									e.preventDefault();
+									submitTpl('');
+								} else if (e.key === 'Escape') savingTpl = false;
+							}}
+						/>
+						<button
+							class="icon-btn"
+							type="button"
+							aria-label={$t('Save as new template')}
+							title={$t('Save as new template')}
+							onclick={() => submitTpl('')}
+						>
+							<Icon name="check" size={14} />
+						</button>
+						<button
+							class="icon-btn"
+							type="button"
+							aria-label={$t('Cancel')}
+							onclick={() => (savingTpl = false)}
+						>
+							<Icon name="xmark" size={14} />
+						</button>
+						{#if matchTemplates.length}
+							<div class="save-tpl-results">
+								{#each matchTemplates as tpl (tpl.id)}
+									<button class="save-tpl-result" type="button" onclick={() => submitTpl(tpl.id)}>
+										<Icon name="bookmark" size={13} />
+										<span>{tpl.name}</span>
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<button class="btn btn-sm save-tpl-open" type="button" onclick={openSaveTpl}>
+						<Icon name="bookmark" size={14} />
+						{$t('Save as template')}
+					</button>
+				{/if}
+			</div>
+			<form
+				bind:this={tplForm}
+				method="POST"
+				action="?/saveTaskAsTemplate"
+				class="hidden-form"
+				use:enhance={() => async ({ update, result }) => {
+					await update({ reset: false });
+					if (result.type === 'success') {
+						savingTpl = false;
+						tplQuery = '';
+						tplTargetId = '';
+					}
+				}}
+			>
+				<input type="hidden" name="taskId" value={task.id} />
+				<input type="hidden" name="templateId" value={tplTargetId} />
+				<input type="hidden" name="name" value={tplQuery} />
+			</form>
+		{/if}
 	</div>
 </SidePane>
 
@@ -1255,5 +1336,77 @@
 
 	.x-btn:hover {
 		color: var(--color-fg);
+	}
+
+	/* Save-as-template footer control (morphs button ↔ search field) */
+	.save-tpl-slot {
+		margin-left: auto;
+		position: relative;
+	}
+
+	.save-tpl-edit {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.save-tpl-search {
+		width: 160px;
+	}
+
+	.icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-bg);
+		color: var(--color-muted);
+		cursor: pointer;
+		padding: 4px;
+		border-radius: var(--radius-field, 0.25rem);
+		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+	}
+
+	.icon-btn:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
+	}
+
+	.save-tpl-results {
+		position: absolute;
+		bottom: calc(100% + 4px);
+		right: 0;
+		min-width: 200px;
+		max-height: 220px;
+		overflow-y: auto;
+		background: var(--color-bg);
+		border: 1px solid var(--color-border-subtle);
+		border-radius: var(--radius-field, 0.25rem);
+		padding: 4px;
+		z-index: 30;
+		box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+	}
+
+	.save-tpl-result {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+		border: none;
+		background: none;
+		color: var(--color-fg);
+		font-size: 13px;
+		text-align: left;
+		padding: 5px 6px;
+		border-radius: var(--radius-field, 0.25rem);
+		cursor: pointer;
+	}
+
+	.save-tpl-result:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.hidden-form {
+		display: none;
 	}
 </style>

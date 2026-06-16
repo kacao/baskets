@@ -53,7 +53,8 @@
 		viewName = '',
 		canEditView = false,
 		onNewTask,
-		statusDisplay = 'text'
+		statusDisplay = 'text',
+		templates = []
 	}: {
 		tasks: Task[];
 		users: { id: string; name: string }[];
@@ -74,6 +75,7 @@
 		canEditView?: boolean;
 		onNewTask?: (prefill?: Record<string, string>) => void;
 		statusDisplay?: 'text' | 'icon' | 'text-icon';
+		templates?: { id: string; name: string }[];
 	} = $props();
 
 	// Task editing opens the shared right-side pane (ADR-025); the chevron only
@@ -646,6 +648,7 @@
 		{taskCustomValues}
 		{files}
 		{canEditTask}
+		{templates}
 		{statusDisplay}
 		onClose={() => (selectedId = null)}
 		onSelectTask={(id) => (selectedId = id)}

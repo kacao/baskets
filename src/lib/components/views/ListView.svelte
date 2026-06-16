@@ -46,7 +46,8 @@
 		files = [],
 		config = {},
 		canEditTask,
-		statusDisplay = 'text'
+		statusDisplay = 'text',
+		templates = []
 	}: {
 		tasks: Task[];
 		statuses: Status[];
@@ -63,6 +64,7 @@
 		config?: Record<string, unknown>;
 		canEditTask: (t: { id: string; parentId: string | null }) => boolean;
 		statusDisplay?: 'text' | 'icon' | 'text-icon';
+		templates?: { id: string; name: string }[];
 	} = $props();
 
 	let expanded = $state<Record<string, boolean>>({});
@@ -219,6 +221,7 @@
 			{taskCustomValues}
 			{files}
 			{canEditTask}
+			{templates}
 			{statusDisplay}
 			onClose={() => (selectedId = null)}
 			onSelectTask={(id) => (selectedId = id)}

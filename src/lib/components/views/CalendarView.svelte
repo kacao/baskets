@@ -42,6 +42,7 @@
 		config = {},
 		canEditTask,
 		statusDisplay = 'text',
+		templates = [],
 		viewId,
 		viewName = '',
 		canEditView = false,
@@ -62,6 +63,7 @@
 		config?: Record<string, unknown>;
 		canEditTask: (t: { id: string; parentId: string | null }) => boolean;
 		statusDisplay?: 'text' | 'icon' | 'text-icon';
+		templates?: { id: string; name: string }[];
 		viewId?: string;
 		viewName?: string;
 		canEditView?: boolean;
@@ -242,6 +244,7 @@
 			{taskCustomValues}
 			{files}
 			{canEditTask}
+			{templates}
 			{statusDisplay}
 			onClose={() => (selectedId = null)}
 			onSelectTask={(id) => (selectedId = id)}
