@@ -36,7 +36,8 @@
 	},
 	"overrides": {
 		"esbuild": "0.25.12",
-		"cookie": "^0.7.0"
+		"cookie": "^0.7.0",
+		"form-data": "^4.0.6"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.49.0",
