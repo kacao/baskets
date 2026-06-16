@@ -198,7 +198,7 @@ await db.insert(schema.task).values([
 		priority: 'high',
 		milestoneId: 'seed-milestone-1'
 	}),
-	t(2, pid(1), 'Design homepage in StudioBlank style', {
+	t(2, pid(1), 'Design homepage in minimalist style', {
 		statusId: 'status-in-progress',
 		priority: 'urgent',
 		assigneeId: demoId,

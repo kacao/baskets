@@ -1,6 +1,6 @@
 # PRD — Baskets
 
-Single-instance project management app: workspaces → projects → tasks → sub-tasks. Linear/Notion-inspired, deliberately small. This document describes the product as currently built and its near-term direction.
+Single-instance project management app: workspaces → projects → tasks → sub-tasks. Deliberately small. This document describes the product as currently built and its near-term direction.
 
 ## Problem
 
@@ -64,7 +64,7 @@ Visibility = access (ADR-019): non-admins see only workspaces they own or hold a
 - /integrations; one config per type (single instance). **Slack** incoming-webhook notifications on `project.created`, `task.created`, `task.completed` (connect, pause/resume, test, remove). Fire-and-forget — failures never block app mutations.
 
 ### Design
-- Built on **Tailwind 4 + DaisyUI 5** (ADR-022). Stock **light** (default) and **dark** themes with a topbar toggle (cookie-persisted, SSR-applied). Animations ≤200ms, reduced-motion safe. (`design.md` describes the retired StudioBlank look and is historical.)
+- Built on **Tailwind 4 + DaisyUI 5** (ADR-022). Stock **light** (default) and **dark** themes with a topbar toggle (cookie-persisted, SSR-applied). Animations ≤200ms, reduced-motion safe.
 
 ### Other
 - English-only UI (the `$t()` wrapper remains so a locale can be re-added). Responsive with a mobile sidebar drawer. Admin → Users: create, toggle admin, ban/unban, remove.
@@ -78,7 +78,7 @@ Visibility = access (ADR-019): non-admins see only workspaces they own or hold a
 
 ## Future candidates
 
-- More integrations (generic outgoing webhooks, GitHub/Linear sync) and events (`task.updated`, assignment notifications)
+- More integrations (generic outgoing webhooks, GitHub sync) and events (`task.updated`, assignment notifications)
 - Moving a project between workspaces
 - API pagination + rate limiting before any public deployment
 - Test suite (currently `npm run check` + manual smoke tests)
