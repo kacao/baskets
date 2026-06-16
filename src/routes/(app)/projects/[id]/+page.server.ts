@@ -607,6 +607,10 @@ export const actions: Actions = {
 				set.order = order;
 			}
 		}
+		if (form.has('startDate')) {
+			const raw = String(form.get('startDate') ?? '');
+			set.startDate = raw ? new Date(raw + 'T00:00:00') : null;
+		}
 		if (form.has('dueDate')) {
 			const raw = String(form.get('dueDate') ?? '');
 			set.dueDate = raw ? new Date(raw + 'T00:00:00') : null;
@@ -1482,6 +1486,7 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();
+		const startDateRaw = String(form.get('startDate') ?? '');
 		const targetDateRaw = String(form.get('targetDate') ?? '');
 
 		if (!name) return fail(400, { message: 'Milestone name is required' });
@@ -1492,6 +1497,7 @@ export const actions: Actions = {
 			id: msId,
 			projectId: params.id,
 			name,
+			startDate: startDateRaw ? new Date(startDateRaw + 'T00:00:00') : null,
 			targetDate: targetDateRaw ? new Date(targetDateRaw + 'T00:00:00') : null,
 			position: now.getTime(),
 			createdAt: now,
@@ -1600,17 +1606,21 @@ export const actions: Actions = {
 		const [ms] = await db.select().from(milestone).where(eq(milestone.id, id));
 		if (!ms || ms.projectId !== params.id) return fail(400, { message: 'Invalid milestone' });
 
-		const patch: { name?: string; targetDate?: Date | null } = {};
+		const patch: { name?: string; startDate?: Date | null; targetDate?: Date | null } = {};
 		if (form.has('name')) {
 			const name = String(form.get('name') ?? '').trim();
 			if (!name) return fail(400, { message: 'Milestone name is required' });
 			patch.name = name;
 		}
+		if (form.has('startDate')) {
+			const raw = String(form.get('startDate') ?? '').trim();
+			patch.startDate = raw ? new Date(raw + 'T00:00:00') : null;
+		}
 		if (form.has('targetDate')) {
 			const raw = String(form.get('targetDate') ?? '').trim();
 			patch.targetDate = raw ? new Date(raw + 'T00:00:00') : null;
 		}
-		if (!('name' in patch) && !('targetDate' in patch))
+		if (!('name' in patch) && !('startDate' in patch) && !('targetDate' in patch))
 			return fail(400, { message: 'No fields to update' });
 
 		await db.update(milestone).set({ ...patch, updatedAt: new Date() }).where(eq(milestone.id, id));

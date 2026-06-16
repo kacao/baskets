@@ -102,6 +102,7 @@ export const project = sqliteTable('project', {
 	// how statuses render across this project's views: text | icon | text-icon
 	statusDisplay: text('status_display').notNull().default('text'),
 	pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
+	startDate: integer('start_date', { mode: 'timestamp' }),
 	createdBy: text('created_by')
 		.notNull()
 		.references(() => user.id),
@@ -207,6 +208,7 @@ export const milestone = sqliteTable('milestone', {
 		.references(() => project.id, { onDelete: 'cascade' }),
 	name: text('name').notNull(),
 	description: text('description'),
+	startDate: integer('start_date', { mode: 'timestamp' }),
 	targetDate: integer('target_date', { mode: 'timestamp' }),
 	position: integer('position').notNull().default(0),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),

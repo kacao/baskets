@@ -246,12 +246,18 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();
 		const description = String(form.get('description') ?? '').trim();
+		const startRaw = String(form.get('startDate') ?? '').trim();
 
 		if (!name) return fail(400, { message: 'Project name is required' });
 
 		await db
 			.update(project)
-			.set({ name, description: description || null, updatedAt: new Date() })
+			.set({
+				name,
+				description: description || null,
+				startDate: startRaw ? new Date(startRaw + 'T00:00:00') : null,
+				updatedAt: new Date()
+			})
 			.where(eq(project.id, params.id));
 
 		return { success: true };
@@ -867,6 +873,7 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();
+		const startDateRaw = String(form.get('startDate') ?? '');
 		const targetDateRaw = String(form.get('targetDate') ?? '');
 
 		if (!name) return fail(400, { message: 'Milestone name is required' });
@@ -876,6 +883,7 @@ export const actions: Actions = {
 			id: crypto.randomUUID(),
 			projectId: params.id,
 			name,
+			startDate: startDateRaw ? new Date(startDateRaw + 'T00:00:00') : null,
 			targetDate: targetDateRaw ? new Date(targetDateRaw + 'T00:00:00') : null,
 			position: now.getTime(),
 			createdAt: now,

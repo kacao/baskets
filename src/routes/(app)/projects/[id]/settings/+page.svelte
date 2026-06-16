@@ -62,6 +62,19 @@
 				>{data.project.description ?? ''}</textarea
 			>
 		</div>
+		<div class="field">
+			<label class="label" for="pstart">{$t('Start date')}</label>
+			<input
+				id="pstart"
+				name="startDate"
+				type="date"
+				class="input"
+				style="width: auto;"
+				value={data.project.startDate
+					? new Date(data.project.startDate).toISOString().slice(0, 10)
+					: ''}
+			/>
+		</div>
 		<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
 	</form>
 </div>
@@ -283,6 +296,9 @@
 	{#each data.milestones as m (m.id)}
 		<div class="u-flex" style="margin-bottom: var(--sp-1);">
 			<span class="u-small">{m.name}</span>
+			{#if m.startDate}
+				<span class="u-tiny u-muted mono">{new Date(m.startDate).toISOString().slice(0, 10)} →</span>
+			{/if}
 			{#if m.targetDate}
 				<span class="u-tiny u-muted mono">{new Date(m.targetDate).toISOString().slice(0, 10)}</span>
 			{/if}
@@ -294,7 +310,8 @@
 	{/each}
 	<form method="POST" action="?/createMilestone" use:enhance class="u-flex" style="flex-wrap: wrap;">
 		<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder={$t('New milestone…')} required />
-		<input name="targetDate" type="date" class="input" style="width: auto;" />
+		<input name="startDate" type="date" class="input" style="width: auto;" aria-label={$t('Start date')} />
+		<input name="targetDate" type="date" class="input" style="width: auto;" aria-label={$t('Target date')} />
 		<button class="btn btn-sm" type="submit">{$t('Add')}</button>
 	</form>
 </div>

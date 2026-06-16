@@ -30,6 +30,7 @@
 		locationId: string | null;
 		location: string | null;
 		order: number | null;
+		startDate?: Date | string | null;
 		dueDate: Date | string | null;
 		recurrence?: string | null;
 		coverFileId?: string | null;
@@ -454,6 +455,33 @@
 							<button class="opt" type="submit">{opt.title}</button>
 						</form>
 					{/each}
+				{/snippet}
+			</Popover>
+
+			<!-- Start date -->
+			<Popover ariaLabel={$t('Start date')}>
+				{#snippet trigger()}
+					<span class="pill-val mono" class:pill-ph={!task.startDate}>{fmtDate(task.startDate ?? null) ?? $t('Start date')}</span>
+				{/snippet}
+				{#snippet panel(close)}
+					<form method="POST" action="?/patchTask" use:enhance={pick(close)} class="pop-due">
+						<input type="hidden" name="id" value={task.id} />
+						<input
+							name="startDate"
+							type="date"
+							class="input"
+							value={fmtDate(task.startDate ?? null) ?? ''}
+							onchange={(e) => e.currentTarget.form?.requestSubmit()}
+						/>
+						<button
+							class="opt opt--create"
+							type="submit"
+							onclick={(e) => {
+								const input = e.currentTarget.form?.elements.namedItem('startDate');
+								if (input instanceof HTMLInputElement) input.value = '';
+							}}>{$t('Clear')}</button
+						>
+					</form>
 				{/snippet}
 			</Popover>
 

@@ -1137,6 +1137,18 @@
 				<div class="ms-meta">
 					<form method="POST" action="?/updateMilestone" use:enhance class="ms-date-form">
 						<input type="hidden" name="id" value={m.id} />
+						<Icon name="play" size={13} />
+						<input
+							class="ms-date"
+							type="date"
+							name="startDate"
+							value={m.startDate ? new Date(m.startDate).toISOString().slice(0, 10) : ''}
+							aria-label={$t('Start date')}
+							onchange={(e) => e.currentTarget.form?.requestSubmit()}
+						/>
+					</form>
+					<form method="POST" action="?/updateMilestone" use:enhance class="ms-date-form">
+						<input type="hidden" name="id" value={m.id} />
 						<Icon name="calendar" size={13} />
 						<input
 							class="ms-date"

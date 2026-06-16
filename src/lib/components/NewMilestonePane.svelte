@@ -7,6 +7,7 @@
 	let { onClose }: { onClose: () => void } = $props();
 
 	let name = $state('');
+	let startDate = $state('');
 	let targetDate = $state('');
 	let createMore = $state(false);
 	let nameEl = $state<HTMLInputElement | null>(null);
@@ -23,6 +24,7 @@
 					await update({ reset: false });
 					if (createMore) {
 						name = '';
+						startDate = '';
 						targetDate = '';
 						nameEl?.focus();
 					} else {
@@ -47,6 +49,11 @@
 				autocomplete="off"
 				autofocus
 			/>
+		</div>
+
+		<div class="field">
+			<label class="label" for="nm-start">{$t('Start date')}</label>
+			<input id="nm-start" name="startDate" type="date" class="input" bind:value={startDate} />
 		</div>
 
 		<div class="field">
