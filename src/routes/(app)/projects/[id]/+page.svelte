@@ -26,7 +26,7 @@
 	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
 	import BudgetSummary from '$lib/components/BudgetSummary.svelte';
 	import { filterTasks } from '$lib/taskFilter';
-	import { sortTasks } from '$lib/taskSort';
+	import { sortTasks, parseSortBy } from '$lib/taskSort';
 	import { selection } from '$lib/selection.svelte';
 	import { toast } from '$lib/toast.svelte';
 	import { t } from '$lib/i18n';
@@ -168,25 +168,31 @@
 	const setGroupByConfig = (val: string) =>
 		JSON.stringify({ ...viewConfig, groupBy: val || undefined });
 
-	// Sort-by options for the table view (config.sortBy); '' = natural order.
-	const SORT_BY_OPTIONS = [
+	// Sort-by: a field (config.sortBy key) + a direction toggle (':desc' suffix).
+	const SORT_FIELD_OPTIONS = [
 		['', 'None'],
 		['priority', 'Priority'],
 		['order', 'Order'],
-		['title', 'Title (A–Z)'],
-		['title:desc', 'Title (Z–A)'],
-		['due', 'Due date (soonest)'],
-		['due:desc', 'Due date (latest)'],
+		['title', 'Title'],
+		['due', 'Due date'],
 		['status', 'Status'],
 		['assignee', 'Assignee'],
-		['createdAt', 'Created (oldest)'],
-		['createdAt:desc', 'Created (newest)']
+		['createdAt', 'Created']
 	] as const;
-	const sortByValue = $derived(
-		typeof viewConfig.sortBy === 'string' ? (viewConfig.sortBy as string) : ''
+	const sortParsed = $derived(
+		parseSortBy(typeof viewConfig.sortBy === 'string' ? (viewConfig.sortBy as string) : null)
 	);
-	const setSortByConfig = (val: string) =>
-		JSON.stringify({ ...viewConfig, sortBy: val || undefined });
+	const sortFieldValue = $derived(sortParsed.key ?? '');
+	const setSortFieldConfig = (key: string) =>
+		JSON.stringify({
+			...viewConfig,
+			sortBy: key ? key + (sortParsed.desc ? ':desc' : '') : undefined
+		});
+	const setSortDirConfig = (desc: boolean) =>
+		JSON.stringify({
+			...viewConfig,
+			sortBy: sortParsed.key ? sortParsed.key + (desc ? ':desc' : '') : undefined
+		});
 
 	// Aggregations (config.aggregations): number fields summed per group, shown as "(x)".
 	const numberFields = $derived(data.customFields.filter((f) => f.type === 'number'));
@@ -378,6 +384,17 @@
 			...viewConfig,
 			filters: Object.keys(cleaned).length ? cleaned : undefined
 		});
+	}
+	// Persist a config JSON to the active view without closing an open popover
+	// (fetch + invalidate, like the FilterBar — not a form submit).
+	async function postViewConfig(configJson: string) {
+		if (!activeView || !canEditActiveView) return;
+		const fd = new FormData();
+		fd.set('id', activeView.id);
+		fd.set('name', activeView.name);
+		fd.set('config', configJson);
+		await fetch(`${page.url.pathname}?/updateView`, { method: 'POST', body: fd });
+		await invalidateAll();
 	}
 
 	const labelSections = $derived.by(() => {
@@ -881,6 +898,66 @@
 	</div>
 {/if}
 
+<!-- Single-select pill (Group by / Sort field): label + current value, popover of options. -->
+{#snippet selectPill(
+	label: string,
+	options: readonly (readonly [string, string])[],
+	currentVal: string,
+	configFn: (v: string) => string
+)}
+	{@const curLabel = options.find(([v]) => v === currentVal)?.[1] ?? options[0]?.[1] ?? ''}
+	<span class="cz-pill" class:cz-pill--on={!!currentVal}>
+		<Popover ariaLabel={label}>
+			{#snippet trigger()}{label}: {$t(curLabel)}{/snippet}
+			{#snippet panel(close)}
+				<div class="cz-opts">
+					{#each options as [val, lbl] (val)}
+						<button
+							class="cz-opt"
+							class:cz-opt--on={currentVal === val}
+							type="button"
+							onclick={() => {
+								postViewConfig(configFn(val));
+								close();
+							}}
+						>
+							<span class="cz-check">{#if currentVal === val}<Icon name="check" size={13} />{/if}</span>
+							{$t(lbl)}
+						</button>
+					{/each}
+				</div>
+			{/snippet}
+		</Popover>
+	</span>
+{/snippet}
+
+<!-- Multi-select filter pill: label + count, popover of checkable items (stays open). -->
+{#snippet filterPill(group: { key: string; label: string; opts: [string, string][] })}
+	{@const chosen = filterChosen(group.key)}
+	<span class="cz-pill" class:cz-pill--on={chosen.length > 0}>
+		<Popover ariaLabel={$t(group.label)}>
+			{#snippet trigger()}{$t(group.label)}{#if chosen.length}<span class="cz-count">{chosen.length}</span>{/if}{/snippet}
+			{#snippet panel()}
+				<div class="cz-opts">
+					{#each group.opts as [val, lbl] (val)}
+						<button
+							class="cz-opt"
+							class:cz-opt--on={chosen.includes(val)}
+							type="button"
+							onclick={() => postViewConfig(toggleFilterConfig(group.key, val))}
+						>
+							<span class="cz-check">{#if chosen.includes(val)}<Icon name="check" size={13} />{/if}</span>
+							{lbl}
+						</button>
+					{:else}
+						<span class="cz-empty">{$t('No options')}</span>
+					{/each}
+				</div>
+			{/snippet}
+		</Popover>
+	</span>
+{/snippet}
+
 <!-- Customize pane (ADR-025): edits the ACTIVE view; changes apply immediately (auto-save) -->
 {#if customizing && activeView && canEditActiveView}
 	<SidePane title={`${$t('Customize')} — ${activeView.name}`} onClose={() => (customizing = false)}>
@@ -902,25 +979,27 @@
 		{#if activeView.type === 'table'}
 			<span class="label">{$t('Group by')}</span>
 			<div class="chips-row">
-				{#each GROUP_BY_OPTIONS as [val, lbl] (val)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={setGroupByConfig(val)} />
-						<button class="chip" class:chip--on={groupByValue === val} type="submit">{$t(lbl)}</button>
-					</form>
-				{/each}
+				{@render selectPill($t('Group by'), GROUP_BY_OPTIONS, groupByValue, setGroupByConfig)}
 			</div>
 			<span class="label">{$t('Sort by')}</span>
 			<div class="chips-row">
-				{#each SORT_BY_OPTIONS as [val, lbl] (val)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={setSortByConfig(val)} />
-						<button class="chip" class:chip--on={sortByValue === val} type="submit">{$t(lbl)}</button>
-					</form>
-				{/each}
+				{@render selectPill($t('Sort by'), SORT_FIELD_OPTIONS, sortFieldValue, setSortFieldConfig)}
+				{#if sortFieldValue}
+					<div class="toggle-group">
+						<button
+							class="toggle"
+							class:toggle--on={!sortParsed.desc}
+							type="button"
+							onclick={() => postViewConfig(setSortDirConfig(false))}>{$t('A–Z')}</button
+						>
+						<button
+							class="toggle"
+							class:toggle--on={sortParsed.desc}
+							type="button"
+							onclick={() => postViewConfig(setSortDirConfig(true))}>{$t('Z–A')}</button
+						>
+					</div>
+				{/if}
 			</div>
 			<span class="label">{$t('Columns')}</span>
 			<div class="chips-row">
@@ -949,14 +1028,12 @@
 		{#if activeView.type === 'board'}
 			<span class="label">{$t('Group by')}</span>
 			<div class="chips-row">
-				{#each BOARD_GROUP_BY_OPTIONS as [val, lbl] (val)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={setBoardGroupByConfig(val)} />
-						<button class="chip" class:chip--on={boardGroupByValue === val} type="submit">{$t(lbl)}</button>
-					</form>
-				{/each}
+				{@render selectPill(
+					$t('Group by'),
+					BOARD_GROUP_BY_OPTIONS,
+					boardGroupByValue,
+					setBoardGroupByConfig
+				)}
 			</div>
 			<span class="label">{$t('Statuses shown')}</span>
 			<div class="chips-row">
@@ -974,32 +1051,17 @@
 		{#if activeView.type === 'list'}
 			<span class="label">{$t('Group by')}</span>
 			<div class="chips-row">
-				{#each GROUP_BY_OPTIONS as [val, lbl] (val)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={setGroupByConfig(val)} />
-						<button class="chip" class:chip--on={groupByValue === val} type="submit">{$t(lbl)}</button>
-					</form>
-				{/each}
+				{@render selectPill($t('Group by'), GROUP_BY_OPTIONS, groupByValue, setGroupByConfig)}
 			</div>
 		{/if}
 
 		{#if ['table', 'board', 'list'].includes(activeView.type)}
 			<span class="label">{$t('Filters')}</span>
-			{#each filterGroups as group (group.key)}
-				<span class="sublabel">{$t(group.label)}</span>
-				<div class="chips-row">
-					{#each group.opts as [val, lbl] (val)}
-						<form method="POST" action="?/updateView" use:enhance>
-							<input type="hidden" name="id" value={activeView.id} />
-							<input type="hidden" name="name" value={activeView.name} />
-							<input type="hidden" name="config" value={toggleFilterConfig(group.key, val)} />
-							<button class="chip" class:chip--on={filterChosen(group.key).includes(val)} type="submit">{lbl}</button>
-						</form>
-					{/each}
-				</div>
-			{/each}
+			<div class="chips-row">
+				{#each filterGroups as group (group.key)}
+					{@render filterPill(group)}
+				{/each}
+			</div>
 		{/if}
 
 		{#if ['table', 'board', 'list'].includes(activeView.type) && numberFields.length}
@@ -1660,11 +1722,109 @@
 		margin-bottom: var(--sp-2);
 	}
 
-	.sublabel {
-		display: block;
+	/* Customize pills (Group by / Sort / Filters) — Popover-driven facets. */
+	.cz-pill {
+		display: inline-flex;
+	}
+
+	.cz-pill :global(.pill) {
+		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--color-muted);
-		margin: 2px 0;
+		gap: 4px;
+		padding: 2px 8px;
+	}
+
+	.cz-pill--on :global(.pill) {
+		background: color-mix(in oklab, var(--color-fg) 12%, var(--color-bg));
+		border-color: color-mix(in oklab, var(--color-fg) 30%, var(--color-bg));
+		color: var(--color-fg);
+	}
+
+	.cz-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 15px;
+		height: 15px;
+		padding: 0 3px;
+		border-radius: 999px;
+		background: var(--color-fg);
+		color: var(--color-bg);
+		font-size: 10px;
+		font-weight: 600;
+		line-height: 1;
+	}
+
+	.cz-opts {
+		display: flex;
+		flex-direction: column;
+		min-width: 180px;
+		max-height: 260px;
+		overflow-y: auto;
+	}
+
+	.cz-opt {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+		border: none;
+		background: none;
+		color: var(--color-fg);
+		font-size: 13px;
+		text-align: left;
+		padding: 6px 8px;
+		border-radius: var(--radius-field, 0.25rem);
+		cursor: pointer;
+	}
+
+	.cz-opt:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.cz-opt--on {
+		font-weight: 600;
+	}
+
+	.cz-check {
+		display: inline-flex;
+		width: 13px;
+		flex: 0 0 13px;
+		color: var(--color-fg);
+	}
+
+	.cz-empty {
+		font-size: 12px;
+		color: var(--color-muted);
+		padding: 6px 8px;
+	}
+
+	/* Sort direction toggle group [A–Z | Z–A] */
+	.toggle-group {
+		display: inline-flex;
+		border: 1px solid var(--color-border-subtle);
+		border-radius: var(--radius-field, 0.25rem);
+		overflow: hidden;
+	}
+
+	.toggle {
+		border: none;
+		background: var(--color-bg);
+		color: var(--color-muted);
+		font-family: var(--font-mono);
+		font-size: 11px;
+		padding: 2px 8px;
+		cursor: pointer;
+	}
+
+	.toggle + .toggle {
+		border-left: 1px solid var(--color-border-subtle);
+	}
+
+	.toggle--on {
+		background: color-mix(in oklab, var(--color-fg) 12%, var(--color-bg));
+		color: var(--color-fg);
 	}
 
 	.chip {
