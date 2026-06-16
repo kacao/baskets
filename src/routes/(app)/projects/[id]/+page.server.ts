@@ -208,7 +208,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.where(eq(location.projectId, params.id))
 		.orderBy(asc(location.position), asc(location.title));
 
-	const customFields = await listProjectCustomFields(params.id);
+	// Task-facing custom fields only — entity='project' fields live in project settings.
+	const customFields = (await listProjectCustomFields(params.id)).filter(
+		(f) => (f.entity ?? 'task') !== 'project'
+	);
 	const [customFieldOptions, taskCustomValues, files] = await Promise.all([
 		listCustomFieldOptions(customFields.map((f) => f.id)),
 		taskIds.length > 0

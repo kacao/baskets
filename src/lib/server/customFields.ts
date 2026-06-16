@@ -1,6 +1,15 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from './db';
-import { customField, customFieldOption, file, location, task, taskCustomValue, user } from './db/schema';
+import {
+	customField,
+	customFieldOption,
+	file,
+	location,
+	projectCustomValue,
+	task,
+	taskCustomValue,
+	user
+} from './db/schema';
 import {
 	CUSTOM_FIELD_TYPES,
 	EMAIL_RE,
@@ -164,7 +173,10 @@ export async function writeTaskCustomValues(
 	if (entries.length === 0) return {};
 	const fields = await db.select().from(customField).where(eq(customField.projectId, projectId));
 	const byId = new Map(
-		fields.map((f) => [f.id, { id: f.id, type: f.type, appliesTo: f.appliesTo, config: parseConfig(f.config) }])
+		fields.map((f) => [
+			f.id,
+			{ id: f.id, type: f.type, appliesTo: f.appliesTo, entity: f.entity, config: parseConfig(f.config) }
+		])
 	);
 	// the field must apply to this task's level (top-level vs sub-task)
 	const [tk] = await db.select({ parentId: task.parentId }).from(task).where(eq(task.id, taskId));
@@ -175,6 +187,7 @@ export async function writeTaskCustomValues(
 	for (const { fieldId, raw } of entries) {
 		const field = byId.get(fieldId);
 		if (!field) return { error: 'Unknown custom field' };
+		if (field.entity === 'project') return { error: 'Field is a project field, not a task field' };
 		if (!fieldAppliesTo(field, isSubtask)) return { error: 'Field not available for this task' };
 		const res = await encodeAndValidate(field, raw, projectId);
 		if ('error' in res) return { error: res.error };
@@ -190,6 +203,52 @@ export async function writeTaskCustomValues(
 			.values({ taskId, fieldId: w.fieldId, value: w.value })
 			.onConflictDoUpdate({ target: [taskCustomValue.taskId, taskCustomValue.fieldId], set: { value: w.value } });
 	return {};
+}
+
+/**
+ * Validate + persist custom-field values for the PROJECT itself (entity='project'
+ * fields, stored in project_custom_value). Mirrors writeTaskCustomValues but has
+ * no task-level (appliesTo) check. Returns `{ error }` (nothing written) on the
+ * first invalid entry, else `{}`.
+ */
+export async function writeProjectCustomValues(
+	projectId: string,
+	entries: { fieldId: string; raw: string | null }[]
+): Promise<{ error?: string }> {
+	if (entries.length === 0) return {};
+	const fields = await db.select().from(customField).where(eq(customField.projectId, projectId));
+	const byId = new Map(
+		fields.map((f) => [f.id, { id: f.id, type: f.type, entity: f.entity, config: parseConfig(f.config) }])
+	);
+	const writes: { fieldId: string; value: string }[] = [];
+	const clears: string[] = [];
+	for (const { fieldId, raw } of entries) {
+		const field = byId.get(fieldId);
+		if (!field) return { error: 'Unknown custom field' };
+		if (field.entity !== 'project') return { error: 'Field is not a project field' };
+		const res = await encodeAndValidate(field, raw, projectId);
+		if ('error' in res) return { error: res.error };
+		if (res.value === null) clears.push(fieldId);
+		else writes.push({ fieldId, value: res.value });
+	}
+	for (const fieldId of clears)
+		await db
+			.delete(projectCustomValue)
+			.where(and(eq(projectCustomValue.projectId, projectId), eq(projectCustomValue.fieldId, fieldId)));
+	for (const w of writes)
+		await db
+			.insert(projectCustomValue)
+			.values({ projectId, fieldId: w.fieldId, value: w.value })
+			.onConflictDoUpdate({
+				target: [projectCustomValue.projectId, projectCustomValue.fieldId],
+				set: { value: w.value }
+			});
+	return {};
+}
+
+/** Raw stored project-field values for a project. */
+export async function listProjectCustomValues(projectId: string) {
+	return db.select().from(projectCustomValue).where(eq(projectCustomValue.projectId, projectId));
 }
 
 /**

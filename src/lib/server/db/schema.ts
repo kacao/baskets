@@ -365,10 +365,14 @@ export const customField = sqliteTable('custom_field', {
 	projectId: text('project_id')
 		.notNull()
 		.references(() => project.id, { onDelete: 'cascade' }),
+	// which entity the field describes: 'task' (default, values in task_custom_value)
+	// or 'project' (the project itself, values in project_custom_value)
+	entity: text('entity').notNull().default('task'),
 	name: text('name').notNull(),
 	type: text('type').notNull(),
 	config: text('config').notNull().default('{}'),
 	// which tasks this field applies to: all | tasks (top-level only) | subtasks
+	// (only meaningful for entity='task')
 	appliesTo: text('applies_to').notNull().default('all'),
 	position: integer('position').notNull().default(0),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
@@ -402,6 +406,22 @@ export const taskCustomValue = sqliteTable(
 		value: text('value').notNull()
 	},
 	(t) => [primaryKey({ columns: [t.taskId, t.fieldId] })]
+);
+
+// One value per (project, field) for entity='project' custom fields — mirrors
+// task_custom_value. `value` is a scalar string or a JSON array. Absent = no value.
+export const projectCustomValue = sqliteTable(
+	'project_custom_value',
+	{
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		fieldId: text('field_id')
+			.notNull()
+			.references(() => customField.id, { onDelete: 'cascade' }),
+		value: text('value').notNull()
+	},
+	(t) => [primaryKey({ columns: [t.projectId, t.fieldId] })]
 );
 
 // Uploaded files (Files & media custom fields). Bytes live on local disk under

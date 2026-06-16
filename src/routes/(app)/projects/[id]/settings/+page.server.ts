@@ -40,6 +40,8 @@ import {
 	isCustomFieldType,
 	listCustomFieldOptions,
 	listProjectCustomFields,
+	listProjectCustomValues,
+	writeProjectCustomValues,
 	validateFieldConfig
 } from '$lib/server/customFields';
 import { deleteFilesForField } from '$lib/server/uploads';
@@ -175,14 +177,15 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.orderBy(asc(location.position), asc(location.title));
 
 	const customFields = await listProjectCustomFields(params.id);
-	const [customFieldOptions, cfUsage] = await Promise.all([
+	const [customFieldOptions, cfUsage, projectCustomValues] = await Promise.all([
 		listCustomFieldOptions(customFields.map((f) => f.id)),
 		db
 			.select({ fieldId: taskCustomValue.fieldId, n: count() })
 			.from(taskCustomValue)
 			.innerJoin(task, eq(taskCustomValue.taskId, task.id))
 			.where(eq(task.projectId, params.id))
-			.groupBy(taskCustomValue.fieldId)
+			.groupBy(taskCustomValue.fieldId),
+		listProjectCustomValues(params.id)
 	]);
 
 	const admin = isAdmin(locals.user);
@@ -224,6 +227,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			inUse: cfUsage.find((u) => u.fieldId === f.id)?.n ?? 0
 		})),
 		customFieldOptions,
+		projectCustomValues,
 		fieldTypes: CUSTOM_FIELD_TYPES,
 		users,
 		views,
@@ -483,6 +487,7 @@ export const actions: Actions = {
 		const appliesTo = String(form.get('appliesTo') ?? 'all');
 		if (!APPLIES_TO.includes(appliesTo as (typeof APPLIES_TO)[number]))
 			return fail(400, { message: 'Invalid “applies to”' });
+		const entity = String(form.get('entity') ?? 'task') === 'project' ? 'project' : 'task';
 
 		const existing = await db
 			.select({ name: customField.name, position: customField.position })
@@ -495,6 +500,7 @@ export const actions: Actions = {
 		await db.insert(customField).values({
 			id: crypto.randomUUID(),
 			projectId: params.id,
+			entity,
 			name,
 			type,
 			config: validateFieldConfig(type, String(form.get('config') ?? '{}')),
@@ -503,6 +509,25 @@ export const actions: Actions = {
 			createdAt: new Date()
 		});
 		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	// Set the project's own (entity='project') custom-field values from a pill form
+	// (posts `id` = projectId + `cf_<fieldId>` fields, like patchTask but project-scoped).
+	patchProjectCustomValues: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const entries: { fieldId: string; raw: string | null }[] = [];
+		for (const [k, v] of form.entries()) {
+			if (k.startsWith('cf_')) entries.push({ fieldId: k.slice(3), raw: String(v) });
+		}
+		if (entries.length) {
+			const res = await writeProjectCustomValues(params.id, entries);
+			if (res.error) return fail(400, { message: res.error });
+		}
 		return { success: true };
 	},
 

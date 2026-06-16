@@ -18,7 +18,7 @@
 		type FieldConfig
 	} from '$lib/customFields';
 
-	type Field = { id: string; name: string; type: string; config: FieldConfig; appliesTo: string; position: number; inUse: number };
+	type Field = { id: string; name: string; type: string; config: FieldConfig; appliesTo: string; entity?: string; position: number; inUse: number };
 	type Option = { id: string; fieldId: string; title: string; color: string | null; icon: string | null; position: number };
 
 	let {
@@ -44,6 +44,10 @@
 	};
 	const TIME_FORMAT_LABELS: Record<string, string> = { hidden: 'Hidden', '12h': '12 hour', '24h': '24 hour' };
 	const DISPLAY_LABELS: Record<string, string> = { text: 'Text only', icon: 'Icon only', 'text-icon': 'Text and icon' };
+
+	// [Task | Project] tabs — task fields describe tasks, project fields describe
+	// the project itself (entity column). The list + create form follow the tab.
+	let entityTab = $state('task');
 
 	let creating = $state(false);
 	let newName = $state('');
@@ -95,6 +99,7 @@
 	$effect(() => {
 		items = [...fields];
 	});
+	const shownItems = $derived(items.filter((f) => (f.entity ?? 'task') === entityTab));
 	let dragId = $state<string | null>(null);
 	let reorderForm = $state<HTMLFormElement | null>(null);
 	let reorderIds = $state('');
@@ -165,8 +170,13 @@
 	{/if}
 {/snippet}
 
+<div class="cf-tabs">
+	<button class="cf-tab" class:cf-tab--on={entityTab === 'task'} type="button" onclick={() => { entityTab = 'task'; creating = false; }}>{$t('Task')}</button>
+	<button class="cf-tab" class:cf-tab--on={entityTab === 'project'} type="button" onclick={() => { entityTab = 'project'; creating = false; }}>{$t('Project')}</button>
+</div>
+
 <div class="cf-editor">
-	{#each items as f (f.id)}
+	{#each shownItems as f (f.id)}
 		<div class="cf">
 			{#if editingId === f.id}
 				<form
@@ -208,7 +218,7 @@
 					{#if typeHint(f)}<span class="u-tiny u-muted">{typeHint(f)}</span>{/if}
 					{#if (f.appliesTo ?? 'all') !== 'all'}<span class="badge">{$t(appliesToLabel(f.appliesTo))}</span>{/if}
 					<span class="spacer"></span>
-					<span class="u-tiny u-muted">{$t('{n} task(s)', { n: f.inUse })}</span>
+					{#if (f.entity ?? 'task') === 'task'}<span class="u-tiny u-muted">{$t('{n} task(s)', { n: f.inUse })}</span>{/if}
 					<button class="icon-btn" type="button" aria-label={$t('Edit')} onclick={() => openEdit(f)}>
 						<Icon name="edit-pencil" size={14} />
 					</button>
@@ -311,10 +321,13 @@
 				{#each fieldTypes as ty (ty)}<option value={ty}>{$t(fieldTypeLabel(ty))}</option>{/each}
 			</select>
 			<input type="hidden" name="config" value={JSON.stringify(newConfig)} />
+			<input type="hidden" name="entity" value={entityTab} />
 			{@render configFields(newType, newConfig)}
-			<select name="appliesTo" class="select cfg-in" bind:value={newAppliesTo} aria-label={$t('Applies to')}>
-				{#each APPLIES_TO as a (a)}<option value={a}>{$t(appliesToLabel(a))}</option>{/each}
-			</select>
+			{#if entityTab === 'task'}
+				<select name="appliesTo" class="select cfg-in" bind:value={newAppliesTo} aria-label={$t('Applies to')}>
+					{#each APPLIES_TO as a (a)}<option value={a}>{$t(appliesToLabel(a))}</option>{/each}
+				</select>
+			{/if}
 			<span class="spacer"></span>
 			<button class="btn btn-sm" type="button" onclick={() => (creating = false)}>{$t('Cancel')}</button>
 			<button class="btn btn-sm btn-primary" type="submit">{$t('Create')}</button>
@@ -331,6 +344,35 @@
 </div>
 
 <style>
+	.cf-tabs {
+		display: inline-flex;
+		gap: 2px;
+		margin-bottom: var(--sp-2);
+		border: 1px solid var(--color-border-subtle);
+		border-radius: var(--radius-field, 0.25rem);
+		overflow: hidden;
+	}
+
+	.cf-tab {
+		border: none;
+		background: var(--color-bg);
+		color: var(--color-muted);
+		font-size: 12px;
+		padding: 3px 14px;
+		cursor: pointer;
+		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+	}
+
+	.cf-tab + .cf-tab {
+		border-left: 1px solid var(--color-border-subtle);
+	}
+
+	.cf-tab--on {
+		background: var(--color-surface-muted);
+		color: var(--color-fg);
+		font-weight: 600;
+	}
+
 	.cf-editor {
 		border: 1px solid var(--color-base-300);
 		border-radius: var(--radius-box, 0.5rem);

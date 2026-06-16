@@ -8,6 +8,7 @@
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import StatusEditor from '$lib/components/StatusEditor.svelte';
 	import CustomFieldEditor from '$lib/components/CustomFieldEditor.svelte';
+	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
 	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
@@ -133,6 +134,30 @@
 	</p>
 	<CustomFieldEditor fields={data.customFields} options={data.customFieldOptions} fieldTypes={data.fieldTypes} />
 </div>
+
+{#if data.customFields.some((f) => f.entity === 'project')}
+	<!-- Project field values: the project's own (entity='project') custom fields -->
+	<div class="card section">
+		<h4 style="margin-bottom: var(--sp-2);">{$t('Project fields')}</h4>
+		<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
+			{$t('Values for this project’s own custom fields.')}
+		</p>
+		<div class="pfields">
+			{#each data.customFields.filter((f) => f.entity === 'project') as f (f.id)}
+				<CustomFieldValue
+					field={f}
+					mode="pill"
+					taskId={data.project.id}
+					formAction="?/patchProjectCustomValues"
+					value={data.projectCustomValues.find((v) => v.fieldId === f.id)?.value ?? null}
+					options={data.customFieldOptions.filter((o) => o.fieldId === f.id)}
+					users={data.users}
+					locations={data.locations}
+				/>
+			{/each}
+		</div>
+	</div>
+{/if}
 
 <!-- Budget (BASDEV-10) -->
 <div class="card section">
@@ -454,6 +479,13 @@
 		gap: var(--sp-2);
 		padding: var(--sp-1) 0;
 		border-bottom: 1px solid var(--color-border-subtle);
+	}
+
+	.pfields {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-2);
+		align-items: flex-start;
 	}
 
 	.color-in {

@@ -16,6 +16,7 @@
 		value = null,
 		mode = 'pill',
 		taskId = '',
+		formAction = '?/patchTask',
 		users = [],
 		locations = [],
 		tasks = [],
@@ -28,6 +29,7 @@
 		value?: string | null;
 		mode?: 'pill' | 'cell' | 'input';
 		taskId?: string;
+		formAction?: string;
 		users?: { id: string; name: string }[];
 		locations?: { id: string; title: string }[];
 		tasks?: { id: string; title: string; parentId: string | null }[];
@@ -270,7 +272,7 @@
 					<div class="panel">{@render editor(close)}</div>
 				{/snippet}
 			</Popover>
-			<form bind:this={form} method="POST" action="?/patchTask" use:enhance class="hidden-form">
+			<form bind:this={form} method="POST" action={formAction} use:enhance class="hidden-form">
 				<input type="hidden" name="id" value={taskId} />
 				<input type="hidden" name={`cf_${field.id}`} value={current} />
 			</form>
