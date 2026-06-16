@@ -17,3 +17,9 @@ data/uploads/
 test-results/
 playwright-report/
 .playwright/
+
+# webwright run artifacts (screenshots/logs, regenerated)
+tests/webwright/final_runs/
+tests/webwright/screenshots/
+tests/webwright/outputs/
+tests/webwright/final_script_log.txt
