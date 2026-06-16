@@ -698,8 +698,6 @@
 
 	.table-wrap {
 		overflow: visible;
-		border: var(--border-width) solid var(--color-base-300);
-		border-radius: var(--radius-box, 0.5rem);
 	}
 
 	.group-row td {
@@ -787,6 +785,13 @@
 	   pane scroll horizontally when the side pane narrows it (Notion-style — no squish) */
 	.table {
 		width: 100%;
+		/* separate (not the Tailwind-preflight default of collapse) so the table's
+		   own border + radius render — Firefox drops a collapsed table's border
+		   when border-radius is set. spacing:0 keeps inner cell lines tight. */
+		border-collapse: separate;
+		border-spacing: 0;
+		border: var(--border-width) solid var(--color-base-300);
+		border-radius: var(--radius-box, 0.5rem);
 	}
 
 	.table :global(th),
