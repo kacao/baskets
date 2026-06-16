@@ -120,6 +120,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		eligible,
 		labels,
 		projLabels,
+		projectScopedLabels,
 		projDeps,
 		allProjects,
 		milestones,
@@ -139,6 +140,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 					.orderBy(asc(label.position), asc(label.name))
 			: Promise.resolve([]),
 		db.select().from(projectLabel).where(eq(projectLabel.projectId, params.id)),
+		db
+			.select()
+			.from(label)
+			.where(eq(label.projectId, params.id))
+			.orderBy(asc(label.position), asc(label.name)),
 		db.select().from(projectDependency).where(eq(projectDependency.projectId, params.id)),
 		db
 			.select({ id: project.id, name: project.name, workspaceId: project.workspaceId })
@@ -208,6 +214,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		categories: STATUS_CATEGORIES,
 		labels,
 		projectLabelIds: projLabels.map((l) => l.labelId),
+		projectScopedLabels,
 		projectDependsOn: projDeps.map((d) => d.dependsOnId),
 		allProjects: visibleProjects,
 		milestones,
@@ -736,6 +743,77 @@ export const actions: Actions = {
 				return fail(400, { message: 'Unknown label' });
 			await db.insert(projectLabel).values({ projectId: params.id, labelId });
 		}
+		return { success: true };
+	},
+
+	// Project-scoped labels: owned by this project (label.projectId), always
+	// available to its tasks — distinct from toggling shared workspace labels.
+	createProjectLabel: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const name = String(form.get('name') ?? '').trim();
+		if (!name) return fail(400, { message: 'Label name is required' });
+		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
+		const existing = await db
+			.select({ name: label.name })
+			.from(label)
+			.where(eq(label.projectId, params.id));
+		if (existing.some((l) => l.name.toLowerCase() === name.toLowerCase()))
+			return fail(400, { message: 'A label with that name exists' });
+
+		await db.insert(label).values({
+			id: crypto.randomUUID(),
+			name,
+			projectId: params.id,
+			color: parseColor(form.get('color')),
+			icon: parseIconValue(form.get('icon')),
+			position: Date.now(),
+			createdAt: new Date()
+		});
+		return { success: true };
+	},
+
+	updateProjectLabel: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const [existing] = await db.select().from(label).where(eq(label.id, id));
+		if (!existing || existing.projectId !== params.id)
+			return fail(400, { message: 'Unknown label' });
+
+		const set: Partial<typeof label.$inferInsert> = {};
+		if (form.has('name')) {
+			const name = String(form.get('name') ?? '').trim();
+			if (!name) return fail(400, { message: 'Label name is required' });
+			if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
+			const others = await db
+				.select({ id: label.id, name: label.name })
+				.from(label)
+				.where(eq(label.projectId, params.id));
+			if (others.some((l) => l.id !== id && l.name.toLowerCase() === name.toLowerCase()))
+				return fail(400, { message: 'A label with that name exists' });
+			set.name = name;
+		}
+		if (form.has('color')) set.color = parseColor(form.get('color'));
+		if (form.has('icon')) set.icon = parseIconValue(form.get('icon'));
+		if (Object.keys(set).length) await db.update(label).set(set).where(eq(label.id, id));
+		return { success: true };
+	},
+
+	deleteProjectLabel: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		await db.delete(label).where(and(eq(label.id, id), eq(label.projectId, params.id)));
 		return { success: true };
 	},
 

@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
 	customField,
@@ -159,13 +159,15 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.from(milestone)
 			.where(eq(milestone.projectId, params.id))
 			.orderBy(asc(milestone.position), asc(milestone.createdAt)),
-		proj.workspaceId
-			? db
-					.select()
-					.from(label)
-					.where(eq(label.workspaceId, proj.workspaceId))
-					.orderBy(asc(label.position), asc(label.name))
-			: Promise.resolve([]),
+		db
+			.select()
+			.from(label)
+			.where(
+				proj.workspaceId
+					? or(eq(label.workspaceId, proj.workspaceId), eq(label.projectId, params.id))
+					: eq(label.projectId, params.id)
+			)
+			.orderBy(asc(label.position), asc(label.name)),
 		proj.workspaceId
 			? db
 					.select()

@@ -258,10 +258,14 @@ export const labelGroup = sqliteTable('label_group', {
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
 });
 
+// A label is workspace-scoped (workspaceId set, shared pool, attached to projects
+// via project_label) OR project-scoped (projectId set — owned by one project,
+// always available to it). Exactly one of workspaceId/projectId is set.
 export const label = sqliteTable('label', {
 	id: text('id').primaryKey(),
 	name: text('name').notNull(),
 	workspaceId: text('workspace_id').references(() => workspace.id, { onDelete: 'cascade' }),
+	projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
 	groupId: text('group_id').references(() => labelGroup.id, { onDelete: 'set null' }),
 	color: text('color'), // hex #rrggbb or null (tinted chip), like status/custom_field_option
 	icon: text('icon'), // emoji or `iconoir:<name>` or null
