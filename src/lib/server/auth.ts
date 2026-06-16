@@ -9,6 +9,9 @@ export const auth = betterAuth({
 	appName: 'Baskets',
 	secret: env.BETTER_AUTH_SECRET,
 	baseURL: env.BETTER_AUTH_URL ?? 'http://localhost:5173',
+	advanced: {
+		useSecureCookies: process.env.NODE_ENV === 'production'
+	},
 	database: drizzleAdapter(db, {
 		provider: 'sqlite',
 		schema: {

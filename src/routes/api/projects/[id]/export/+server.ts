@@ -18,10 +18,14 @@ import { listProjectCustomFields } from '$lib/server/customFields';
 import { decodeValue, formatDate, formatNumber, MULTI_CAPABLE } from '$lib/customFields';
 import type { RequestHandler } from './$types';
 
-/** Escape one CSV cell per RFC 4180: wrap in quotes when it contains
- *  a comma, quote, CR or LF, doubling any embedded quotes. */
+/** Escape one CSV cell. First, neutralize formula injection: if the cell
+ *  begins with =, +, -, @, tab or CR, prefix a single quote so spreadsheet
+ *  apps (Excel/Sheets) treat it as text, not a formula. Then quote per
+ *  RFC 4180: wrap in quotes when it contains a comma, quote, CR or LF,
+ *  doubling any embedded quotes. */
 function csvCell(value: unknown): string {
-	const s = value == null ? '' : String(value);
+	let s = value == null ? '' : String(value);
+	if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
 	if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
 	return s;
 }

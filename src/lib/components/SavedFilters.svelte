@@ -40,13 +40,14 @@
 		close();
 	}
 
-	async function confirmDelete(e: SubmitEvent) {
+	async function confirmDelete(e: MouseEvent & { currentTarget: HTMLButtonElement }) {
+		const form = e.currentTarget.form;
 		const ok = await confirmDialog($i18n('Delete this saved filter?'), {
 			confirmLabel: $i18n('Delete'),
 			cancelLabel: $i18n('Cancel'),
 			danger: true
 		});
-		if (!ok) e.preventDefault();
+		if (ok) form?.requestSubmit();
 	}
 </script>
 
@@ -71,10 +72,15 @@
 									method="POST"
 									action="?/deleteSavedFilter"
 									use:enhance={() => async ({ update }) => update()}
-									onsubmit={confirmDelete}
 								>
 									<input type="hidden" name="id" value={f.id} />
-									<button class="sf-del" type="submit" aria-label={$i18n('Delete')} title={$i18n('Delete')}>
+									<button
+										class="sf-del"
+										type="button"
+										aria-label={$i18n('Delete')}
+										title={$i18n('Delete')}
+										onclick={confirmDelete}
+									>
 										<Icon name="trash" size={13} />
 									</button>
 								</form>

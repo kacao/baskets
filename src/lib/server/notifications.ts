@@ -12,22 +12,30 @@ export type CreateNotificationInput = {
 	taskId?: string | null;
 };
 
-/** Insert a single notification. Returns the created row. */
-export async function create(input: CreateNotificationInput): Promise<NotificationRow> {
-	const [row] = await db
-		.insert(notification)
-		.values({
-			id: crypto.randomUUID(),
-			userId: input.userId,
-			type: input.type,
-			body: input.body,
-			projectId: input.projectId ?? null,
-			taskId: input.taskId ?? null,
-			read: false,
-			createdAt: new Date()
-		})
-		.returning();
-	return row;
+/**
+ * Insert a single notification. Returns the created row, or null on failure.
+ * Safe to fire-and-forget (`void create(...)`): never rejects.
+ */
+export async function create(input: CreateNotificationInput): Promise<NotificationRow | null> {
+	try {
+		const [row] = await db
+			.insert(notification)
+			.values({
+				id: crypto.randomUUID(),
+				userId: input.userId,
+				type: input.type,
+				body: input.body,
+				projectId: input.projectId ?? null,
+				taskId: input.taskId ?? null,
+				read: false,
+				createdAt: new Date()
+			})
+			.returning();
+		return row;
+	} catch (err) {
+		console.error('notifications.create failed', err);
+		return null;
+	}
 }
 
 /** Most-recent-first notifications for a user. */
@@ -131,9 +139,8 @@ export async function generateDueReminders(userId: string): Promise<Notification
 		const body = overdue
 			? `Overdue: "${r.title}"`
 			: `Due soon: "${r.title}"`;
-		created.push(
-			await create({ userId, type, body, projectId: r.projectId, taskId: r.id })
-		);
+		const row = await create({ userId, type, body, projectId: r.projectId, taskId: r.id });
+		if (row) created.push(row);
 	}
 
 	return created;

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { location, milestone, project, task } from '$lib/server/db/schema';
+import { location, milestone, project, task, user } from '$lib/server/db/schema';
 import {
 	apiError,
 	readJson,
@@ -93,6 +93,10 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	if (body.assigneeId !== undefined) {
 		newAssigneeId =
 			typeof body.assigneeId === 'string' && body.assigneeId ? body.assigneeId : null;
+		if (newAssigneeId) {
+			const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, newAssigneeId));
+			if (!u) return apiError(400, 'assigneeId must reference a valid user');
+		}
 		updates.assigneeId = newAssigneeId;
 	}
 

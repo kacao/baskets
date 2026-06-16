@@ -11,7 +11,11 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
 
-	await generateDueReminders(locals.user.id);
+	try {
+		await generateDueReminders(locals.user.id);
+	} catch (e) {
+		console.error('[notifications] reminder generation failed', e);
+	}
 	const [notifications, unread] = await Promise.all([
 		listForUser(locals.user.id),
 		unreadCount(locals.user.id)

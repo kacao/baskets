@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { apiError } from '$lib/server/api';
-import { canAccessProject } from '$lib/server/permissions';
+import { canAccessProject, canEditProject, canEditWorkspace } from '$lib/server/permissions';
 import {
 	createTemplate,
 	instantiateTemplate,
@@ -37,13 +37,21 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (body.instantiate === true || typeof body.templateId === 'string') {
 		const templateId = typeof body.templateId === 'string' ? body.templateId : '';
 		if (!templateId) return apiError(400, 'templateId is required');
-		const taskId = await instantiateTemplate(templateId, params.id, locals.user.id);
+		let taskId: string | null;
+		try {
+			taskId = await instantiateTemplate(templateId, params.id, locals.user.id);
+		} catch (err) {
+			console.error('[templates] instantiate failed:', err);
+			return apiError(400, 'Template could not be instantiated');
+		}
 		if (!taskId) return apiError(400, 'Template could not be instantiated');
 		broadcastProjectChange(params.id, locals.user.id);
 		return json({ taskId }, { status: 201 });
 	}
 
-	// Create path
+	// Create path requires structure-edit rights (404 not 403 per access=visibility).
+	if (!(await canEditProject(locals.user, params.id))) return apiError(404, 'Not found');
+
 	const name = typeof body.name === 'string' ? body.name.trim() : '';
 	if (!name) return apiError(400, 'name is required');
 	if (name.length > 120) return apiError(400, 'name too long (max 120)');
@@ -57,6 +65,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		.select({ workspaceId: project.workspaceId })
 		.from(project)
 		.where(eq(project.id, params.id));
+
+	// Workspace-scoped templates additionally need workspace-edit rights.
+	if (scope === 'workspace') {
+		if (!proj?.workspaceId) return apiError(404, 'Not found');
+		if (!(await canEditWorkspace(locals.user, proj.workspaceId)))
+			return apiError(404, 'Not found');
+	}
 
 	const id = await createTemplate({
 		name,

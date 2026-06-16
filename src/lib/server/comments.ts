@@ -162,13 +162,17 @@ export async function logActivity(
 	type: string,
 	data: Record<string, unknown> = {}
 ): Promise<void> {
-	await db.insert(activity).values({
-		id: crypto.randomUUID(),
-		projectId,
-		taskId,
-		actorId,
-		type,
-		data: JSON.stringify(data ?? {}),
-		createdAt: new Date()
-	});
+	try {
+		await db.insert(activity).values({
+			id: crypto.randomUUID(),
+			projectId,
+			taskId,
+			actorId,
+			type,
+			data: JSON.stringify(data ?? {}),
+			createdAt: new Date()
+		});
+	} catch (err) {
+		console.error('[activity] log failed:', err);
+	}
 }

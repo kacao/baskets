@@ -41,12 +41,13 @@
 		}
 	}
 
-	async function confirmDelete(e: SubmitEvent) {
+	async function confirmDelete(e: MouseEvent) {
+		const form = (e.currentTarget as HTMLButtonElement).form;
 		const ok = await confirmDialog($t('Delete this template?'), {
 			confirmLabel: $t('Delete'),
 			danger: true
 		});
-		if (!ok) e.preventDefault();
+		if (ok) form?.requestSubmit();
 	}
 </script>
 
@@ -87,10 +88,14 @@
 							method="POST"
 							action="?/deleteTemplate"
 							use:enhance={() => async ({ update }) => update()}
-							onsubmit={confirmDelete}
 						>
 							<input type="hidden" name="templateId" value={tpl.id} />
-							<button class="btn btn-ghost btn-sm" type="submit" aria-label={$t('Delete template')}>
+							<button
+								class="btn btn-ghost btn-sm"
+								type="button"
+								aria-label={$t('Delete template')}
+								onclick={confirmDelete}
+							>
 								<Icon name="trash" size={14} />
 							</button>
 						</form>

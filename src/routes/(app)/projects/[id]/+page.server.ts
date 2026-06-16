@@ -51,6 +51,7 @@ import {
 	canEditProject,
 	canEditTask,
 	canEditView,
+	canEditWorkspace,
 	grantedProjectIds,
 	isAdmin
 } from '$lib/server/permissions';
@@ -749,14 +750,17 @@ export const actions: Actions = {
 		if (ids.length === 0) return fail(400, { message: 'No tasks selected' });
 
 		const set: Partial<typeof task.$inferInsert> = {};
+		// Track whether the new status completes tasks, to cascade to sub-tasks (mirrors single setStatus).
+		let completedStatusId: string | null = null;
 
 		if (form.has('statusId')) {
 			const statusId = String(form.get('statusId') ?? '');
 			if (!statusId) return fail(400, { message: 'Invalid status' });
 			const eligible = await listProjectStatuses(params.id);
-			if (!eligible.some((s) => s.id === statusId))
-				return fail(400, { message: 'Status not eligible for this project' });
+			const target = eligible.find((s) => s.id === statusId);
+			if (!target) return fail(400, { message: 'Status not eligible for this project' });
 			set.statusId = statusId;
+			if (target.category === 'completed') completedStatusId = statusId;
 		}
 		if (form.has('assigneeId')) {
 			const assigneeId = String(form.get('assigneeId') ?? '') || null;
@@ -818,6 +822,13 @@ export const actions: Actions = {
 			.update(task)
 			.set({ ...set, updatedAt: new Date() })
 			.where(inArray(task.id, allowed));
+
+		// Completing a task completes its sub-tasks (mirrors single setStatus cascade).
+		if (completedStatusId)
+			await db
+				.update(task)
+				.set({ statusId: completedStatusId, updatedAt: new Date() })
+				.where(inArray(task.parentId, allowed));
 
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true, updated: allowed.length };
@@ -948,8 +959,8 @@ export const actions: Actions = {
 
 	saveTaskAsTemplate: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canAccessProject(locals.user, params.id)))
-			return fail(403, { message: 'No access to this project' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
 		const taskId = String(form.get('taskId') ?? '');
@@ -961,6 +972,17 @@ export const actions: Actions = {
 		const parent = await getTask(taskId);
 		if (!parent || parent.projectId !== params.id)
 			return fail(400, { message: 'Invalid task' });
+
+		const [proj] = await db
+			.select({ workspaceId: project.workspaceId })
+			.from(project)
+			.where(eq(project.id, params.id));
+
+		// Workspace-scoped templates are workspace structure — require workspace edit rights.
+		if (scope === 'workspace') {
+			if (!proj?.workspaceId || !(await canEditWorkspace(locals.user, proj.workspaceId)))
+				return fail(403, { message: 'No edit permission on this workspace' });
+		}
 
 		const subtasks = await db.select().from(task).where(eq(task.parentId, taskId));
 		const ids = [parent.id, ...subtasks.map((s) => s.id)];
@@ -976,10 +998,6 @@ export const actions: Actions = {
 			: [];
 
 		const payload = buildPayloadFromTask(parent, subtasks, cfValues);
-		const [proj] = await db
-			.select({ workspaceId: project.workspaceId })
-			.from(project)
-			.where(eq(project.id, params.id));
 		await createTemplate({
 			name,
 			scope,
@@ -1001,7 +1019,13 @@ export const actions: Actions = {
 		const templateId = String(form.get('templateId') ?? '');
 		if (!templateId) return fail(400, { message: 'templateId is required' });
 
-		const newId = await instantiateTemplate(templateId, params.id, locals.user.id);
+		let newId: string | null;
+		try {
+			newId = await instantiateTemplate(templateId, params.id, locals.user.id);
+		} catch (err) {
+			console.error('[templates] instantiate failed:', err);
+			return fail(400, { message: 'Template could not be instantiated' });
+		}
 		if (!newId) return fail(400, { message: 'Template could not be instantiated' });
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
