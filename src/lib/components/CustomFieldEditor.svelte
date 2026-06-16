@@ -4,6 +4,7 @@
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
 	import Popover from '$lib/components/Popover.svelte';
+	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
 	import {
 		fieldTypeLabel,
@@ -214,13 +215,23 @@
 					<form
 						method="POST"
 						action="?/deleteCustomField"
-						use:enhance={({ cancel }) => {
-							if (f.inUse > 0 && !confirm($t('Delete this field and its values from {n} task(s)?', { n: f.inUse }))) cancel();
-							return ({ update }) => update();
-						}}
+						use:enhance={() => async ({ update }) => update()}
 					>
 						<input type="hidden" name="id" value={f.id} />
-						<button class="icon-btn icon-btn--danger" type="submit" aria-label={$t('Delete')}>
+						<button
+							class="icon-btn icon-btn--danger"
+							type="button"
+							aria-label={$t('Delete')}
+							onclick={async (e) => {
+								const form = e.currentTarget.form;
+								const msg =
+									f.inUse > 0
+										? $t('Delete this field and its values from {n} task(s)?', { n: f.inUse })
+										: $t('Delete this field?');
+								if (await confirmDialog(msg, { confirmLabel: $t('Delete'), danger: true }))
+									form?.requestSubmit();
+							}}
+						>
 							<Icon name="trash" size={14} />
 						</button>
 					</form>
