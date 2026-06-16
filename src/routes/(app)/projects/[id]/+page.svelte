@@ -320,6 +320,66 @@
 		data.allProjects.filter((p) => data.projectDependsOn.includes(p.id))
 	);
 
+	// Filters (config.filters: TaskFilters) — mirrors FilterBar's facets, but set from
+	// the Customize pane and persisted per view. Same keys/'_none' sentinels so the two
+	// stay in sync. Priority/Assignee/Milestone/Label per request.
+	const PRIORITY_FILTER_OPTIONS = [
+		['urgent', 'Urgent'],
+		['high', 'High'],
+		['medium', 'Medium'],
+		['low', 'Low'],
+		['none', 'None']
+	] as const;
+	const filterGroups = $derived([
+		{
+			key: 'priorities',
+			label: 'Priority',
+			opts: PRIORITY_FILTER_OPTIONS.map(([v, l]) => [v, $t(l)] as [string, string])
+		},
+		{
+			key: 'assigneeIds',
+			label: 'Assignee',
+			opts: [
+				['_none', $t('Unassigned')] as [string, string],
+				...data.users.map((u) => [u.id, u.name] as [string, string])
+			]
+		},
+		{
+			key: 'milestoneIds',
+			label: 'Milestone',
+			opts: [
+				['_none', $t('No milestone')] as [string, string],
+				...data.milestones.map((m) => [m.id, m.name] as [string, string])
+			]
+		},
+		{
+			key: 'labelIds',
+			label: 'Labels',
+			opts: [
+				['_none', $t('No label')] as [string, string],
+				...projectLabels.map((l) => [l.id, l.name] as [string, string])
+			]
+		}
+	]);
+	const viewFilters = $derived(
+		(viewConfig.filters && typeof viewConfig.filters === 'object'
+			? viewConfig.filters
+			: {}) as Record<string, string[]>
+	);
+	const filterChosen = (key: string) => (Array.isArray(viewFilters[key]) ? viewFilters[key] : []);
+	/** activeView config with one filter value toggled, ready to POST (empties dropped). */
+	function toggleFilterConfig(key: string, value: string) {
+		const cur = filterChosen(key);
+		const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
+		const merged: Record<string, unknown> = { ...viewFilters, [key]: next };
+		const cleaned: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(merged)) if (Array.isArray(v) && v.length) cleaned[k] = v;
+		return JSON.stringify({
+			...viewConfig,
+			filters: Object.keys(cleaned).length ? cleaned : undefined
+		});
+	}
+
 	const labelSections = $derived.by(() => {
 		const q = labelQuery.trim().toLowerCase();
 		const match = (l: { name: string }) => !q || l.name.toLowerCase().includes(q);
@@ -923,6 +983,23 @@
 					</form>
 				{/each}
 			</div>
+		{/if}
+
+		{#if ['table', 'board', 'list'].includes(activeView.type)}
+			<span class="label">{$t('Filters')}</span>
+			{#each filterGroups as group (group.key)}
+				<span class="sublabel">{$t(group.label)}</span>
+				<div class="chips-row">
+					{#each group.opts as [val, lbl] (val)}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={toggleFilterConfig(group.key, val)} />
+							<button class="chip" class:chip--on={filterChosen(group.key).includes(val)} type="submit">{lbl}</button>
+						</form>
+					{/each}
+				</div>
+			{/each}
 		{/if}
 
 		{#if ['table', 'board', 'list'].includes(activeView.type) && numberFields.length}
@@ -1576,6 +1653,13 @@
 		gap: var(--sp-1);
 		flex-wrap: wrap;
 		margin-bottom: var(--sp-2);
+	}
+
+	.sublabel {
+		display: block;
+		font-size: 11px;
+		color: var(--color-muted);
+		margin: 2px 0;
 	}
 
 	.chip {
