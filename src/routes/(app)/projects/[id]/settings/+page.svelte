@@ -54,11 +54,11 @@
 	<form method="POST" action="?/updateProject" use:enhance>
 		<div class="field">
 			<label class="label" for="pname">{$t('Name')}</label>
-			<input id="pname" name="name" class="input" value={data.project.name} required />
+			<input id="pname" name="name" class="input input--bare" value={data.project.name} required />
 		</div>
 		<div class="field">
 			<label class="label" for="pdesc">{$t('Description')}</label>
-			<textarea id="pdesc" name="description" class="textarea" rows="2"
+			<textarea id="pdesc" name="description" class="textarea input--bare" rows="2"
 				>{data.project.description ?? ''}</textarea
 			>
 		</div>
@@ -452,6 +452,16 @@
 		flex-direction: column;
 		gap: var(--sp-2);
 		align-items: flex-start;
+	}
+
+	.input--bare {
+		width: 100%;
+		border: none;
+		box-shadow: none;
+		outline: none;
+		background: transparent;
+		padding-left: 0;
+		padding-right: 0;
 	}
 
 	.color-in {
