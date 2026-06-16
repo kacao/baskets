@@ -102,9 +102,6 @@ export const project = sqliteTable('project', {
 	// how statuses render across this project's views: text | icon | text-icon
 	statusDisplay: text('status_display').notNull().default('text'),
 	pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
-	// budget: which number custom fields hold estimated / actual cost (BASDEV-10)
-	estimatedCostFieldId: text('estimated_cost_field_id'),
-	actualCostFieldId: text('actual_cost_field_id'),
 	createdBy: text('created_by')
 		.notNull()
 		.references(() => user.id),

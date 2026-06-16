@@ -24,7 +24,6 @@
 	import FilterBar from '$lib/components/FilterBar.svelte';
 	import SavedFilters from '$lib/components/SavedFilters.svelte';
 	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
-	import BudgetSummary from '$lib/components/BudgetSummary.svelte';
 	import { filterTasks } from '$lib/taskFilter';
 	import { sortTasks, parseSortBy } from '$lib/taskSort';
 	import { selection } from '$lib/selection.svelte';
@@ -1197,14 +1196,6 @@
 			</div>
 			<button class="btn btn-sm btn-primary" type="submit">{$t('Add milestone')}</button>
 		</form>
-		<BudgetSummary
-			tasks={data.tasks}
-			taskCustomValues={data.taskCustomValues}
-			customFields={data.customFields}
-			milestones={data.milestones}
-			estimatedCostFieldId={data.project.estimatedCostFieldId}
-			actualCostFieldId={data.project.actualCostFieldId}
-		/>
 	</SidePane>
 {/if}
 

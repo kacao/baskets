@@ -166,13 +166,8 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 		'Assignee',
 		'Milestone',
 		'Due Date',
-		...customFields.map((f) => f.name),
-		'Estimated Cost',
-		'Actual Cost'
+		...customFields.map((f) => f.name)
 	];
-
-	const estId = proj.estimatedCostFieldId;
-	const actId = proj.actualCostFieldId;
 
 	const lines = [csvRow(header)];
 	for (const t of tasks) {
@@ -187,8 +182,6 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 			t.dueDate ? new Date(t.dueDate).toISOString().slice(0, 10) : ''
 		];
 		for (const f of customFields) row.push(renderCustom(f.id, vals?.get(f.id)));
-		row.push(estId ? renderCustom(estId, vals?.get(estId)) : '');
-		row.push(actId ? renderCustom(actId, vals?.get(actId)) : '');
 		lines.push(csvRow(row));
 	}
 

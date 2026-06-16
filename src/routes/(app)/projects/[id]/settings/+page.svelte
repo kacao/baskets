@@ -28,7 +28,6 @@
 		data.allProjects.filter((p) => data.projectDependsOn.includes(p.id))
 	);
 	const userName = (id: string) => data.users.find((u) => u.id === id)?.name ?? id;
-	const numberFields = $derived(data.customFields.filter((f) => f.type === 'number'));
 	const grantLabel = (g: { resourceType: string; resourceId: string }) => {
 		if (g.resourceType === 'project') return $t('project');
 		if (g.resourceType === 'view')
@@ -158,39 +157,6 @@
 		</div>
 	</div>
 {/if}
-
-<!-- Budget (BASDEV-10) -->
-<div class="card section">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('Budget')}</h4>
-	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
-		{$t('Choose which number fields hold estimated and actual cost. The Milestones pane rolls them up per milestone.')}
-	</p>
-	{#if numberFields.length}
-		<form method="POST" action="?/setBudgetFields" use:enhance class="u-flex" style="flex-wrap: wrap; gap: var(--sp-3);">
-			<div class="field" style="margin: 0;">
-				<label class="label" for="estField">{$t('Estimated cost field')}</label>
-				<select id="estField" name="estimatedCostFieldId" class="select" style="width: auto;">
-					<option value="">{$t('none')}</option>
-					{#each numberFields as f (f.id)}
-						<option value={f.id} selected={data.project.estimatedCostFieldId === f.id}>{f.name}</option>
-					{/each}
-				</select>
-			</div>
-			<div class="field" style="margin: 0;">
-				<label class="label" for="actField">{$t('Actual cost field')}</label>
-				<select id="actField" name="actualCostFieldId" class="select" style="width: auto;">
-					<option value="">{$t('none')}</option>
-					{#each numberFields as f (f.id)}
-						<option value={f.id} selected={data.project.actualCostFieldId === f.id}>{f.name}</option>
-					{/each}
-				</select>
-			</div>
-			<button class="btn btn-sm btn-primary" type="submit" style="align-self: flex-end;">{$t('Save')}</button>
-		</form>
-	{:else}
-		<p class="u-tiny u-muted">{$t('Create a Number custom field first, then pick it here.')}</p>
-	{/if}
-</div>
 
 <!-- Labels -->
 <div class="card section">

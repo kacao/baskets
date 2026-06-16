@@ -211,7 +211,7 @@ Create a template, or instantiate one into the project.
 ## Export
 
 ### GET /api/projects/{id}/export?format=csv
-Download all project tasks as CSV (UTF-8 BOM, CRLF, RFC-4180 quoting). Columns: Title, Parent, Status, Priority, Assignee, Milestone, Due Date, one per custom field, plus Estimated Cost / Actual Cost (from the project's budget fields). Access-gated (`404` otherwise); served as a `Content-Disposition: attachment` download.
+Download all project tasks as CSV (UTF-8 BOM, CRLF, RFC-4180 quoting). Columns: Title, Parent, Status, Priority, Assignee, Milestone, Due Date, one per custom field. Access-gated (`404` otherwise); served as a `Content-Disposition: attachment` download.
 
 ## Object shapes
 
