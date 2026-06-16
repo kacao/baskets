@@ -328,6 +328,8 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();
 		const groupId = String(form.get('groupId') ?? '') || null;
+		const color = parseColor(form.get('color'));
+		const icon = parseIconValue(form.get('icon'));
 
 		if (!name) return fail(400, { message: 'Label name is required' });
 		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
@@ -349,9 +351,40 @@ export const actions: Actions = {
 			name,
 			workspaceId: params.id,
 			groupId,
+			color,
+			icon,
 			position: Date.now(),
 			createdAt: new Date()
 		});
+		return { success: true };
+	},
+
+	updateLabel: async ({ request, params, locals }) => {
+		const denied = await guard(locals, params.id);
+		if (denied) return denied;
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const [existing] = await db.select().from(label).where(eq(label.id, id));
+		if (!existing || existing.workspaceId !== params.id)
+			return fail(400, { message: 'Unknown label' });
+
+		const set: Partial<typeof label.$inferInsert> = {};
+		if (form.has('name')) {
+			const name = String(form.get('name') ?? '').trim();
+			if (!name) return fail(400, { message: 'Label name is required' });
+			if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
+			const others = await db
+				.select({ id: label.id, name: label.name })
+				.from(label)
+				.where(eq(label.workspaceId, params.id));
+			if (others.some((l) => l.id !== id && l.name.toLowerCase() === name.toLowerCase()))
+				return fail(400, { message: 'A label with that name exists' });
+			set.name = name;
+		}
+		if (form.has('color')) set.color = parseColor(form.get('color'));
+		if (form.has('icon')) set.icon = parseIconValue(form.get('icon'));
+		if (Object.keys(set).length) await db.update(label).set(set).where(eq(label.id, id));
 		return { success: true };
 	},
 

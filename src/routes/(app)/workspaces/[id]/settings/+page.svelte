@@ -1,10 +1,26 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import Icon from '$lib/components/Icon.svelte';
+	import EntityIcon from '$lib/components/EntityIcon.svelte';
+	import IconPicker from '$lib/components/IconPicker.svelte';
+	import Popover from '$lib/components/Popover.svelte';
+	import LabelChip from '$lib/components/LabelChip.svelte';
 	import StatusEditor from '$lib/components/StatusEditor.svelte';
 	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
+
+	let newLabelIcon = $state('');
+
+	// Patch one field of an existing label (color/icon/name) without a form round-trip.
+	async function patchLabel(id: string, field: 'color' | 'icon' | 'name', value: string) {
+		const fd = new FormData();
+		fd.set('id', id);
+		fd.set(field, value);
+		await fetch('?/updateLabel', { method: 'POST', body: fd });
+		await invalidateAll();
+	}
 
 	const userName = (id: string) => data.users.find((u) => u.id === id)?.name ?? id;
 	const grouped = $derived([
@@ -73,9 +89,34 @@
 			</div>
 			{#each section.labels as l (l.id)}
 				<div class="row">
-					<span class="badge">{l.name}</span>
+					<LabelChip label={l} />
 					<span class="u-tiny u-muted">{$t('{n} use(s)', { n: l.inUse })}</span>
 					<span style="flex: 1;"></span>
+					<input
+						type="color"
+						class="color-in"
+						value={l.color ?? '#71717a'}
+						aria-label={$t('Label color')}
+						onchange={(e) => patchLabel(l.id, 'color', e.currentTarget.value)}
+					/>
+					<Popover ariaLabel={$t('Label icon')}>
+						{#snippet trigger()}
+							{#if l.icon}<EntityIcon value={l.icon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
+						{/snippet}
+						{#snippet panel(close)}
+							<IconPicker
+								value={l.icon ?? ''}
+								onSelect={(v) => {
+									patchLabel(l.id, 'icon', v);
+									close();
+								}}
+								onRemove={() => {
+									patchLabel(l.id, 'icon', '');
+									close();
+								}}
+							/>
+						{/snippet}
+					</Popover>
 					<form method="POST" action="?/deleteLabel" use:enhance>
 						<input type="hidden" name="id" value={l.id} />
 						<button class="btn btn-sm btn-error" type="submit">{$t('Delete')}</button>
@@ -87,8 +128,37 @@
 		</div>
 	{/each}
 
-	<form method="POST" action="?/createLabel" use:enhance class="u-flex" style="flex-wrap: wrap; margin-bottom: var(--sp-2);">
+	<form
+		method="POST"
+		action="?/createLabel"
+		use:enhance={() => async ({ update }) => {
+			newLabelIcon = '';
+			await update();
+		}}
+		class="u-flex"
+		style="flex-wrap: wrap; margin-bottom: var(--sp-2);"
+	>
 		<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder={$t('New label…')} required maxlength="40" />
+		<input type="color" name="color" class="color-in" value="#71717a" aria-label={$t('Label color')} />
+		<Popover ariaLabel={$t('Label icon')}>
+			{#snippet trigger()}
+				{#if newLabelIcon}<EntityIcon value={newLabelIcon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
+			{/snippet}
+			{#snippet panel(close)}
+				<IconPicker
+					value={newLabelIcon}
+					onSelect={(v) => {
+						newLabelIcon = v;
+						close();
+					}}
+					onRemove={() => {
+						newLabelIcon = '';
+						close();
+					}}
+				/>
+			{/snippet}
+		</Popover>
+		<input type="hidden" name="icon" value={newLabelIcon} />
 		<select name="groupId" class="select" style="width: auto;">
 			<option value="">{$t('no group')}</option>
 			{#each data.groups as g (g.id)}
@@ -196,5 +266,15 @@
 
 	.x-btn:hover {
 		color: var(--color-error);
+	}
+
+	.color-in {
+		width: 28px;
+		height: 24px;
+		padding: 0;
+		border: 1px solid var(--color-border-subtle);
+		border-radius: var(--radius-field, 0.25rem);
+		background: none;
+		cursor: pointer;
 	}
 </style>

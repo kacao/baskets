@@ -12,6 +12,7 @@
 	import TaskComments from '$lib/components/TaskComments.svelte';
 	import TaskAttachments from '$lib/components/TaskAttachments.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { fieldAppliesTo } from '$lib/customFields';
 	import { describeRecurrence } from '$lib/recurrence';
 	import { confirmDialog } from '$lib/confirm.svelte';
@@ -62,7 +63,7 @@
 		statuses: Status[];
 		milestones: { id: string; name: string }[];
 		locations: Location[];
-		labels: { id: string; name: string }[];
+		labels: { id: string; name: string; color?: string | null; icon?: string | null }[];
 		taskLabels: { taskId: string; labelId: string }[];
 		taskDeps: { taskId: string; dependsOnId: string }[];
 		customFields?: { id: string; name: string; type: string; config: Record<string, unknown>; appliesTo?: string }[];
@@ -608,7 +609,7 @@
 			<span class="label">{$t('Labels')}</span>
 			<div class="chips-row">
 				{#each labelsOf(task.id) as l (l!.id)}
-					<span class="badge">{l!.name}</span>
+					<LabelChip label={l!} />
 				{/each}
 			</div>
 		</div>

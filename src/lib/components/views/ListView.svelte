@@ -9,6 +9,7 @@
 	import { fieldAggregations } from '$lib/customFields';
 	import { sortTasks } from '$lib/taskSort';
 	import { selection } from '$lib/selection.svelte';
+	import LabelChip from '$lib/components/LabelChip.svelte';
 
 	type Task = {
 		id: string;
@@ -52,7 +53,7 @@
 		tasks: Task[];
 		statuses: Status[];
 		users: { id: string; name: string }[];
-		labels: { id: string; name: string }[];
+		labels: { id: string; name: string; color?: string | null; icon?: string | null }[];
 		taskLabels: { taskId: string; labelId: string }[];
 		taskDeps: { taskId: string; dependsOnId: string }[];
 		milestones: { id: string; name: string }[];
@@ -275,7 +276,7 @@
 			<div class="row-meta">
 				<PriorityBadge priority={t.priority} />
 				{#each labelsOf(t.id) as l (l!.id)}
-					<span class="badge">{l!.name}</span>
+					<LabelChip label={l!} />
 				{/each}
 				{#if milestoneName(t.milestoneId)}
 					<span class="badge">{milestoneName(t.milestoneId)}</span>

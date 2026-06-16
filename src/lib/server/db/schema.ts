@@ -263,6 +263,8 @@ export const label = sqliteTable('label', {
 	name: text('name').notNull(),
 	workspaceId: text('workspace_id').references(() => workspace.id, { onDelete: 'cascade' }),
 	groupId: text('group_id').references(() => labelGroup.id, { onDelete: 'set null' }),
+	color: text('color'), // hex #rrggbb or null (tinted chip), like status/custom_field_option
+	icon: text('icon'), // emoji or `iconoir:<name>` or null
 	position: integer('position').notNull().default(0),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
 });

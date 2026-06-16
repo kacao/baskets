@@ -7,6 +7,7 @@
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
+	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { fieldAppliesTo, fieldAggregations } from '$lib/customFields';
 	import { sortTasks } from '$lib/taskSort';
 	import { selection } from '$lib/selection.svelte';
@@ -61,7 +62,7 @@
 		statuses: Status[];
 		milestones: { id: string; name: string }[];
 		locations: Location[];
-		labels: { id: string; name: string }[];
+		labels: { id: string; name: string; color?: string | null; icon?: string | null }[];
 		taskLabels: { taskId: string; labelId: string }[];
 		taskDeps: { taskId: string; dependsOnId: string }[];
 		customFields?: CustomFieldDef[];
@@ -547,7 +548,7 @@
 							<td>
 								<div class="cell-labels">
 									{#each labelsOf(t.id) as l (l!.id)}
-										<span class="badge badge-sm">{l!.name}</span>
+										<LabelChip label={l!} size={11} />
 									{:else}
 										<span class="u-muted">—</span>
 									{/each}
@@ -604,7 +605,7 @@
 							{#if show('labels')}
 								<td>
 									<div class="cell-labels">
-										{#each labelsOf(s.id) as l (l!.id)}<span class="badge badge-sm">{l!.name}</span>{:else}<span class="u-muted">—</span>{/each}
+										{#each labelsOf(s.id) as l (l!.id)}<LabelChip label={l!} size={11} />{:else}<span class="u-muted">—</span>{/each}
 									</div>
 								</td>
 							{/if}
