@@ -6,6 +6,7 @@ import {
 	formatNumber,
 	formatDate,
 	fieldAppliesTo,
+	isMulti,
 	MULTI_CAPABLE
 } from '$lib/customFields';
 
@@ -67,14 +68,15 @@ describe('defaultConfig', () => {
 		expect(defaultConfig('date')).toEqual({ dateFormat: 'full', timeFormat: 'hidden' });
 	});
 
-	it('builds a multi:false config for person/place/files', () => {
+	it('builds a multi:false config for person/place/files/task', () => {
 		expect(defaultConfig('person')).toEqual({ multi: false });
 		expect(defaultConfig('place')).toEqual({ multi: false });
 		expect(defaultConfig('files')).toEqual({ multi: false });
+		expect(defaultConfig('task')).toEqual({ multi: false });
 	});
 
 	it('returns an empty config for plain scalar types', () => {
-		for (const type of ['text', 'task', 'checkbox', 'email', 'phone', 'url']) {
+		for (const type of ['text', 'checkbox', 'email', 'phone', 'url']) {
 			expect(defaultConfig(type)).toEqual({});
 		}
 	});
@@ -229,5 +231,37 @@ describe('fieldAppliesTo', () => {
 	it('applies only to sub-tasks when appliesTo is "subtasks"', () => {
 		expect(fieldAppliesTo({ appliesTo: 'subtasks' }, true)).toBe(true);
 		expect(fieldAppliesTo({ appliesTo: 'subtasks' }, false)).toBe(false);
+	});
+});
+
+describe('task field is multi-capable', () => {
+	it('includes task in the multi-capable set', () => {
+		expect(MULTI_CAPABLE.has('task')).toBe(true);
+	});
+
+	it('decodes a JSON id-array of task ids', () => {
+		expect(decodeValue({ type: 'task' }, '["t1","t2"]')).toEqual(['t1', 't2']);
+		expect(decodeValue({ type: 'task' }, '[]')).toEqual([]);
+	});
+
+	it('recovers a legacy scalar task id (pre-multi) as a single-element array', () => {
+		expect(decodeValue({ type: 'task' }, 'abc-123')).toEqual(['abc-123']);
+	});
+
+	it('keeps other multi types returning [] for non-array values (no scalar era)', () => {
+		expect(decodeValue({ type: 'select' }, 'not-json')).toEqual([]);
+		expect(decodeValue({ type: 'person' }, '"u1"')).toEqual([]);
+	});
+
+	it('sanitizes a task config to a multi flag', () => {
+		expect(sanitizeConfig('task', { multi: true })).toEqual({ multi: true });
+		expect(sanitizeConfig('task', { multi: 'yes', junk: 1 })).toEqual({ multi: false });
+		expect(sanitizeConfig('task', null)).toEqual({ multi: false });
+	});
+
+	it('isMulti is true only when a task field opts in via config.multi', () => {
+		expect(isMulti({ type: 'task', config: { multi: true } })).toBe(true);
+		expect(isMulti({ type: 'task', config: { multi: false } })).toBe(false);
+		expect(isMulti({ type: 'task', config: {} })).toBe(false);
 	});
 });

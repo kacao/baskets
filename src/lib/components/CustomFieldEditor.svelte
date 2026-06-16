@@ -85,7 +85,7 @@
 		const c = f.config ?? {};
 		if (f.type === 'number') return $t(NUMBER_FORMAT_LABELS[(c.numberFormat as string) ?? 'number']);
 		if (f.type === 'date') return $t(DATE_FORMAT_LABELS[(c.dateFormat as string) ?? 'full']);
-		if (['select', 'person', 'place', 'files'].includes(f.type) && c.multi) return $t('multiple');
+		if (['select', 'person', 'place', 'files', 'task'].includes(f.type) && c.multi) return $t('multiple');
 		return '';
 	}
 
@@ -159,7 +159,7 @@
 		<select class="select cfg-in" bind:value={cfg.displayOption} aria-label={$t('Display')}>
 			{#each SELECT_DISPLAYS as d (d)}<option value={d}>{$t(DISPLAY_LABELS[d])}</option>{/each}
 		</select>
-	{:else if type === 'person' || type === 'place' || type === 'files'}
+	{:else if type === 'person' || type === 'place' || type === 'files' || type === 'task'}
 		<label class="cfg-check"><input type="checkbox" bind:checked={cfg.multi} /> {$t('Allow multiple')}</label>
 	{/if}
 {/snippet}

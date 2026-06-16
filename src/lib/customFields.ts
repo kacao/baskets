@@ -1,7 +1,8 @@
 // Custom field types + pure helpers (client-safe; server re-exports from
 // $lib/server/customFields). Field defs are project-scoped (custom_field);
 // values live one-per-(task,field) in task_custom_value as a scalar string or a
-// JSON array for the multi-capable types. Display-only in v1 (no sort/group/filter).
+// JSON array for the multi-capable types (select/person/place/files/task).
+// Display-only in v1 (no sort/group/filter).
 
 export const CUSTOM_FIELD_TYPES = [
 	'text',
@@ -36,7 +37,13 @@ export const FIELD_TYPE_LABELS: Record<string, string> = {
 export const fieldTypeLabel = (t: string) => FIELD_TYPE_LABELS[t] ?? t;
 
 // Types whose value is always stored as a JSON array (single = 1-element array).
-export const MULTI_CAPABLE: ReadonlySet<string> = new Set(['select', 'person', 'place', 'files']);
+export const MULTI_CAPABLE: ReadonlySet<string> = new Set([
+	'select',
+	'person',
+	'place',
+	'files',
+	'task'
+]);
 
 // which tasks a field applies to (independent of type)
 export const APPLIES_TO = ['all', 'tasks', 'subtasks'] as const;
@@ -85,6 +92,7 @@ export function defaultConfig(type: string): FieldConfig {
 		case 'person':
 		case 'place':
 		case 'files':
+		case 'task':
 			return { multi: false };
 		default:
 			return {};
@@ -112,6 +120,7 @@ export function sanitizeConfig(type: string, raw: unknown): FieldConfig {
 		case 'person':
 		case 'place':
 		case 'files':
+		case 'task':
 			return { multi: c.multi === true };
 		default:
 			return {};
@@ -128,10 +137,13 @@ export function decodeValue(field: { type: string }, raw: string | null | undefi
 	if (MULTI_CAPABLE.has(field.type)) {
 		try {
 			const v = JSON.parse(raw);
-			return Array.isArray(v) ? v : [];
+			if (Array.isArray(v)) return v;
 		} catch {
-			return [];
+			// fall through
 		}
+		// `task` is the only multi type with a scalar era — recover its legacy
+		// bare-id values as a single-element array; others are always arrays.
+		return field.type === 'task' ? [raw] : [];
 	}
 	return raw;
 }

@@ -37,7 +37,7 @@
 	} = $props();
 
 	const multi = $derived(field.config?.multi === true);
-	const isArrayType = $derived(['select', 'person', 'place', 'files'].includes(field.type));
+	const isArrayType = $derived(['select', 'person', 'place', 'files', 'task'].includes(field.type));
 
 	// svelte-ignore state_referenced_locally
 	let current = $state<string>(value ?? '');
@@ -146,7 +146,7 @@
 	{:else if field.type === 'place'}
 		<span class="chips">{#each ids as id (id)}<span class="chip">{locTitle(id)}</span>{/each}</span>
 	{:else if field.type === 'task'}
-		<span class="v">{taskTitle(current)}</span>
+		<span class="chips">{#each ids as id (id)}<span class="chip">{taskTitle(id)}</span>{/each}</span>
 	{:else if field.type === 'files'}
 		<span class="chips">
 			{#each ids as id (id)}
@@ -219,8 +219,8 @@
 		<input class="input search" placeholder={$t('Search tasks…')} bind:value={query} autocomplete="off" />
 		<div class="pick">
 			{#each matchTasks as tk (tk.id)}
-				<button class="pick-item" type="button" onclick={() => { set(current === tk.id ? '' : tk.id); close(); }}>
-					<span class="chk-box">{#if current === tk.id}<Icon name="check" size={12} />{/if}</span>{tk.title}
+				<button class="pick-item" type="button" onclick={() => { toggleId(tk.id); if (!multi) close(); }}>
+					<span class="chk-box">{#if ids.includes(tk.id)}<Icon name="check" size={12} />{/if}</span>{tk.title}
 				</button>
 			{/each}
 		</div>

@@ -60,10 +60,13 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 		if (s.trim()) {
 			try {
 				const v = JSON.parse(s);
-				if (!Array.isArray(v)) return { error: 'Invalid value' };
-				ids = v.map(String);
+				if (Array.isArray(v)) ids = v.map(String);
+				else if (type === 'task') ids = [s.trim()]; // legacy scalar task id
+				else return { error: 'Invalid value' };
 			} catch {
-				return { error: 'Invalid value' };
+				// a bare (non-JSON) id is only valid for the formerly-scalar `task` type
+				if (type === 'task') ids = [s.trim()];
+				else return { error: 'Invalid value' };
 			}
 		}
 		ids = [...new Set(ids)];
@@ -86,6 +89,12 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 				.from(location)
 				.where(and(eq(location.projectId, projectId), inArray(location.id, ids)));
 			valid = new Set(locs.map((l) => l.id));
+		} else if (type === 'task') {
+			const ts = await db
+				.select({ id: task.id })
+				.from(task)
+				.where(and(eq(task.projectId, projectId), inArray(task.id, ids)));
+			valid = new Set(ts.map((t) => t.id));
 		} else {
 			// files
 			const fs = await db
@@ -133,13 +142,6 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 			const v = s.trim();
 			if (!v) return { value: null };
 			if (isNaN(+new Date(v))) return { error: 'Invalid date' };
-			return { value: v };
-		}
-		case 'task': {
-			const v = s.trim();
-			if (!v) return { value: null };
-			const [t] = await db.select({ id: task.id, projectId: task.projectId }).from(task).where(eq(task.id, v));
-			if (!t || t.projectId !== projectId) return { error: 'Unknown task' };
 			return { value: v };
 		}
 		default:
