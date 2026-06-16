@@ -459,7 +459,7 @@
 			</Popover>
 
 			<!-- Start date -->
-			<Popover ariaLabel={$t('Start date')}>
+			<Popover ariaLabel={$t('Start date')} align="right">
 				{#snippet trigger()}
 					<span class="pill-val mono" class:pill-ph={!task.startDate}>{fmtDate(task.startDate ?? null) ?? $t('Start date')}</span>
 				{/snippet}
@@ -486,7 +486,7 @@
 			</Popover>
 
 			<!-- Due date -->
-			<Popover ariaLabel={$t('Due date')}>
+			<Popover ariaLabel={$t('Due date')} align="right">
 				{#snippet trigger()}
 					<span class="pill-val mono" class:pill-ph={!task.dueDate}>{fmtDate(task.dueDate) ?? $t('Due date')}</span>
 				{/snippet}
