@@ -138,7 +138,7 @@
 		class="u-flex"
 		style="flex-wrap: wrap; margin-bottom: var(--sp-2);"
 	>
-		<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder={$t('New label…')} required maxlength="40" />
+		<input name="name" class="input" style="width: 200px; max-width: 100%;" placeholder={$t('New label…')} required maxlength="40" />
 		<input type="color" name="color" class="color-in" value="#71717a" aria-label={$t('Label color')} />
 		<Popover ariaLabel={$t('Label icon')}>
 			{#snippet trigger()}

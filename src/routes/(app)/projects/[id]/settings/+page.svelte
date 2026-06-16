@@ -49,8 +49,8 @@
 {/if}
 
 <!-- General -->
+<h4 class="section-title">{$t('General')}</h4>
 <div class="card section">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('General')}</h4>
 	<form method="POST" action="?/updateProject" use:enhance>
 		<div class="field">
 			<label class="label" for="pname">{$t('Name')}</label>
@@ -67,8 +67,8 @@
 </div>
 
 <!-- Statuses -->
+<h4 class="section-title">{$t('Statuses')}</h4>
 <div class="card section">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('Statuses')}</h4>
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
 		{$t('Pick which default and workspace statuses this project uses, and add statuses that only exist in this project.')}
 	</p>
@@ -126,8 +126,8 @@
 </div>
 
 <!-- Custom fields -->
+<h4 class="section-title">{$t('Custom fields')}</h4>
 <div class="card section">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('Custom fields')}</h4>
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
 		{$t('Project-specific fields shown on every task. Type is fixed once a field is created.')}
 	</p>
@@ -136,8 +136,8 @@
 
 {#if data.customFields.some((f) => f.entity === 'project')}
 	<!-- Project field values: the project's own (entity='project') custom fields -->
+	<h4 class="section-title">{$t('Project fields')}</h4>
 	<div class="card section">
-		<h4 style="margin-bottom: var(--sp-2);">{$t('Project fields')}</h4>
 		<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
 			{$t('Values for this project’s own custom fields.')}
 		</p>
@@ -159,8 +159,8 @@
 {/if}
 
 <!-- Labels -->
+<h4 class="section-title">{$t('Labels')}</h4>
 <div class="card section">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('Labels')}</h4>
 	<span class="label">{$t('Workspace labels')}</span>
 	<div class="chips-row" style="margin-bottom: var(--sp-3);">
 		{#each data.labels.filter((l) => l.workspaceId) as l (l.id)}
@@ -223,7 +223,7 @@
 		class="u-flex"
 		style="flex-wrap: wrap; margin-top: var(--sp-1);"
 	>
-		<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder={$t('New project label…')} required maxlength="40" />
+		<input name="name" class="input" style="width: 200px; max-width: 100%;" placeholder={$t('New project label…')} required maxlength="40" />
 		<input type="color" name="color" class="color-in" value="#71717a" aria-label={$t('Label color')} />
 		<Popover ariaLabel={$t('Label icon')}>
 			{#snippet trigger()}
@@ -249,8 +249,8 @@
 </div>
 
 <!-- Dependencies -->
+<h4 class="section-title">{$t('Depends on projects')}</h4>
 <div class="card section">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('Depends on projects')}</h4>
 	<div class="chips-row">
 		{#each dependsOn as p (p.id)}
 			<form method="POST" action="?/removeProjectDep" use:enhance>
@@ -278,8 +278,8 @@
 </div>
 
 <!-- Milestones -->
+<h4 class="section-title">{$t('Milestones')}</h4>
 <div class="card section">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('Milestones')}</h4>
 	{#each data.milestones as m (m.id)}
 		<div class="u-flex" style="margin-bottom: var(--sp-1);">
 			<span class="u-small">{m.name}</span>
@@ -300,8 +300,8 @@
 </div>
 
 <!-- Locations -->
+<h4 class="section-title">{$t('Locations')}</h4>
 <div class="card section">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('Locations')}</h4>
 	{#each data.locations as l (l.id)}
 		<div class="row">
 			{#if editingLocation === l.id}
@@ -352,8 +352,8 @@
 
 {#if data.perm.admin}
 	<!-- Permissions -->
+	<h4 class="section-title">{$t('Edit grants')}</h4>
 	<div class="card section">
-		<h4 style="margin-bottom: var(--sp-2);">{$t('Edit grants')}</h4>
 		{#each data.grants as g (g.id)}
 			<div class="u-flex" style="margin-bottom: var(--sp-1);">
 				<span class="u-small">{userName(g.userId)}</span>
@@ -389,8 +389,8 @@
 {/if}
 
 <!-- Danger -->
+<h4 class="section-title">{$t('Danger zone')}</h4>
 <div class="card section">
-	<h4 style="margin-bottom: var(--sp-2);">{$t('Danger zone')}</h4>
 	<form
 		method="POST"
 		action="?/deleteProject"
@@ -407,6 +407,19 @@
 	.section {
 		max-width: 640px;
 		margin-bottom: var(--sp-3);
+	}
+
+	.section-title {
+		max-width: 640px;
+		margin: var(--sp-5) 0 var(--sp-2);
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--color-fg);
+	}
+
+	/* first section title sits right under the page heading — less top gap */
+	.section-title:first-of-type {
+		margin-top: var(--sp-2);
 	}
 
 	.row {
