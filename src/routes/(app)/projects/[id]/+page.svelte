@@ -985,20 +985,19 @@
 			<div class="chips-row">
 				{@render selectPill($t('Sort by'), SORT_FIELD_OPTIONS, sortFieldValue, setSortFieldConfig)}
 				{#if sortFieldValue}
-					<div class="toggle-group">
+					<span class="seg">
 						<button
-							class="toggle"
-							class:toggle--on={!sortParsed.desc}
+							class="seg-btn"
+							class:seg-btn--on={!sortParsed.desc}
 							type="button"
 							onclick={() => postViewConfig(setSortDirConfig(false))}>{$t('A–Z')}</button
-						>
-						<button
-							class="toggle"
-							class:toggle--on={sortParsed.desc}
+						><button
+							class="seg-btn"
+							class:seg-btn--on={sortParsed.desc}
 							type="button"
 							onclick={() => postViewConfig(setSortDirConfig(true))}>{$t('Z–A')}</button
 						>
-					</div>
+					</span>
 				{/if}
 			</div>
 			<span class="label">{$t('Columns')}</span>
@@ -1800,31 +1799,38 @@
 		padding: 6px 8px;
 	}
 
-	/* Sort direction toggle group [A–Z | Z–A] */
-	.toggle-group {
+	/* Sort direction segmented toggle [A–Z | Z–A] */
+	.seg {
 		display: inline-flex;
 		border: 1px solid var(--color-border-subtle);
 		border-radius: var(--radius-field, 0.25rem);
 		overflow: hidden;
 	}
 
-	.toggle {
+	.seg-btn {
 		border: none;
 		background: var(--color-bg);
 		color: var(--color-muted);
 		font-family: var(--font-mono);
 		font-size: 11px;
-		padding: 2px 8px;
+		line-height: 1.7;
+		padding: 0 8px;
 		cursor: pointer;
+		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
 	}
 
-	.toggle + .toggle {
+	.seg-btn + .seg-btn {
 		border-left: 1px solid var(--color-border-subtle);
 	}
 
-	.toggle--on {
-		background: color-mix(in oklab, var(--color-fg) 12%, var(--color-bg));
+	.seg-btn:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.seg-btn--on {
+		background: var(--color-surface-muted);
 		color: var(--color-fg);
+		font-weight: 600;
 	}
 
 	.chip {
