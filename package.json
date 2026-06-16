@@ -29,6 +29,10 @@
 		"tailwindcss": "^4.3.0",
 		"ws": "^8.21.0"
 	},
+	"overrides": {
+		"esbuild": "0.25.12",
+		"cookie": "^0.7.0"
+	},
 	"devDependencies": {
 		"@sveltejs/adapter-node": "^5.2.0",
 		"@sveltejs/kit": "^2.20.0",
