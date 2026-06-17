@@ -187,11 +187,20 @@
 		)
 	);
 
+	// move THIS sub-task to a different parent: top-level tasks except self + current parent
+	let parentQuery = $state('');
+	const parentChoices = $derived(
+		tasks.filter(
+			(x) => !x.parentId && x.id !== task.id && x.id !== task.parentId && matches(x.title, parentQuery)
+		)
+	);
+
 	// --- sub-task multi-select + bulk edit ---
 	let subSel = $state<string[]>([]);
 	$effect(() => {
-		task.id; // reset selection when the open task changes
+		task.id; // reset selection + parent search when the open task changes
 		subSel = [];
+		parentQuery = '';
 	});
 	const subChecked = (id: string) => subSel.includes(id);
 	function toggleSub(id: string) {
@@ -280,6 +289,31 @@
 		<div class="pills-row">
 			<!-- Status -->
 			<StatusSelect taskId={task.id} statusId={task.statusId} {statuses} canEdit={editable} display={statusDisplay} />
+
+			<!-- Parent (sub-tasks only): move to another task or make top-level -->
+			{#if task.parentId}
+				<Popover ariaLabel={$t('Parent')}>
+					{#snippet trigger()}
+						<span class="pill-val">{parent?.title ?? $t('Parent')}</span>
+					{/snippet}
+					{#snippet panel(close)}
+						<!-- svelte-ignore a11y_autofocus -->
+						<input class="pop-search" placeholder={$t('Move to task…')} bind:value={parentQuery} autofocus />
+						<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
+							<input type="hidden" name="id" value={task.id} />
+							<input type="hidden" name="parentId" value="" />
+							<button class="opt" type="submit">{$t('No parent (make top-level)')}</button>
+						</form>
+						{#each parentChoices as p (p.id)}
+							<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
+								<input type="hidden" name="id" value={task.id} />
+								<input type="hidden" name="parentId" value={p.id} />
+								<button class="opt" type="submit">{p.title}</button>
+							</form>
+						{/each}
+					{/snippet}
+				</Popover>
+			{/if}
 
 			<!-- Priority -->
 			<Popover ariaLabel={$t('Priority')}>

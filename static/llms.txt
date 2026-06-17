@@ -104,7 +104,8 @@ Fetch one task and its sub-tasks.
 
 ### PATCH /api/tasks/{id}
 Update a task. At least one field (else `400 "No fields to update"`).
-- Body: any of `title` (non-empty, max 240), `statusId` or `status` (name), `priority`, `description`, `assigneeId` (string|null), `milestoneId` (string|null, same project), `locationId` (string|null, same project), `location` (string|null, legacy text), `order` (integer|null), `dueDate` (string|null), `customFields` (`{ "<fieldId>": value }` map; see Custom fields — an empty/null value clears the field).
+- Body: any of `title` (non-empty, max 240), `statusId` or `status` (name), `priority`, `description`, `assigneeId` (string|null), `milestoneId` (string|null, same project), `locationId` (string|null, same project), `location` (string|null, legacy text), `order` (integer|null), `dueDate` (string|null), `parentId` (string|null — re-parent this task), `customFields` (`{ "<fieldId>": value }` map; see Custom fields — an empty/null value clears the field).
+- `parentId`: move the task under another top-level task of the SAME project (makes it a sub-task), or `null`/`""` to detach it back to top-level. Rejected (`400`) if the target is itself a sub-task (only one nesting level), if it's the task itself, or if this task already has sub-tasks of its own.
 - Done-cascade: setting a parent to a `completed`-category status cascades that status to all its sub-tasks.
 - 200: `{ "task": <task> }`
 

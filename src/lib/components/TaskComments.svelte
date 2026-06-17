@@ -182,6 +182,8 @@
 				return to ? $t('set due date to {v}', { v: to }) : $t('changed the due date');
 			case 'title':
 				return $t('renamed this task');
+			case 'parent':
+				return d.to ? $t('moved to another task') : $t('removed from its parent');
 			default:
 				return $t('updated this task');
 		}

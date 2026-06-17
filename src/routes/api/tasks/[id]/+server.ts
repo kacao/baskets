@@ -155,6 +155,27 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		}
 	}
 
+	// re-parent: move under another task, or null/"" to make it top-level. Depth-1 only.
+	if (body.parentId !== undefined) {
+		if (body.parentId === null || body.parentId === '') {
+			updates.parentId = null;
+		} else if (typeof body.parentId === 'string') {
+			if (body.parentId === params.id) return apiError(400, 'a task cannot be its own parent');
+			const [parent] = await db.select().from(task).where(eq(task.id, body.parentId));
+			if (!parent || parent.projectId !== existing.projectId)
+				return apiError(400, 'parentId must reference a task of the same project');
+			if (parent.parentId) return apiError(400, 'sub-tasks cannot have sub-tasks');
+			const kids = await db
+				.select({ id: task.id })
+				.from(task)
+				.where(eq(task.parentId, params.id));
+			if (kids.length > 0) return apiError(400, "move or remove this task's sub-tasks first");
+			updates.parentId = body.parentId;
+		} else {
+			return apiError(400, 'parentId must be a string or null');
+		}
+	}
+
 	const cfMap =
 		body.customFields && typeof body.customFields === 'object' && !Array.isArray(body.customFields)
 			? (body.customFields as Record<string, unknown>)

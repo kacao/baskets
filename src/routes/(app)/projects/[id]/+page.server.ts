@@ -666,6 +666,11 @@ export const actions: Actions = {
 			void logActivity(params.id, id, locals.user.id, 'due', {
 				to: set.dueDate ? new Date(set.dueDate).toISOString().slice(0, 10) : null
 			});
+		if (set.parentId !== undefined && set.parentId !== existing.parentId)
+			void logActivity(params.id, id, locals.user.id, 'parent', {
+				from: existing.parentId,
+				to: set.parentId
+			});
 
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
