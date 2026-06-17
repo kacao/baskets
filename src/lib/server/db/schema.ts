@@ -103,6 +103,7 @@ export const project = sqliteTable('project', {
 	statusDisplay: text('status_display').notNull().default('text'),
 	pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
 	startDate: integer('start_date', { mode: 'timestamp' }),
+	dueDate: integer('due_date', { mode: 'timestamp' }),
 	createdBy: text('created_by')
 		.notNull()
 		.references(() => user.id),

@@ -266,6 +266,7 @@ export const actions: Actions = {
 		const name = String(form.get('name') ?? '').trim();
 		const description = String(form.get('description') ?? '').trim();
 		const startRaw = String(form.get('startDate') ?? '').trim();
+		const dueRaw = String(form.get('dueDate') ?? '').trim();
 
 		if (!name) return fail(400, { message: 'Project name is required' });
 
@@ -275,6 +276,7 @@ export const actions: Actions = {
 				name,
 				description: description || null,
 				startDate: startRaw ? new Date(startRaw + 'T00:00:00') : null,
+				dueDate: dueRaw ? new Date(dueRaw + 'T00:00:00') : null,
 				updatedAt: new Date()
 			})
 			.where(eq(project.id, params.id));

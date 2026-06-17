@@ -86,18 +86,33 @@
 				rows="2">{data.project.description ?? ''}</textarea
 			>
 		</div>
-		<div class="field">
-			<label class="label" for="pstart">{$t('Start date')}</label>
-			<input
-				id="pstart"
-				name="startDate"
-				type="date"
-				class="input"
-				style="width: auto;"
-				value={data.project.startDate
-					? new Date(data.project.startDate).toISOString().slice(0, 10)
-					: ''}
-			/>
+		<div class="u-flex" style="gap: var(--sp-4); margin-bottom: var(--sp-3);">
+			<div class="field" style="margin: 0;">
+				<label class="label" for="pstart">{$t('Start date')}</label>
+				<input
+					id="pstart"
+					name="startDate"
+					type="date"
+					class="input"
+					style="width: auto;"
+					value={data.project.startDate
+						? new Date(data.project.startDate).toISOString().slice(0, 10)
+						: ''}
+				/>
+			</div>
+			<div class="field" style="margin: 0;">
+				<label class="label" for="pdue">{$t('Due date')}</label>
+				<input
+					id="pdue"
+					name="dueDate"
+					type="date"
+					class="input"
+					style="width: auto;"
+					value={data.project.dueDate
+						? new Date(data.project.dueDate).toISOString().slice(0, 10)
+						: ''}
+				/>
+			</div>
 		</div>
 		<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
 	</form>
