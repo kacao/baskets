@@ -3,6 +3,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
+	import { flip } from 'svelte/animate';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
@@ -335,6 +336,7 @@
 				<div class="col-body">
 					{#each col as t, i (t.id)}
 						{@const editable = canEditTask(t)}
+						<div class="bcard-slot" animate:flip={{ duration: 220 }}>
 						{#if over?.lane === lane.key && over?.statusId === s.id && over.index === i && dragId !== t.id}
 							<div class="drop-line"></div>
 						{/if}
@@ -383,6 +385,7 @@
 									{/if}
 								</div>
 							{/if}
+						</div>
 						</div>
 					{/each}
 					{#if over?.lane === lane.key && over?.statusId === s.id && over.index >= col.length}
@@ -625,17 +628,29 @@
 		min-height: 8px;
 	}
 
+	.bcard-slot {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-1);
+	}
+
 	.bcard {
 		border: 1px solid var(--color-border-subtle);
 		background: var(--color-bg);
 		padding: var(--sp-2);
 		transition:
 			border-color 0.15s ease,
-			opacity 0.15s ease;
+			box-shadow 0.15s ease,
+			opacity 0.15s ease,
+			transform 0.15s ease;
 	}
 
 	.bcard[draggable='true'] {
 		cursor: grab;
+	}
+
+	.bcard[draggable='true']:active {
+		cursor: grabbing;
 	}
 
 	.bcard.clickable:hover {
@@ -648,6 +663,9 @@
 
 	.bcard.dragging {
 		opacity: 0.4;
+		transform: scale(0.97) rotate(-1deg);
+		box-shadow: 0 6px 16px rgb(0 0 0 / 0.12);
+		cursor: grabbing;
 	}
 
 	.bcard-cover {
@@ -708,9 +726,11 @@
 	}
 
 	.drop-line {
-		height: 2px;
-		background: var(--color-fg);
+		height: 3px;
+		background: var(--color-primary, var(--color-fg));
+		border-radius: 999px;
 		margin: -1px 0;
+		box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary, var(--color-fg)) 30%, transparent);
 	}
 
 	.col-add-form .input {
