@@ -81,3 +81,19 @@ Twelve features shipped together on `feat/essential-features` (tracked as BASDEV
 - **Photo / doc capture** (BASDEV-12): `TaskAttachments.svelte` (drag-drop + `<input capture>` camera) reusing `/api/files`, REST `POST /api/tasks/{id}/files`; optional `task.coverFileId` cover thumbnail.
 - **Mobile responsive** (BASDEV-13): `src/lib/mobile.css` (imported from `app.css`) — sidebar drawer < 720px, viewbar/table horizontal scroll, larger touch targets, full-screen pane overlay.
 - **`Popover.svelte`** gained an **`up`** prop (opens above the trigger) for bottom-anchored bars (e.g. `BulkActionBar`).
+
+## Filter facets are exclusion sets (ADR-033)
+
+**Context.** The FilterBar facets (ADR-032 / BASDEV-2) originally stored the *selected/included* values: an empty facet meant "show all", and checking items narrowed to only those. With nothing checked by default, "all shown" and "show only X" looked identical until you opened the popover, and there was no intuitive "hide just this label" gesture.
+
+**Decision.** Each `view.config.filters` facet array now holds the **excluded (unchecked) values**. Every popover option renders **checked by default**; unchecking one hides tasks whose value matches. `matchTask` (in `src/lib/taskFilter.ts`) drops a task when its value for any facet is in that facet's array (labels: a task is hidden if it carries ANY excluded label; `_none` excludes unassigned / no-milestone / no-label / no-due). Empty/absent array = nothing hidden. `toggle`/`postFilters`/`hasActiveFilters` are unchanged (pure array-membership); only the interpreter (`matchTask`) and the renderer (FilterBar's checkmark predicate) flipped.
+
+**Consequences.** Storing the excluded set (vs. "all-but-one included") means newly-created statuses/labels/users are shown by default — they aren't in anyone's exclusion list. The persisted shape is unchanged (same keys), but the MEANING of `view.config.filters` and any `saved_filter` row inverted; `static/llms.txt` documents this. Free-text search stays inclusive (only matching tasks shown). `tests/unit/taskFilter.test.ts` rewritten to the exclusion model.
+
+## Tooltip action (ADR-034)
+
+**Context.** ~40 affordances used native `title=` for tooltips — slow to appear (~700ms, OS-controlled), unstyled (clashes with the dark theme), broken on touch, no positioning/flip control.
+
+**Decision.** A lightweight **Svelte action** `use:tooltip` (`src/lib/tooltip.ts`) over a component: it attaches to any existing element, so no markup restructure, and a single shared singleton floating node serves every tooltip (no N components mounted). Shows on hover (mouse only — skips touch/pen) + keyboard focus after a delay, positions above with viewport edge-flip, hides on leave/click/Escape/scroll, and strips the host's native `title` on mount (no doubled OS tooltip). Themed by `.app-tooltip` in `app.css` (inverse bubble, ≤120ms fade, respects `prefers-reduced-motion`). Actions never run during SSR, so `document` access inside is safe without a `browser` guard.
+
+**Consequences.** Native `title=` on icon-only affordances (buttons, drag/resize handles, avatars, badges, relative timestamps) across ~16 components converted to `use:tooltip`. `IconPicker`'s large grid keeps native `title` (per-cell listeners would be wasteful). Accepts `string | null | undefined | {text,placement,delay}` and no-ops on empty, so callers can pass nullable values (e.g. `userName(assigneeId)`).

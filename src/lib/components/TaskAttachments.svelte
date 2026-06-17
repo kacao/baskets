@@ -4,6 +4,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
+	import { tooltip } from '$lib/tooltip';
 
 	type FileRef = {
 		id: string;
@@ -141,7 +142,7 @@
 							<img src={`/api/files/${f.id}`} alt={f.filename} loading="lazy" />
 						</button>
 					{:else}
-						<a class="thumb-doc" href={`/api/files/${f.id}`} target="_blank" rel="noreferrer noopener" title={f.filename}>
+						<a class="thumb-doc" href={`/api/files/${f.id}`} target="_blank" rel="noreferrer noopener" use:tooltip={f.filename}>
 							<Icon name="page" size={22} />
 							<span class="doc-name">{f.filename}</span>
 						</a>
@@ -153,7 +154,7 @@
 								class:on={coverFileId === f.id}
 								type="button"
 								aria-label={coverFileId === f.id ? $t('Remove cover') : $t('Set as cover')}
-								title={coverFileId === f.id ? $t('Cover image') : $t('Set as cover')}
+								use:tooltip={coverFileId === f.id ? $t('Cover image') : $t('Set as cover')}
 								onclick={() => setCover(f.id)}
 							>
 								<Icon name="star" size={12} />

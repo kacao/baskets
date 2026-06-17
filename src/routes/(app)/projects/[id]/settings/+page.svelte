@@ -10,6 +10,7 @@
 	import CustomFieldEditor from '$lib/components/CustomFieldEditor.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
 	import { computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
+	import { tooltip } from '$lib/tooltip';
 	import { t } from '$lib/i18n';
 
 	// Project-entity rollup: aggregate a target field over all the project's tasks.
@@ -308,7 +309,7 @@
 		{#each dependsOn as p (p.id)}
 			<form method="POST" action="?/removeProjectDep" use:enhance>
 				<input type="hidden" name="dependsOnId" value={p.id} />
-				<button class="chip chip--on" type="submit" title={$t('Remove dependency')}>{p.name} ×</button>
+				<button class="chip chip--on" type="submit" use:tooltip={$t('Remove dependency')}>{p.name} ×</button>
 			</form>
 		{:else}
 			<span class="u-tiny u-muted">{$t('none')}</span>

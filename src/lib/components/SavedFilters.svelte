@@ -4,6 +4,7 @@
 	import Popover from '$lib/components/Popover.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { confirmDialog } from '$lib/confirm.svelte';
+	import { tooltip } from '$lib/tooltip';
 	import { t as i18n } from '$lib/i18n';
 
 	type SavedFilter = { id: string; name: string; config: string };
@@ -78,7 +79,7 @@
 										class="sf-del"
 										type="button"
 										aria-label={$i18n('Delete')}
-										title={$i18n('Delete')}
+										use:tooltip={$i18n('Delete')}
 										onclick={confirmDelete}
 									>
 										<Icon name="trash" size={13} />

@@ -8,6 +8,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import { t } from '$lib/i18n';
+	import { tooltip } from '$lib/tooltip';
 	import { fieldAggregations } from '$lib/customFields';
 
 	type Task = {
@@ -303,7 +304,7 @@
 			<span class="lane-name">{lane.name}</span>
 			<span class="lane-count">{laneCount(lane.key)}</span>
 			{#each fieldAggregations(aggFieldIds, customFields, laneTasks(lane.key), taskCustomValues, tasks) as a (a.id)}
-				<span class="lane-agg" title={a.name}>({a.text})</span>
+				<span class="lane-agg" use:tooltip={a.name}>({a.text})</span>
 			{/each}
 		</div>
 	{/if}
@@ -325,7 +326,7 @@
 					<span class="col-name">{s.name}</span>
 					<span class="col-count">{col.length}</span>
 					{#each fieldAggregations(aggFieldIds, customFields, col, taskCustomValues, tasks) as a (a.id)}
-						<span class="col-agg" title={a.name}>({a.text})</span>
+						<span class="col-agg" use:tooltip={a.name}>({a.text})</span>
 					{/each}
 					<span class="col-spacer"></span>
 					<button class="col-add" aria-label={$t('Add task to {name}', { name: s.name })} onclick={() => openAdd(lane.key, s.id)}>
@@ -379,7 +380,7 @@
 									{/if}
 									<span class="bcard-spacer"></span>
 									{#if userName(t.assigneeId)}
-										<span class="avatar" title={userName(t.assigneeId)}>
+										<span class="avatar" use:tooltip={userName(t.assigneeId)}>
 											{initials(userName(t.assigneeId)!)}
 										</span>
 									{/if}

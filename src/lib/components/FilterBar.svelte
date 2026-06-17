@@ -50,6 +50,8 @@
 	];
 
 	// Active filter set lives in view.config.filters (persisted via ?/updateView).
+	// Each facet array holds the EXCLUDED (unchecked) values; every option is
+	// checked by default and unchecking one hides tasks with that value.
 	const filters = $derived(
 		(config.filters && typeof config.filters === 'object'
 			? config.filters
@@ -138,22 +140,23 @@
 </div>
 
 {#snippet facet(key: keyof TaskFilters, label: string, opts: [string, string][])}
-	{@const chosen = sel(key)}
-	<span class="facet" class:facet--on={chosen.length > 0}>
+	{@const excluded = sel(key)}
+	<span class="facet" class:facet--on={excluded.length > 0}>
 	<Popover ariaLabel={label}>
 		{#snippet trigger()}
-			{label}{#if chosen.length > 0}<span class="facet-count">{chosen.length}</span>{/if}
+			{label}{#if excluded.length > 0}<span class="facet-count">{excluded.length}</span>{/if}
 		{/snippet}
 		{#snippet panel()}
 			{#each opts as [val, lbl] (val)}
+				{@const on = !excluded.includes(val)}
 				<button
 					class="opt"
-					class:opt--on={chosen.includes(val)}
+					class:opt--on={on}
 					type="button"
 					disabled={!canEditView}
 					onclick={() => toggle(key, val)}
 				>
-					<span class="opt-check">{#if chosen.includes(val)}<Icon name="check" size={13} />{/if}</span>
+					<span class="opt-check">{#if on}<Icon name="check" size={13} />{/if}</span>
 					{lbl}
 				</button>
 			{:else}

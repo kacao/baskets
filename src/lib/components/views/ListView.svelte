@@ -10,6 +10,7 @@
 	import { sortTasks } from '$lib/taskSort';
 	import { selection } from '$lib/selection.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
+	import { tooltip } from '$lib/tooltip';
 
 	type Task = {
 		id: string;
@@ -191,7 +192,7 @@
 				<span class="group-title">{grp.title}</span>
 				<span class="group-count">{grp.tasks.length}</span>
 				{#each fieldAggregations(aggFieldIds, customFields, grp.tasks, taskCustomValues, tasks) as a (a.id)}
-					<span class="group-agg" title={a.name}>({a.text})</span>
+					<span class="group-agg" use:tooltip={a.name}>({a.text})</span>
 				{/each}
 			</div>
 			{#if !collapsed[grp.key]}

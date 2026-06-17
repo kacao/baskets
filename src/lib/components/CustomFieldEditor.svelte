@@ -4,6 +4,7 @@
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
 	import Popover from '$lib/components/Popover.svelte';
+	import { tooltip } from '$lib/tooltip';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
 	import {
@@ -236,7 +237,7 @@
 					ondragend={() => (dragId = null)}
 					ondrop={commitOrder}
 				>
-					<span class="drag" title={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
+					<span class="drag" use:tooltip={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
 					<button class="name name-btn" type="button" onclick={() => openEdit(f)}>{f.name}</button>
 					<span class="badge">{$t(fieldTypeLabel(f.type))}</span>
 					{#if typeHint(f)}<span class="u-tiny u-muted">{typeHint(f)}</span>{/if}

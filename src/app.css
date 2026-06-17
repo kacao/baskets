@@ -214,6 +214,36 @@ code,
 	font-size: 12px;
 }
 
+/* Themed tooltip (src/lib/tooltip.ts use:tooltip action) */
+.app-tooltip {
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: 9999;
+	max-width: 260px;
+	padding: 4px 8px;
+	border-radius: var(--radius-field, 0.25rem);
+	background: color-mix(in oklab, var(--color-base-content) 92%, var(--color-base-100));
+	color: var(--color-base-100);
+	font-size: 12px;
+	line-height: 1.4;
+	white-space: pre-line;
+	box-shadow: 0 4px 12px rgb(0 0 0 / 0.18);
+	pointer-events: none;
+	opacity: 0;
+	visibility: hidden;
+	transform: translateY(2px);
+	transition:
+		opacity var(--dur-fast, 0.12s) ease,
+		transform var(--dur-fast, 0.12s) ease;
+}
+
+.app-tooltip--visible {
+	opacity: 1;
+	visibility: visible;
+	transform: translateY(0);
+}
+
 /* Reduced motion: kill transitions */
 @media (prefers-reduced-motion: reduce) {
 	*,

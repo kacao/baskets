@@ -17,6 +17,9 @@ export type FilterableTask = {
 // A "due bucket" coarsely classifies a task by its dueDate relative to today.
 export type DueBucket = 'overdue' | 'today' | 'week' | 'later' | 'none';
 
+// Each array holds the EXCLUDED (unchecked) values for that facet — the popover
+// shows every option checked by default, and unchecking one hides tasks with
+// that value. An empty/absent array excludes nothing (everything shown).
 export type TaskFilters = {
 	statusIds?: string[];
 	assigneeIds?: string[]; // '_none' = unassigned
@@ -64,7 +67,9 @@ export function hasActiveFilters(filters: TaskFilters | undefined, searchText = 
 	);
 }
 
-// AND across every active facet; OR within a single facet's selected values.
+// Exclusion semantics: a task is HIDDEN when, for any facet, its value appears in
+// that facet's excluded (unchecked) list. Default (no exclusions) shows everything.
+// Free-text search stays inclusive — only tasks matching the query are kept.
 export function matchTask(
 	task: FilterableTask,
 	filters: TaskFilters | undefined,
@@ -79,29 +84,27 @@ export function matchTask(
 
 	if (!filters) return true;
 
-	if (active(filters.statusIds) && !filters.statusIds.includes(task.statusId)) return false;
+	if (active(filters.statusIds) && filters.statusIds.includes(task.statusId)) return false;
 
-	if (active(filters.priorities) && !filters.priorities.includes(task.priority)) return false;
+	if (active(filters.priorities) && filters.priorities.includes(task.priority)) return false;
 
-	if (active(filters.assigneeIds)) {
-		const key = task.assigneeId ?? '_none';
-		if (!filters.assigneeIds.includes(key)) return false;
-	}
+	if (active(filters.assigneeIds) && filters.assigneeIds.includes(task.assigneeId ?? '_none'))
+		return false;
 
-	if (active(filters.milestoneIds)) {
-		const key = task.milestoneId ?? '_none';
-		if (!filters.milestoneIds.includes(key)) return false;
-	}
+	if (active(filters.milestoneIds) && filters.milestoneIds.includes(task.milestoneId ?? '_none'))
+		return false;
 
-	if (active(filters.dueBuckets) && !filters.dueBuckets.includes(dueBucketOf(task.dueDate)))
+	if (active(filters.dueBuckets) && filters.dueBuckets.includes(dueBucketOf(task.dueDate)))
 		return false;
 
 	if (active(filters.labelIds)) {
 		const ids = helpers.labelIdsOf(task.id);
-		const wantNone = filters.labelIds.includes('_none');
-		const matchesAny =
-			(wantNone && ids.length === 0) || ids.some((id) => filters.labelIds!.includes(id));
-		if (!matchesAny) return false;
+		// hide an unlabeled task when 'No label' is unchecked, or any of the task's
+		// labels has been unchecked (a task tagged with a hidden label disappears)
+		const hidden =
+			(ids.length === 0 && filters.labelIds.includes('_none')) ||
+			ids.some((id) => filters.labelIds!.includes(id));
+		if (hidden) return false;
 	}
 
 	return true;

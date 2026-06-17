@@ -13,6 +13,7 @@
 	import TaskAttachments from '$lib/components/TaskAttachments.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
+	import { tooltip } from '$lib/tooltip';
 	import { fieldAppliesTo, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
 	import { describeRecurrence } from '$lib/recurrence';
 	import { confirmDialog } from '$lib/confirm.svelte';
@@ -489,7 +490,7 @@
 						<form method="POST" action="?/removeTaskDep" use:enhance={() => async ({ update }) => update()}>
 							<input type="hidden" name="taskId" value={task.id} />
 							<input type="hidden" name="dependsOnId" value={d!.id} />
-							<button class="opt opt--on" type="submit" title={$t('Remove dependency')}>{d!.title} ×</button>
+							<button class="opt opt--on" type="submit" use:tooltip={$t('Remove dependency')}>{d!.title} ×</button>
 						</form>
 					{:else}
 						<span class="opt-empty">{$t('none')}</span>
@@ -723,6 +724,9 @@
 						{#snippet panel(close)}
 							<!-- svelte-ignore a11y_autofocus -->
 							<input class="pop-search" placeholder={$t('Search or create…')} bind:value={moveQuery} autofocus />
+							<button class="opt opt--create" type="button" disabled={subBusy} onclick={() => bulkSub({ parentId: '' }, close)}>
+								<Icon name="arrow-up-right-square" size={12} /> {$t('Make into tasks (no parent)')}
+							</button>
 							{#each moveTargets as m (m.id)}
 								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ parentId: m.id }, close)}>{m.title}</button>
 							{/each}
@@ -793,19 +797,38 @@
 								<button class="sub-title-btn" type="button" onclick={() => onSelectTask?.(s.id)}>{s.title}</button>
 								<span class="spacer"></span>
 								{#if sEdit}
-									<form method="POST" action="?/deleteTask" use:enhance>
-										<input type="hidden" name="id" value={s.id} />
-										<button
-											class="x-btn"
-											type="button"
-											aria-label={$t('Delete sub-task')}
-											onclick={async (e) => {
-												const form = e.currentTarget.form;
-												if (await confirmDialog($t('Delete this sub-task?'), { confirmLabel: $t('Delete'), danger: true }))
-													form?.requestSubmit();
-											}}>×</button
-										>
-									</form>
+									<div class="sub-actions">
+										<!-- promote: detach from this parent → becomes a top-level task -->
+										<form method="POST" action="?/patchTask" use:enhance>
+											<input type="hidden" name="id" value={s.id} />
+											<input type="hidden" name="parentId" value="" />
+											<button
+												class="sub-act"
+												type="submit"
+												aria-label={$t('Make into task')}
+												use:tooltip={$t('Make into task')}
+											>
+												<Icon name="arrow-up-right-square" size={14} />
+											</button>
+										</form>
+										<!-- delete -->
+										<form method="POST" action="?/deleteTask" use:enhance>
+											<input type="hidden" name="id" value={s.id} />
+											<button
+												class="sub-act sub-act--del"
+												type="button"
+												aria-label={$t('Delete sub-task')}
+												use:tooltip={$t('Delete sub-task')}
+												onclick={async (e) => {
+													const form = e.currentTarget.form;
+													if (await confirmDialog($t('Delete this sub-task?'), { confirmLabel: $t('Delete'), danger: true }))
+														form?.requestSubmit();
+												}}
+											>
+												<Icon name="trash" size={14} />
+											</button>
+										</form>
+									</div>
 								{/if}
 							</div>
 							<div class="sub-pills">
@@ -910,7 +933,7 @@
 							class="icon-btn"
 							type="button"
 							aria-label={$t('Save as new template')}
-							title={$t('Save as new template')}
+							use:tooltip={$t('Save as new template')}
 							onclick={() => submitTpl('')}
 						>
 							<Icon name="check" size={14} />
@@ -1418,18 +1441,44 @@
 		gap: var(--sp-2);
 	}
 
-	.x-btn {
-		border: none;
-		background: none;
-		font-size: 18px;
-		line-height: 1;
-		cursor: pointer;
-		color: var(--color-muted);
-		padding: 2px 6px;
+	/* sub-task head actions (promote / delete): revealed on row hover */
+	.sub-actions {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		opacity: 0;
+		transition: opacity var(--dur-fast) ease;
 	}
 
-	.x-btn:hover {
+	.sub-item:hover .sub-actions,
+	.sub-actions:focus-within {
+		opacity: 1;
+	}
+
+	.sub-act {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		padding: 3px;
+		border-radius: var(--radius-field, 0.25rem);
+	}
+
+	.sub-act:hover {
+		background: var(--color-surface-muted);
 		color: var(--color-fg);
+	}
+
+	.sub-act--del:hover {
+		color: var(--color-error);
+	}
+
+	/* declutter: empty property pills appear only on row hover (no blank pills at rest) */
+	.sub-item:not(:hover) .sub-pills :global(.pop-wrap:has(.pill-ph)) {
+		display: none;
 	}
 
 	/* Save-as-template footer control (morphs button ↔ search field) */

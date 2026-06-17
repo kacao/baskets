@@ -26,10 +26,12 @@
 	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
 	import { filterTasks } from '$lib/taskFilter';
 	import { sortTasks, parseSortBy } from '$lib/taskSort';
+	import { fieldAppliesTo } from '$lib/customFields';
 	import { selection } from '$lib/selection.svelte';
 	import { toast } from '$lib/toast.svelte';
 	import { t } from '$lib/i18n';
 	import { confirmDialog } from '$lib/confirm.svelte';
+	import { tooltip } from '$lib/tooltip';
 
 	let { data, form } = $props();
 
@@ -148,6 +150,9 @@
 		labels: 'Labels'
 	};
 	const colOn = (key: string) => viewConfig[key] !== false;
+	// custom-field columns shown in the table (top-level rows) — mirror TableView's
+	// cfCols so Customize toggles the same `cf:<id>` keys as the table's "…" menu
+	const tableCustomCols = $derived(data.customFields.filter((f) => fieldAppliesTo(f, false)));
 	/** activeView config with one table column toggled, ready to POST. */
 	const toggleColumnConfig = (key: string) =>
 		JSON.stringify({ ...viewConfig, [key]: viewConfig[key] === false });
@@ -468,7 +473,7 @@
 		{#if data.project.icon}<span class="proj-icon"><EntityIcon value={data.project.icon} size={22} /></span>{/if}<span class="proj-name">{data.project.name}</span>
 	</h2>
 	{#if data.project.pinned}
-		<span class="u-muted" title={$t('Pinned')}><Icon name="star" size={14} /></span>
+		<span class="u-muted" use:tooltip={$t('Pinned')}><Icon name="star" size={14} /></span>
 	{/if}
 	{#if data.perm.project}
 		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
@@ -663,7 +668,7 @@
 		<span style="flex: 1;"></span>
 		<div class="presence" aria-label={$t('People viewing')}>
 			{#each others as u (u.id)}
-				<span class="avatar" title={u.name}>{initials(u.name)}</span>
+				<span class="avatar" use:tooltip={u.name}>{initials(u.name)}</span>
 			{/each}
 		</div>
 	{/if}
@@ -699,7 +704,7 @@
 			class:dragging={dragViewId === v.id}
 			href="?view={v.id}"
 			data-sveltekit-noscroll
-			title={v.name}
+			use:tooltip={v.name}
 			draggable={data.perm.views[v.id]}
 			ondragstart={(e) => {
 				dragViewId = v.id;
@@ -999,6 +1004,14 @@
 						<button class="chip" class:chip--on={colOn(key)} type="submit">{$t(COLUMN_LABELS[key])}</button>
 					</form>
 				{/each}
+				{#each tableCustomCols as f (f.id)}
+					<form method="POST" action="?/updateView" use:enhance>
+						<input type="hidden" name="id" value={activeView.id} />
+						<input type="hidden" name="name" value={activeView.name} />
+						<input type="hidden" name="config" value={toggleColumnConfig(`cf:${f.id}`)} />
+						<button class="chip" class:chip--on={colOn(`cf:${f.id}`)} type="submit">{f.name}</button>
+					</form>
+				{/each}
 			</div>
 			<span class="label">{$t('Statuses shown')}</span>
 			<div class="chips-row">
@@ -1119,7 +1132,7 @@
 					</form>
 				</div>
 
-				<div class="ms-progress" title={`${prog.done}/${prog.total} ${$t('done')}`}>
+				<div class="ms-progress" use:tooltip={`${prog.done}/${prog.total} ${$t('done')}`}>
 					<div class="ms-bar"><div class="ms-bar-fill" style={`width:${prog.pct}%`}></div></div>
 					<span class="ms-prog-text">{prog.done}/{prog.total}</span>
 				</div>

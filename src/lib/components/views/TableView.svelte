@@ -12,6 +12,7 @@
 	import { sortTasks } from '$lib/taskSort';
 	import { selection } from '$lib/selection.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import { tooltip } from '$lib/tooltip';
 	import { t as i18n } from '$lib/i18n';
 
 	type Task = {
@@ -151,7 +152,7 @@
 		'actions'
 	]);
 	const COL_DEFAULTS: Record<string, number> = {
-		select: 36, status: 44, title: 320, priority: 110, assignee: 140, milestone: 160, due: 120, labels: 160, actions: 44
+		select: 36, status: 120, title: 320, priority: 110, assignee: 140, milestone: 160, due: 120, labels: 160, actions: 44
 	};
 	const colDefault = (key: string) => (key.startsWith('cf:') ? 160 : (COL_DEFAULTS[key] ?? 140));
 	const colWidths = $derived(
@@ -364,7 +365,7 @@
 									: selection.selectAll(orderedIds)}
 						/>
 					</th>
-					<th class="col-status">{$i18n('Status')}</th>
+					<th class="col-status">{$i18n('Status')}{@render rh('status')}</th>
 					<th>{$i18n('Title')}{@render rh('title')}</th>
 					{#if show('priority')}<th>{$i18n('Priority')}{@render rh('priority')}</th>{/if}
 					{#if show('assignee')}<th>{$i18n('Assignee')}{@render rh('assignee')}</th>{/if}
@@ -455,13 +456,13 @@
 									<span class="group-title">{g.title}</span>
 									<span class="group-count">{g.tasks.length}</span>
 									{#each fieldAggregations(aggFieldIds, customFields, g.tasks, taskCustomValues, tasks) as a (a.id)}
-										<span class="group-agg" title={a.name}>({a.text})</span>
+										<span class="group-agg" use:tooltip={a.name}>({a.text})</span>
 									{/each}
 									{#if onNewTask}
 										<button
 											class="group-add"
 											aria-label={$i18n('New task')}
-											title={$i18n('New task')}
+											use:tooltip={$i18n('New task')}
 											onclick={() => onNewTask?.(groupPrefill(g))}
 										>
 											+
@@ -481,7 +482,7 @@
 {#snippet rh(key: string)}
 	{#if canEditView && viewId}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<span class="col-resize" title={$i18n('Drag to resize')} onpointerdown={(e) => startResize(e, key)}></span>
+		<span class="col-resize" use:tooltip={$i18n('Drag to resize')} onpointerdown={(e) => startResize(e, key)}></span>
 	{/if}
 {/snippet}
 
@@ -529,7 +530,7 @@
 									<span class="title-text">{t.title}</span>
 								</button>
 								{#if deps.length > 0}
-									<span class="badge badge-sm" title={$i18n('Blocked by {names}', { names: deps.map((d) => d!.title).join(', ') })}>
+									<span class="badge badge-sm" use:tooltip={$i18n('Blocked by {names}', { names: deps.map((d) => d!.title).join(', ') })}>
 										⛓ {deps.length}
 									</span>
 								{/if}

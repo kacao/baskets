@@ -5,6 +5,7 @@
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import { t } from '$lib/i18n';
+	import { tooltip } from '$lib/tooltip';
 
 	type Task = {
 		id: string;
@@ -269,7 +270,7 @@
 			</button>
 		</div>
 		{#if onNewTask}
-			<button class="tl-add" type="button" aria-label={$t('New task')} title={$t('New task')} onclick={() => onNewTask?.()}>+</button>
+			<button class="tl-add" type="button" aria-label={$t('New task')} use:tooltip={$t('New task')} onclick={() => onNewTask?.()}>+</button>
 		{/if}
 	</div>
 
@@ -293,7 +294,7 @@
 					{/each}
 
 					<!-- today marker -->
-					<div class="tl-today" style={`left:${todayX}px`} title={$t('Today')}></div>
+					<div class="tl-today" style={`left:${todayX}px`} use:tooltip={$t('Today')}></div>
 
 					<!-- dependency lines -->
 					{#if depLines.length > 0}
@@ -331,7 +332,7 @@
 										class:selected={selectedId === tk.id}
 										style={`left:${xOf(sp!.start)}px; width:${Math.max(colW, xOf(sp!.end) - xOf(sp!.start) + colW)}px`}
 										type="button"
-										title={`${tk.title} · ${fmtRange(tk)}`}
+										use:tooltip={`${tk.title} · ${fmtRange(tk)}`}
 										onclick={() => openDetail(tk)}
 									>
 										<PriorityIcon priority={tk.priority} />

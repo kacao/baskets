@@ -6,6 +6,7 @@
 	import Popover from '$lib/components/Popover.svelte';
 	import { categoryLabel } from '$lib/statuses';
 	import { t } from '$lib/i18n';
+	import { tooltip } from '$lib/tooltip';
 
 	type Editable = {
 		id: string;
@@ -118,7 +119,7 @@
 					class="cat-add"
 					type="button"
 					aria-label={$t('Add a {category} status', { category: categoryLabel(c) })}
-					title={$t('Add status')}
+					use:tooltip={$t('Add status')}
 					onclick={() => openCreate(c)}
 				>
 					<Icon name="plus" size={14} />
@@ -206,7 +207,7 @@
 						ondragend={() => (dragId = null)}
 						ondrop={commitOrder}
 					>
-						<span class="drag" title={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
+						<span class="drag" use:tooltip={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
 						<span class="ic">
 							{#if s.icon}<EntityIcon value={s.icon} size={16} />{:else}<span class="status-dot" style="--c: {s.color || 'var(--color-muted)'}" aria-hidden="true"></span>{/if}
 						</span>

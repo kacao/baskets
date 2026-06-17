@@ -4,6 +4,7 @@
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
 	import Popover from '$lib/components/Popover.svelte';
+	import { tooltip } from '$lib/tooltip';
 	import { t } from '$lib/i18n';
 	import { categoryLabel } from '$lib/statuses';
 
@@ -26,7 +27,7 @@
 		<div class="row">
 			<Popover ariaLabel={$t('Change icon')}>
 				{#snippet trigger()}
-					<span class="ic-trigger" title={$t('Change icon')}>
+					<span class="ic-trigger" use:tooltip={$t('Change icon')}>
 						{#if s.icon}<EntityIcon value={s.icon} size={18} />{:else}<span class="status-dot" style="--c: {s.color || 'var(--color-muted)'}" aria-hidden="true"></span>{/if}
 					</span>
 				{/snippet}

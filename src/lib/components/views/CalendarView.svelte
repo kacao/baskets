@@ -3,6 +3,7 @@
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
+	import { tooltip } from '$lib/tooltip';
 	import { t } from '$lib/i18n';
 
 	type Task = {
@@ -209,7 +210,7 @@
 									class="chip cat-{statusCat(t.statusId)}"
 									class:selected={selectedId === t.id}
 									type="button"
-									title={t.title}
+									use:tooltip={t.title}
 									onclick={() => openDetail(t)}
 								>
 									<PriorityIcon priority={t.priority} />

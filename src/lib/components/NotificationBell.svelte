@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { popover } from '$lib/transitions';
+	import { tooltip } from '$lib/tooltip';
 	import { t } from '$lib/i18n';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -103,7 +104,7 @@
 		aria-haspopup="dialog"
 		aria-expanded={open}
 		aria-label={$t('Notifications')}
-		title={$t('Notifications')}
+		use:tooltip={$t('Notifications')}
 		onclick={toggle}
 	>
 		<Icon name="bell" size={16} />

@@ -3,6 +3,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
+	import { tooltip } from '$lib/tooltip';
 
 	let { taskId }: { taskId: string } = $props();
 
@@ -208,7 +209,7 @@
 						<div class="cmt-body">
 							<div class="cmt-head">
 								<span class="author">{item.authorName ?? $t('Unknown')}</span>
-								<span class="time" title={new Date(item.createdAt).toLocaleString()}>
+								<span class="time" use:tooltip={new Date(item.createdAt).toLocaleString()}>
 									{relTime(item.createdAt)}{#if item.edited}&nbsp;· {$t('edited')}{/if}
 								</span>
 								{#if canManage(item.authorId)}
@@ -241,7 +242,7 @@
 							<strong>{item.actorName ?? $t('Someone')}</strong>
 							{activityText(item)}
 						</span>
-						<span class="time" title={new Date(item.createdAt).toLocaleString()}>{relTime(item.createdAt)}</span>
+						<span class="time" use:tooltip={new Date(item.createdAt).toLocaleString()}>{relTime(item.createdAt)}</span>
 					</div>
 				{/if}
 			{:else}

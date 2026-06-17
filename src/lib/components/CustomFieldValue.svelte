@@ -42,6 +42,9 @@
 
 	const multi = $derived(field.config?.multi === true);
 	const isArrayType = $derived(['select', 'person', 'place', 'files', 'task'].includes(field.type));
+	// reference fields that benefit from an inline removable-chip layout (files keep
+	// their own upload/remove editor, so they're excluded here)
+	const multiChips = $derived(multi && ['select', 'person', 'place', 'task'].includes(field.type));
 
 	// svelte-ignore state_referenced_locally
 	let current = $state<string>(value ?? '');
@@ -269,17 +272,44 @@
 	</div>
 {:else}
 	<!-- pill -->
-	<div class="cf-pill">
+	<div class="cf-pill" class:cf-pill--multi={multiChips && canEdit}>
 		<span class="cf-label">{field.name}</span>
 		{#if canEdit && field.type !== 'rollup'}
-			<Popover ariaLabel={field.name}>
-				{#snippet trigger()}
-					<span class="pill-val">{@render display()}</span>
-				{/snippet}
-				{#snippet panel(close)}
-					<div class="panel">{@render editor(close)}</div>
-				{/snippet}
-			</Popover>
+			{#if multiChips}
+				<!-- multi reference field: each value is a removable chip + an "+ Add" picker -->
+				<div class="cf-multi">
+					{#each ids as id (id)}
+						{#if field.type === 'select'}
+							{@const o = optById(id)}
+							{#if o}
+								<span class="chip-rm colored" style="--c: {o.color || 'var(--color-muted)'}">
+									{#if displayOption !== 'text' && o.icon}<EntityIcon value={o.icon} size={12} />{/if}
+									{#if displayOption !== 'icon' || !o.icon}<span>{o.title}</span>{/if}
+									<button class="chip-x" type="button" aria-label={$t('Remove')} onclick={() => toggleId(id)}><Icon name="xmark" size={11} /></button>
+								</span>
+							{/if}
+						{:else}
+							<span class="chip-rm">
+								<span>{field.type === 'person' ? userName(id) : field.type === 'place' ? locTitle(id) : taskTitle(id)}</span>
+								<button class="chip-x" type="button" aria-label={$t('Remove')} onclick={() => toggleId(id)}><Icon name="xmark" size={11} /></button>
+							</span>
+						{/if}
+					{/each}
+					<Popover ariaLabel={field.name}>
+						{#snippet trigger()}<span class="add-chip"><Icon name="plus" size={12} /> {$t('Add')}</span>{/snippet}
+						{#snippet panel(close)}<div class="panel">{@render editor(close)}</div>{/snippet}
+					</Popover>
+				</div>
+			{:else}
+				<Popover ariaLabel={field.name}>
+					{#snippet trigger()}
+						<span class="pill-val">{@render display()}</span>
+					{/snippet}
+					{#snippet panel(close)}
+						<div class="panel">{@render editor(close)}</div>
+					{/snippet}
+				</Popover>
+			{/if}
 			<form bind:this={form} method="POST" action={formAction} use:enhance class="hidden-form">
 				<input type="hidden" name="id" value={taskId} />
 				<input type="hidden" name={`cf_${field.id}`} value={current} />
@@ -366,6 +396,72 @@
 		padding: 1px 8px;
 		background: color-mix(in oklab, var(--c) 12%, transparent);
 		border: 1px solid color-mix(in oklab, var(--c) 40%, transparent);
+	}
+
+	/* multi reference field: inline removable chips + an "Add" picker */
+	.cf-pill--multi {
+		align-items: flex-start;
+	}
+
+	.cf-pill--multi .cf-label {
+		padding-top: 4px;
+	}
+
+	.cf-multi {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px;
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.chip-rm {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		max-width: 100%;
+		font-size: 12px;
+		border: 1px solid var(--color-border-subtle);
+		border-radius: 999px;
+		padding: 1px 3px 1px 8px;
+	}
+
+	.chip-rm > span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.chip-rm.colored {
+		background: color-mix(in oklab, var(--c) 12%, transparent);
+		border-color: color-mix(in oklab, var(--c) 40%, transparent);
+	}
+
+	.chip-x {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		padding: 1px;
+		line-height: 0;
+		border-radius: 999px;
+	}
+
+	.chip-x:hover {
+		color: var(--color-error);
+		background: var(--color-surface-muted);
+	}
+
+	.add-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 12px;
+		color: var(--color-muted);
 	}
 
 	.panel {

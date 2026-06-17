@@ -9,6 +9,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
 	import { t } from '$lib/i18n';
+	import { tooltip } from '$lib/tooltip';
 
 	let { data, children } = $props();
 	let menuOpen = $state(false);
@@ -75,7 +76,7 @@
 								class="ws-gear"
 								href="/workspaces/{w.id}/settings"
 								aria-label={$t('Workspace settings')}
-								title={$t('Workspace settings')}
+								use:tooltip={$t('Workspace settings')}
 								onclick={() => {
 									wsMenuOpen = false;
 									menuOpen = false;
@@ -185,7 +186,7 @@
 				<button
 					class="btn btn-sm btn-ghost btn-circle"
 					aria-label={$t('Toggle theme')}
-					title={theme === 'dark' ? $t('Light mode') : $t('Dark mode')}
+					use:tooltip={theme === 'dark' ? $t('Light mode') : $t('Dark mode')}
 					onclick={toggleTheme}
 				>
 					{#if theme === 'dark'}<Icon name="sun-light" size={16} />{:else}<Icon name="half-moon" size={16} />{/if}
