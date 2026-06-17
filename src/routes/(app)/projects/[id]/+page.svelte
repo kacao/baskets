@@ -728,16 +728,6 @@
 			{#if mode !== 'icon'}{v.name}{/if}
 		</a>
 	{/each}
-	{#if activeView && (activeView.type === 'table' || activeView.type === 'list' || activeView.type === 'board')}
-		<div class="viewbar-filters">
-			<SavedFilters
-				savedFilters={data.savedFilters}
-				currentConfig={viewConfig}
-				canEdit={canEditActiveView}
-				onApply={applySavedFilter}
-			/>
-		</div>
-	{/if}
 	{#if data.perm.project}
 		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 		<div class="add-view" onclick={(e) => e.stopPropagation()}>
@@ -1231,18 +1221,28 @@
 {/if}
 
 {#if activeView && ['table', 'board', 'list'].includes(activeView.type)}
-	<FilterBar
-		tasks={data.tasks}
-		statuses={data.statuses}
-		users={data.users}
-		milestones={data.milestones}
-		labels={projectLabels}
-		config={viewConfig}
-		bind:searchText
-		viewId={activeView.id}
-		viewName={activeView.name}
-		canEditView={canEditActiveView}
-	/>
+	<div class="filter-row">
+		<FilterBar
+			tasks={data.tasks}
+			statuses={data.statuses}
+			users={data.users}
+			milestones={data.milestones}
+			labels={projectLabels}
+			config={viewConfig}
+			bind:searchText
+			viewId={activeView.id}
+			viewName={activeView.name}
+			canEditView={canEditActiveView}
+		/>
+		<div class="saved-filters-slot">
+			<SavedFilters
+				savedFilters={data.savedFilters}
+				currentConfig={viewConfig}
+				canEdit={canEditActiveView}
+				onApply={applySavedFilter}
+			/>
+		</div>
+	</div>
 {/if}
 
 <!-- Active view -->
@@ -1631,6 +1631,24 @@
 		margin-bottom: var(--sp-3);
 		padding-bottom: 0;
 		flex-wrap: wrap;
+	}
+
+	/* filter bar row: FilterBar fills, Saved filters pinned far right */
+	.filter-row {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--sp-2);
+		margin-bottom: var(--sp-3);
+	}
+
+	.filter-row :global(.filterbar) {
+		flex: 1 1 auto;
+		margin-bottom: 0;
+	}
+
+	.saved-filters-slot {
+		margin-left: auto;
+		flex: 0 0 auto;
 	}
 
 	.view-tab {
