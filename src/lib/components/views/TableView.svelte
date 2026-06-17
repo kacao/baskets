@@ -8,7 +8,7 @@
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
-	import { fieldAppliesTo, fieldAggregations } from '$lib/customFields';
+	import { fieldAppliesTo, fieldAggregations, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
 	import { sortTasks } from '$lib/taskSort';
 	import { selection } from '$lib/selection.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -119,6 +119,18 @@
 	const cfOptions = (fieldId: string) => customFieldOptions.filter((o) => o.fieldId === fieldId);
 	const cfValue = (taskId: string, fieldId: string) =>
 		taskCustomValues.find((v) => v.taskId === taskId && v.fieldId === fieldId)?.value ?? null;
+	function rollupText(taskId: string, field: { type: string; config: Record<string, unknown> }): string | null {
+		if (field.type !== 'rollup') return null;
+		const cfg = field.config as unknown as RollupConfig;
+		const valueOf = (tid: string, fid: string) => {
+			const raw = cfValue(tid, fid);
+			const n = raw == null ? null : Number(raw);
+			return n != null && Number.isFinite(n) ? n : null;
+		};
+		const n = computeTaskRollup(cfg, taskId, { tasks, taskDeps, valueOf });
+		const target = customFields.find((f) => f.id === cfg.targetFieldId);
+		return target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
+	}
 	const colCount = $derived(
 		4 + COLS.filter((k) => show(k)).length + cfCols.filter((c) => show(c.key)).length
 	);
@@ -562,6 +574,7 @@
 										field={c.field}
 										options={cfOptions(c.field.id)}
 										value={cfValue(t.id, c.field.id)}
+										rollupText={rollupText(t.id, c.field)}
 										mode="cell"
 										{users}
 										{locations}
@@ -617,6 +630,7 @@
 												field={c.field}
 												options={cfOptions(c.field.id)}
 												value={cfValue(s.id, c.field.id)}
+												rollupText={rollupText(s.id, c.field)}
 												mode="cell"
 												{users}
 												{locations}

@@ -17,6 +17,7 @@
 		mode = 'pill',
 		taskId = '',
 		formAction = '?/patchTask',
+		rollupText = null,
 		users = [],
 		locations = [],
 		tasks = [],
@@ -30,6 +31,7 @@
 		mode?: 'pill' | 'cell' | 'input';
 		taskId?: string;
 		formAction?: string;
+		rollupText?: string | null;
 		users?: { id: string; name: string }[];
 		locations?: { id: string; title: string }[];
 		tasks?: { id: string; title: string; parentId: string | null }[];
@@ -119,7 +121,9 @@
 
 <!-- read-only value display (cell + pill trigger) -->
 {#snippet display()}
-	{#if !hasValue}
+	{#if field.type === 'rollup'}
+		<span class="v">{rollupText ?? '—'}</span>
+	{:else if !hasValue}
 		<span class="ph">—</span>
 	{:else if field.type === 'checkbox'}
 		<Icon name="check" size={14} />
@@ -256,14 +260,18 @@
 {:else if mode === 'input'}
 	<div class="cf-input">
 		<span class="cf-label">{field.name}</span>
-		{@render editor(() => {})}
-		<input type="hidden" name={`cf_${field.id}`} value={current} />
+		{#if field.type === 'rollup'}
+			<span class="pill-val pill-val--ro">{@render display()}</span>
+		{:else}
+			{@render editor(() => {})}
+			<input type="hidden" name={`cf_${field.id}`} value={current} />
+		{/if}
 	</div>
 {:else}
 	<!-- pill -->
 	<div class="cf-pill">
 		<span class="cf-label">{field.name}</span>
-		{#if canEdit}
+		{#if canEdit && field.type !== 'rollup'}
 			<Popover ariaLabel={field.name}>
 				{#snippet trigger()}
 					<span class="pill-val">{@render display()}</span>

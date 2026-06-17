@@ -153,6 +153,8 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 			if (isNaN(+new Date(v))) return { error: 'Invalid date' };
 			return { value: v };
 		}
+		case 'rollup':
+			return { value: null }; // computed/display-only — never stored
 		default:
 			return { error: 'Unsupported field type' };
 	}

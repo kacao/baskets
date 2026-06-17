@@ -188,6 +188,23 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		listProjectCustomValues(params.id)
 	]);
 
+	// Task data for project-entity rollup fields (aggregate a target over all tasks).
+	const hasRollup = customFields.some((f) => f.entity === 'project' && f.type === 'rollup');
+	const [rollupTasks, rollupTaskValues] = hasRollup
+		? await Promise.all([
+				db.select({ id: task.id, parentId: task.parentId }).from(task).where(eq(task.projectId, params.id)),
+				db
+					.select({
+						taskId: taskCustomValue.taskId,
+						fieldId: taskCustomValue.fieldId,
+						value: taskCustomValue.value
+					})
+					.from(taskCustomValue)
+					.innerJoin(task, eq(taskCustomValue.taskId, task.id))
+					.where(eq(task.projectId, params.id))
+			])
+		: [[], []];
+
 	const admin = isAdmin(locals.user);
 
 	// ADR-019: dependency picker offers only accessible projects (existing deps stay listed)
@@ -228,6 +245,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		})),
 		customFieldOptions,
 		projectCustomValues,
+		rollupTasks,
+		rollupTaskValues,
 		fieldTypes: CUSTOM_FIELD_TYPES,
 		users,
 		views,

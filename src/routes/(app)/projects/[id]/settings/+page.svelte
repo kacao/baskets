@@ -9,7 +9,22 @@
 	import StatusEditor from '$lib/components/StatusEditor.svelte';
 	import CustomFieldEditor from '$lib/components/CustomFieldEditor.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
+	import { computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
 	import { t } from '$lib/i18n';
+
+	// Project-entity rollup: aggregate a target field over all the project's tasks.
+	function projectRollupText(field: { type: string; config: Record<string, unknown> }): string | null {
+		if (field.type !== 'rollup') return null;
+		const cfg = { ...(field.config as unknown as RollupConfig), relation: 'task' };
+		const valueOf = (tid: string, fid: string) => {
+			const raw = data.rollupTaskValues.find((v) => v.taskId === tid && v.fieldId === fid)?.value;
+			const n = raw == null ? null : Number(raw);
+			return n != null && Number.isFinite(n) ? n : null;
+		};
+		const n = computeTaskRollup(cfg, '', { tasks: data.rollupTasks, taskDeps: [], valueOf });
+		const target = data.customFields.find((f) => f.id === cfg.targetFieldId);
+		return target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
+	}
 
 	let { data, form } = $props();
 
@@ -170,6 +185,7 @@
 					mode="pill"
 					taskId={data.project.id}
 					formAction="?/patchProjectCustomValues"
+					rollupText={projectRollupText(f)}
 					value={data.projectCustomValues.find((v) => v.fieldId === f.id)?.value ?? null}
 					options={data.customFieldOptions.filter((o) => o.fieldId === f.id)}
 					users={data.users}

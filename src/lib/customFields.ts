@@ -16,7 +16,8 @@ export const CUSTOM_FIELD_TYPES = [
 	'email',
 	'phone',
 	'place',
-	'url'
+	'url',
+	'rollup'
 ] as const;
 export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
 
@@ -32,8 +33,70 @@ export const FIELD_TYPE_LABELS: Record<string, string> = {
 	email: 'Email',
 	phone: 'Phone',
 	place: 'Place',
-	url: 'URL'
+	url: 'URL',
+	rollup: 'Rollup'
 };
+
+// Rollup field: aggregate a target field across related items.
+// relation = which items to roll up over (relative to the field's owner);
+// 'task' = all the project's tasks (the only relation valid for project-entity fields).
+export const ROLLUP_RELATIONS = [
+	['blocked-by', 'Blocked by'],
+	['blocking', 'Blocking'],
+	['sub-task', 'Sub-task'],
+	['task', 'Task']
+] as const;
+export const ROLLUP_FORMULAS = [
+	['count', 'Count'],
+	['sum', 'Sum'],
+	['average', 'Average'],
+	['min', 'Min'],
+	['max', 'Max']
+] as const;
+export const rollupRelationLabel = (v: string) =>
+	ROLLUP_RELATIONS.find(([k]) => k === v)?.[1] ?? v;
+export const rollupFormulaLabel = (v: string) => ROLLUP_FORMULAS.find(([k]) => k === v)?.[1] ?? v;
+
+/** Aggregate numeric values per formula. `count` ignores values (counts items). */
+export function rollupAggregate(formula: string, values: number[], relatedCount: number): number {
+	if (formula === 'count') return relatedCount;
+	const nums = values.filter((n) => Number.isFinite(n));
+	if (formula === 'sum') return nums.reduce((a, b) => a + b, 0);
+	if (formula === 'average') return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+	if (formula === 'min') return nums.length ? Math.min(...nums) : 0;
+	if (formula === 'max') return nums.length ? Math.max(...nums) : 0;
+	return 0;
+}
+
+export type RollupConfig = { relation: string; targetFieldId: string; formula: string };
+
+/**
+ * Compute a rollup value for an owner task. `valueOf(taskId, fieldId)` returns the
+ * numeric value of a target field on a related task (or null). Pure + client-safe.
+ */
+export function computeTaskRollup(
+	config: RollupConfig,
+	taskId: string,
+	ctx: {
+		tasks: { id: string; parentId: string | null }[];
+		taskDeps: { taskId: string; dependsOnId: string }[];
+		valueOf: (taskId: string, fieldId: string) => number | null;
+	}
+): number {
+	let related: string[] = [];
+	if (config.relation === 'sub-task')
+		related = ctx.tasks.filter((t) => t.parentId === taskId).map((t) => t.id);
+	else if (config.relation === 'blocked-by')
+		related = ctx.taskDeps.filter((d) => d.taskId === taskId).map((d) => d.dependsOnId);
+	else if (config.relation === 'blocking')
+		related = ctx.taskDeps.filter((d) => d.dependsOnId === taskId).map((d) => d.taskId);
+	else if (config.relation === 'task')
+		related = ctx.tasks.map((t) => t.id).filter((id) => id !== taskId);
+	const values = related
+		.map((id) => ctx.valueOf(id, config.targetFieldId))
+		.filter((n): n is number => n != null);
+	return rollupAggregate(config.formula, values, related.length);
+}
 export const fieldTypeLabel = (t: string) => FIELD_TYPE_LABELS[t] ?? t;
 
 // Types whose value is always stored as a JSON array (single = 1-element array).
@@ -94,6 +157,8 @@ export function defaultConfig(type: string): FieldConfig {
 		case 'files':
 		case 'task':
 			return { multi: false };
+		case 'rollup':
+			return { relation: 'sub-task', targetFieldId: '', formula: 'count' };
 		default:
 			return {};
 	}
@@ -122,6 +187,15 @@ export function sanitizeConfig(type: string, raw: unknown): FieldConfig {
 		case 'files':
 		case 'task':
 			return { multi: c.multi === true };
+		case 'rollup': {
+			const relations = ROLLUP_RELATIONS.map(([k]) => k);
+			const formulas = ROLLUP_FORMULAS.map(([k]) => k);
+			return {
+				relation: pick(c.relation, relations as unknown as readonly string[], 'sub-task'),
+				targetFieldId: typeof c.targetFieldId === 'string' ? c.targetFieldId : '',
+				formula: pick(c.formula, formulas as unknown as readonly string[], 'count')
+			};
+		}
 		default:
 			return {};
 	}

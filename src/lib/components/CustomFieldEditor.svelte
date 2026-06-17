@@ -15,6 +15,8 @@
 		SELECT_DISPLAYS,
 		APPLIES_TO,
 		appliesToLabel,
+		ROLLUP_RELATIONS,
+		ROLLUP_FORMULAS,
 		type FieldConfig
 	} from '$lib/customFields';
 
@@ -56,7 +58,10 @@
 	let newConfig = $state<FieldConfig>(defaultConfig('text'));
 	$effect(() => {
 		// reset config sub-form whenever the chosen type changes
-		newConfig = defaultConfig(newType);
+		const c = defaultConfig(newType);
+		// project-entity rollups can only roll up over the project's tasks
+		if (newType === 'rollup' && entityTab === 'project') c.relation = 'task';
+		newConfig = c;
 	});
 
 	let editingId = $state<string | null>(null);
@@ -167,6 +172,25 @@
 		</select>
 	{:else if type === 'person' || type === 'place' || type === 'files' || type === 'task'}
 		<label class="cfg-check"><input type="checkbox" bind:checked={cfg.multi} /> {$t('Allow multiple')}</label>
+	{:else if type === 'rollup'}
+		<select class="select cfg-in" bind:value={cfg.relation} aria-label={$t('Relation')}>
+			{#each ROLLUP_RELATIONS as [val, lbl] (val)}
+				{#if entityTab !== 'project' || val === 'task'}
+					<option value={val}>{$t(lbl)}</option>
+				{/if}
+			{/each}
+		</select>
+		<select class="select cfg-in" bind:value={cfg.targetFieldId} aria-label={$t('Target property')}>
+			<option value="">{$t('Target property…')}</option>
+			{#each fields.filter((f) => f.type !== 'rollup') as f (f.id)}
+				<option value={f.id}>{f.name}</option>
+			{/each}
+		</select>
+		<select class="select cfg-in" bind:value={cfg.formula} aria-label={$t('Formula')}>
+			{#each ROLLUP_FORMULAS as [val, lbl] (val)}
+				<option value={val}>{$t(lbl)}</option>
+			{/each}
+		</select>
 	{/if}
 {/snippet}
 

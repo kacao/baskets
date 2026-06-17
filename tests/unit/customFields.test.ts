@@ -7,6 +7,8 @@ import {
 	formatDate,
 	fieldAppliesTo,
 	isMulti,
+	rollupAggregate,
+	computeTaskRollup,
 	MULTI_CAPABLE
 } from '$lib/customFields';
 
@@ -263,5 +265,53 @@ describe('task field is multi-capable', () => {
 		expect(isMulti({ type: 'task', config: { multi: true } })).toBe(true);
 		expect(isMulti({ type: 'task', config: { multi: false } })).toBe(false);
 		expect(isMulti({ type: 'task', config: {} })).toBe(false);
+	});
+});
+
+describe('rollup', () => {
+	it('aggregates per formula', () => {
+		expect(rollupAggregate('count', [], 3)).toBe(3);
+		expect(rollupAggregate('sum', [1, 2, 3], 3)).toBe(6);
+		expect(rollupAggregate('average', [2, 4], 2)).toBe(3);
+		expect(rollupAggregate('min', [5, 2, 9], 3)).toBe(2);
+		expect(rollupAggregate('max', [5, 2, 9], 3)).toBe(9);
+		expect(rollupAggregate('sum', [], 0)).toBe(0);
+	});
+
+	it('counts sub-tasks via computeTaskRollup', () => {
+		const tasks = [
+			{ id: 'p', parentId: null },
+			{ id: 'a', parentId: 'p' },
+			{ id: 'b', parentId: 'p' },
+			{ id: 'x', parentId: null }
+		];
+		const n = computeTaskRollup(
+			{ relation: 'sub-task', targetFieldId: '', formula: 'count' },
+			'p',
+			{ tasks, taskDeps: [], valueOf: () => null }
+		);
+		expect(n).toBe(2);
+	});
+
+	it('sums a target field over blocked-by tasks', () => {
+		const tasks = [
+			{ id: 'p', parentId: null },
+			{ id: 'a', parentId: null },
+			{ id: 'b', parentId: null }
+		];
+		const vals: Record<string, number> = { a: 10, b: 5 };
+		const n = computeTaskRollup(
+			{ relation: 'blocked-by', targetFieldId: 'cost', formula: 'sum' },
+			'p',
+			{
+				tasks,
+				taskDeps: [
+					{ taskId: 'p', dependsOnId: 'a' },
+					{ taskId: 'p', dependsOnId: 'b' }
+				],
+				valueOf: (tid) => vals[tid] ?? null
+			}
+		);
+		expect(n).toBe(15);
 	});
 });

@@ -13,7 +13,7 @@
 	import TaskAttachments from '$lib/components/TaskAttachments.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
-	import { fieldAppliesTo } from '$lib/customFields';
+	import { fieldAppliesTo, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
 	import { describeRecurrence } from '$lib/recurrence';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
@@ -135,6 +135,20 @@
 	const cfValue = (fieldId: string) =>
 		taskCustomValues.find((v) => v.taskId === task.id && v.fieldId === fieldId)?.value ?? null;
 	const cfOptions = (fieldId: string) => customFieldOptions.filter((o) => o.fieldId === fieldId);
+
+	// Rollup fields are computed (aggregate a target field over related tasks).
+	function rollupText(field: { type: string; config: Record<string, unknown> }): string | null {
+		if (field.type !== 'rollup') return null;
+		const cfg = field.config as unknown as RollupConfig;
+		const valueOf = (tid: string, fid: string) => {
+			const raw = taskCustomValues.find((x) => x.taskId === tid && x.fieldId === fid)?.value;
+			const n = raw == null ? null : Number(raw);
+			return n != null && Number.isFinite(n) ? n : null;
+		};
+		const n = computeTaskRollup(cfg, task.id, { tasks, taskDeps, valueOf });
+		const target = customFields.find((f) => f.id === cfg.targetFieldId);
+		return target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
+	}
 	const taskFiles = $derived(files.filter((f) => f.taskId === task.id));
 
 	function fmtDate(d: Date | string | null) {
@@ -619,6 +633,7 @@
 					field={f}
 					options={cfOptions(f.id)}
 					value={cfValue(f.id)}
+					rollupText={rollupText(f)}
 					mode="pill"
 					taskId={task.id}
 					{users}
