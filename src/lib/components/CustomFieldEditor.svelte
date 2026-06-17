@@ -376,7 +376,17 @@
 	.cf-editor {
 		border: 1px solid var(--color-base-300);
 		border-radius: var(--radius-box, 0.5rem);
-		overflow: hidden;
+		/* not `overflow: hidden` — it would clip row icon-picker popovers */
+	}
+
+	.cf-editor > :first-child {
+		border-top-left-radius: var(--radius-box, 0.5rem);
+		border-top-right-radius: var(--radius-box, 0.5rem);
+	}
+
+	.cf-editor > :last-child {
+		border-bottom-left-radius: var(--radius-box, 0.5rem);
+		border-bottom-right-radius: var(--radius-box, 0.5rem);
 	}
 
 	.cf {
