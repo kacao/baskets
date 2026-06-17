@@ -383,7 +383,6 @@
 	}
 
 	.row.is-done .title-text {
-		text-decoration: line-through;
 		color: var(--color-muted);
 	}
 

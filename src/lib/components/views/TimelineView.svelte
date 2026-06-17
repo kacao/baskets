@@ -590,7 +590,6 @@
 
 	.cat-canceled {
 		opacity: 0.45;
-		text-decoration: line-through;
 	}
 
 	.tl-nodates {

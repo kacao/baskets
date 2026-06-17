@@ -1333,7 +1333,6 @@
 	}
 
 	.sub-item.is-done .sub-title-btn {
-		text-decoration: line-through;
 		color: var(--color-muted);
 	}
 
