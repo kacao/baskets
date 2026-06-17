@@ -119,6 +119,13 @@
 			.map((d) => tasks.find((t) => t.id === d.dependsOnId))
 			.filter(Boolean)
 	);
+	// reverse direction: tasks that list THIS task as a blocker (this task is blocking them)
+	const blocking = $derived(
+		taskDeps
+			.filter((d) => d.dependsOnId === task.id)
+			.map((d) => tasks.find((t) => t.id === d.taskId))
+			.filter(Boolean)
+	);
 	const userName = (id: string | null) => users.find((u) => u.id === id)?.name ?? null;
 	const milestoneName = (id: string | null) => milestones.find((m) => m.id === id)?.name ?? null;
 	const locationTitle = (id: string | null) => locations.find((l) => l.id === id)?.title ?? null;
@@ -422,11 +429,11 @@
 				{/snippet}
 			</Popover>
 
-			<!-- Depends on (multi) -->
-			<Popover ariaLabel={$t('Depends on')}>
+			<!-- Blocked by (multi) -->
+			<Popover ariaLabel={$t('Blocked by')}>
 				{#snippet trigger()}
 					<span class="pill-val" class:pill-ph={deps.length === 0}
-						>{$t('Depends on')}{#if deps.length > 0}&nbsp;· {deps.length}{/if}</span
+						>{$t('Blocked by')}{#if deps.length > 0}&nbsp;· {deps.length}{/if}</span
 					>
 				{/snippet}
 				{#snippet panel()}
@@ -440,7 +447,7 @@
 						<span class="opt-empty">{$t('none')}</span>
 					{/each}
 					<!-- svelte-ignore a11y_autofocus -->
-					<input class="pop-search" placeholder={$t('Add a dependency…')} bind:value={depQuery} autofocus />
+					<input class="pop-search" placeholder={$t('Add a blocker…')} bind:value={depQuery} autofocus />
 					{#each depFiltered as opt (opt.id)}
 						<form
 							method="POST"
@@ -585,9 +592,19 @@
 		</div>
 		{#if deps.length > 0}
 			<div class="section">
-				<span class="label">{$t('Depends on')}</span>
+				<span class="label">{$t('Blocked by')}</span>
 				<div class="chips-row">
 					{#each deps as d (d!.id)}
+						<span class="badge">{d!.title}</span>
+					{/each}
+				</div>
+			</div>
+		{/if}
+		{#if blocking.length > 0}
+			<div class="section">
+				<span class="label">{$t('Blocking')}</span>
+				<div class="chips-row">
+					{#each blocking as d (d!.id)}
 						<span class="badge">{d!.title}</span>
 					{/each}
 				</div>

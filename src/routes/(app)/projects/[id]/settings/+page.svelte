@@ -53,13 +53,22 @@
 <div class="card section">
 	<form method="POST" action="?/updateProject" use:enhance>
 		<div class="field">
-			<label class="label" for="pname">{$t('Name')}</label>
-			<input id="pname" name="name" class="input input--bare" value={data.project.name} required />
+			<input
+				id="pname"
+				name="name"
+				class="input input--bare name-input"
+				value={data.project.name}
+				placeholder={$t('Project name')}
+				required
+			/>
 		</div>
 		<div class="field">
-			<label class="label" for="pdesc">{$t('Description')}</label>
-			<textarea id="pdesc" name="description" class="textarea input--bare" rows="2"
-				>{data.project.description ?? ''}</textarea
+			<textarea
+				id="pdesc"
+				name="description"
+				class="textarea input--bare"
+				placeholder={$t('Add a description…')}
+				rows="2">{data.project.description ?? ''}</textarea
 			>
 		</div>
 		<div class="field">
@@ -492,6 +501,12 @@
 		background: transparent;
 		padding-left: 0;
 		padding-right: 0;
+	}
+
+	.name-input {
+		font-size: 22px;
+		font-weight: 600;
+		line-height: 1.3;
 	}
 
 	.color-in {

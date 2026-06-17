@@ -517,7 +517,7 @@
 									<span class="title-text">{t.title}</span>
 								</button>
 								{#if deps.length > 0}
-									<span class="badge badge-sm" title={$i18n('Depends on {names}', { names: deps.map((d) => d!.title).join(', ') })}>
+									<span class="badge badge-sm" title={$i18n('Blocked by {names}', { names: deps.map((d) => d!.title).join(', ') })}>
 										⛓ {deps.length}
 									</span>
 								{/if}

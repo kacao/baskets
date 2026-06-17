@@ -39,6 +39,7 @@
 	let editingId = $state<string | null>(null);
 	let creatingCat = $state<string | null>(null);
 	let newIcon = $state('');
+	let createError = $state('');
 	let editIcon = $state('');
 
 	// Local mirror so drag can reorder optimistically; re-synced to the persisted
@@ -59,6 +60,7 @@
 		creatingCat = creatingCat === c ? null : c;
 		editingId = null;
 		newIcon = '';
+		createError = '';
 	}
 	function openEdit(s: Editable) {
 		editingId = s.id;
@@ -133,19 +135,25 @@
 							if (result.type === 'success') {
 								creatingCat = null;
 								newIcon = '';
+								createError = '';
+							} else if (result.type === 'failure') {
+								createError = String(result.data?.message ?? 'Could not create status');
 							}
-							await update();
+							await update({ reset: false });
 						}}
 				>
 					<span class="drag drag--ghost"><Icon name="drag" size={14} /></span>
 					<input type="hidden" name="category" value={c} />
 					<input type="color" name="color" value="#71717a" class="color-in" aria-label={$t('Color')} />
 					{@render iconField(newIcon, (v) => (newIcon = v))}
-					<input name="name" class="input name-in" placeholder={$t('Name')} required maxlength="40" autocomplete="off" />
+					<input name="name" class="input name-in" placeholder={$t('Name')} required maxlength="40" autocomplete="off" oninput={() => (createError = '')} />
 					<input name="description" class="input desc-in" placeholder={$t('Description…')} maxlength="200" autocomplete="off" />
 					<button class="btn btn-sm" type="button" onclick={() => (creatingCat = null)}>{$t('Cancel')}</button>
 					<button class="btn btn-sm btn-primary" type="submit">{$t('Create')}</button>
 				</form>
+				{#if createError}
+					<div class="create-error">{createError}</div>
+				{/if}
 			{/if}
 
 			{#each inh as s (s.id)}
@@ -232,6 +240,12 @@
 		border-radius: var(--radius-box, 0.5rem);
 		/* not `overflow: hidden` — it would clip the row icon-picker popovers.
 		   round the first/last rows instead (below) to keep the corners clean. */
+	}
+
+	.create-error {
+		color: var(--color-error);
+		font-size: 12px;
+		padding: 4px 10px 8px;
 	}
 
 	.status-editor > :first-child {
