@@ -72,9 +72,9 @@ Visibility = access (ADR-019): non-admins see only workspaces they own or hold a
 ## Non-goals
 
 - Multi-tenant SaaS (billing, org isolation) — this is one self-hosted instance, access-scoped by workspaces
-- Real-time collaboration / live presence
+- Real-time concurrent co-editing (live invalidate-and-refetch updates + presence avatars exist; OT/CRDT editing does not)
 - Mobile native apps (responsive web only)
-- Time tracking, Gantt/roadmap views, custom fields
+- Time tracking
 
 ## Future candidates
 
