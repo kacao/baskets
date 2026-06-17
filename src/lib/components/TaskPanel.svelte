@@ -422,11 +422,11 @@
 				{/snippet}
 			</Popover>
 
-			<!-- Blocked by (multi) -->
-			<Popover ariaLabel={$t('Blocked by')}>
+			<!-- Depends on (multi) -->
+			<Popover ariaLabel={$t('Depends on')}>
 				{#snippet trigger()}
 					<span class="pill-val" class:pill-ph={deps.length === 0}
-						>{$t('Blocked by')}{#if deps.length > 0}&nbsp;· {deps.length}{/if}</span
+						>{$t('Depends on')}{#if deps.length > 0}&nbsp;· {deps.length}{/if}</span
 					>
 				{/snippet}
 				{#snippet panel()}
@@ -440,7 +440,7 @@
 						<span class="opt-empty">{$t('none')}</span>
 					{/each}
 					<!-- svelte-ignore a11y_autofocus -->
-					<input class="pop-search" placeholder={$t('Add a blocker…')} bind:value={depQuery} autofocus />
+					<input class="pop-search" placeholder={$t('Add a dependency…')} bind:value={depQuery} autofocus />
 					{#each depFiltered as opt (opt.id)}
 						<form
 							method="POST"
@@ -585,7 +585,7 @@
 		</div>
 		{#if deps.length > 0}
 			<div class="section">
-				<span class="label">{$t('Blocked by')}</span>
+				<span class="label">{$t('Depends on')}</span>
 				<div class="chips-row">
 					{#each deps as d (d!.id)}
 						<span class="badge">{d!.title}</span>
