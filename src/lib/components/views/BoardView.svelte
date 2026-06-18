@@ -129,6 +129,16 @@
 	let justDragged = $state(false);
 	// split pane: ?task= deep-links a task open
 	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
+	// keep the pane in sync with browser back/forward to a ?task= link, without
+	// fighting user clicks (effect tracks the URL only, never selectedId)
+	let lastTaskParam = $state(page.url.searchParams.get('task'));
+	$effect(() => {
+		const fromUrl = page.url.searchParams.get('task');
+		if (fromUrl !== lastTaskParam) {
+			lastTaskParam = fromUrl;
+			selectedId = fromUrl;
+		}
+	});
 	const selected = $derived(tasks.find((t) => t.id === selectedId) ?? null);
 
 	const glyph: Record<string, string> = {
@@ -240,7 +250,7 @@
 		const before = without[idx]?.id ?? '';
 
 		// no-op: same lane + same status + same slot
-		if (!laneChanged && !statusChanged && without[idx - 1]?.id !== id) {
+		if (!laneChanged && !statusChanged) {
 			const cur = cell.findIndex((t) => t.id === id);
 			if (cur === idx || (before === '' && cur === cell.length - 1)) {
 				reset();

@@ -15,6 +15,8 @@
 
 	let el: HTMLDivElement;
 	let map: import('leaflet').Map | null = null;
+	let L: typeof import('leaflet') | null = null;
+	let markerLayer: import('leaflet').LayerGroup | null = null;
 
 	type Point = { task: Task; lat: number; lng: number };
 	const points = $derived(
@@ -35,7 +37,7 @@
 	onMount(() => {
 		let cancelled = false;
 		(async () => {
-			const L = await import('leaflet');
+			L = await import('leaflet');
 			await import('leaflet/dist/leaflet.css');
 			if (cancelled) return;
 
@@ -44,34 +46,48 @@
 				maxZoom: 19,
 				attribution: '© OpenStreetMap contributors'
 			}).addTo(map);
-
-			if (points.length > 0) {
-				const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
-				map.fitBounds(bounds.pad(0.4), { maxZoom: 12 });
-				for (const p of points) {
-					// bindPopup renders HTML — pass a text node so task titles can't inject markup
-					const node = document.createElement('div');
-					node.textContent = p.task.title;
-					L.circleMarker([p.lat, p.lng], {
-						radius: 7,
-						color: '#0a0a0a',
-						weight: 1,
-						fillColor: '#0a0a0a',
-						fillOpacity: 0.9
-					})
-						.addTo(map)
-						.bindPopup(node);
-				}
-			} else {
-				map.setView([20, 0], 2);
-			}
+			markerLayer = L.layerGroup().addTo(map);
+			renderMarkers();
 		})();
 
 		return () => {
 			cancelled = true;
 			map?.remove();
 			map = null;
+			L = null;
+			markerLayer = null;
 		};
+	});
+
+	function renderMarkers() {
+		if (!L || !map || !markerLayer) return;
+		markerLayer.clearLayers();
+		if (points.length > 0) {
+			const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
+			map.fitBounds(bounds.pad(0.4), { maxZoom: 12 });
+			for (const p of points) {
+				// bindPopup renders HTML — pass a text node so task titles can't inject markup
+				const node = document.createElement('div');
+				node.textContent = p.task.title;
+				L.circleMarker([p.lat, p.lng], {
+					radius: 7,
+					color: '#0a0a0a',
+					weight: 1,
+					fillColor: '#0a0a0a',
+					fillOpacity: 0.9
+				})
+					.addTo(markerLayer)
+					.bindPopup(node);
+			}
+		} else {
+			map.setView([20, 0], 2);
+		}
+	}
+
+	// rebuild markers whenever tasks/locations change after the map is ready
+	$effect(() => {
+		points;
+		if (map) renderMarkers();
 	});
 </script>
 

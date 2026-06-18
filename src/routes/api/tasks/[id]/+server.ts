@@ -45,6 +45,9 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 
 	const [existing] = await db.select().from(task).where(eq(task.id, params.id));
 	if (!existing) return apiError(404, 'Task not found');
+	// ADR-019: don't confirm existence to users who can't access — 404, not 403
+	if (!(await canAccessProject(locals.user, existing.projectId)))
+		return apiError(404, 'Task not found');
 	if (!(await canEditTask(locals.user, existing)))
 		return apiError(403, 'No edit permission on this task');
 
@@ -182,16 +185,18 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 			: null;
 	if (Object.keys(updates).length === 0 && !cfMap) return apiError(400, 'No fields to update');
 
+	// Write custom values FIRST so a CF validation error doesn't leave the task
+	// row partially updated with no rollback (no surrounding transaction).
+	if (cfMap) {
+		const res = await writeTaskCustomValues(params.id, existing.projectId, apiCustomFieldEntries(cfMap));
+		if (res.error) return apiError(400, res.error);
+	}
+
 	const [updated] = await db
 		.update(task)
 		.set({ ...updates, updatedAt: new Date() })
 		.where(eq(task.id, params.id))
 		.returning();
-
-	if (cfMap) {
-		const res = await writeTaskCustomValues(params.id, existing.projectId, apiCustomFieldEntries(cfMap));
-		if (res.error) return apiError(400, res.error);
-	}
 
 	// Completing a parent completes its sub-tasks (same rule as the form action)
 	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
@@ -235,6 +240,9 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 
 	const [existing] = await db.select().from(task).where(eq(task.id, params.id));
 	if (!existing) return apiError(404, 'Task not found');
+	// ADR-019: don't confirm existence to users who can't access — 404, not 403
+	if (!(await canAccessProject(locals.user, existing.projectId)))
+		return apiError(404, 'Task not found');
 	if (!(await canEditTask(locals.user, existing)))
 		return apiError(403, 'No edit permission on this task');
 

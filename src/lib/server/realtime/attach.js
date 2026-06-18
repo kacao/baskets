@@ -51,6 +51,19 @@ export function attachRealtime(httpServer) {
 
 	const wss = new WebSocketServer({ noServer: true });
 
+	// Resolve the auth/access endpoints from the server's OWN bound port, never the
+	// client-supplied Host header — otherwise an attacker sets Host: evil.com and we
+	// forward the session cookie to them (SSRF + session leak).
+	let _baseUrl = null;
+	function baseUrl() {
+		if (!_baseUrl) {
+			const addr = httpServer.address();
+			const port = addr && typeof addr === 'object' ? addr.port : 5173;
+			_baseUrl = `http://127.0.0.1:${port}`;
+		}
+		return _baseUrl;
+	}
+
 	httpServer.on('upgrade', async (req, socket, head) => {
 		let pathname;
 		try {
@@ -61,7 +74,7 @@ export function attachRealtime(httpServer) {
 		// Only claim our path — leave Vite HMR and any other upgrades untouched.
 		if (pathname !== WS_PATH) return;
 
-		const origin = `http://${req.headers.host}`;
+		const origin = baseUrl();
 		const cookie = req.headers.cookie ?? '';
 
 		let user = null;

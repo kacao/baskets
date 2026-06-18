@@ -118,7 +118,7 @@ export async function generateDueReminders(userId: string): Promise<Notification
 
 	for (const r of rows) {
 		if (!r.dueDate) continue;
-		if (r.category === 'completed') continue;
+		if (r.category === 'completed' || r.category === 'canceled') continue;
 		const overdue = r.dueDate.getTime() < now.getTime();
 		const type = overdue ? 'overdue' : 'due_soon';
 

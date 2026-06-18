@@ -1144,8 +1144,13 @@ export const actions: Actions = {
 		} else {
 			const [l] = await db.select().from(label).where(eq(label.id, labelId));
 			const [proj] = await db.select().from(project).where(eq(project.id, params.id));
-			if (!l || !proj || l.workspaceId !== proj.workspaceId)
-				return fail(400, { message: 'Unknown label' });
+			// valid if a workspace label of this project's workspace OR scoped to this project
+			const ok =
+				l &&
+				proj &&
+				((l.workspaceId !== null && l.workspaceId === proj.workspaceId) ||
+					(l.projectId !== null && l.projectId === params.id));
+			if (!ok) return fail(400, { message: 'Unknown label' });
 			await db.insert(taskLabel).values({ taskId, labelId });
 		}
 		broadcastProjectChange(params.id, locals.user.id);

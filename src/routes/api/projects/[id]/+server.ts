@@ -66,6 +66,8 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) return apiError(404, 'Project not found');
+	// ADR-019: don't confirm existence to users who can't edit — 404, not 403
+	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Project not found');
 	if (!(await canEditProject(locals.user, params.id)))
 		return apiError(403, 'No edit permission on this project');
 
@@ -107,6 +109,8 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) return apiError(404, 'Project not found');
+	// ADR-019: don't confirm existence to users who can't edit — 404, not 403
+	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Project not found');
 	if (!(await canEditProject(locals.user, params.id)))
 		return apiError(403, 'No edit permission on this project');
 
