@@ -376,14 +376,18 @@
 			? viewConfig.filters
 			: {}) as Record<string, string[]>
 	);
+	const isFilterActive = (key: string) => Array.isArray(viewFilters[key]);
 	const filterChosen = (key: string) => (Array.isArray(viewFilters[key]) ? viewFilters[key] : []);
-	/** activeView config with one filter value toggled, ready to POST (empties dropped). */
-	function toggleFilterConfig(key: string, value: string) {
-		const cur = filterChosen(key);
+	/** activeView config with one filter value toggled, ready to POST. Inclusion
+	 * (ADR-035): seed all-checked from inactive, drop the key when all are re-checked. */
+	function toggleFilterConfig(key: string, value: string, allVals: string[]) {
+		const cur = isFilterActive(key) ? filterChosen(key) : allVals;
 		const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
-		const merged: Record<string, unknown> = { ...viewFilters, [key]: next };
+		const merged: Record<string, unknown> = { ...viewFilters };
+		if (next.length === allVals.length) delete merged[key];
+		else merged[key] = next;
 		const cleaned: Record<string, unknown> = {};
-		for (const [k, v] of Object.entries(merged)) if (Array.isArray(v) && v.length) cleaned[k] = v;
+		for (const [k, v] of Object.entries(merged)) if (Array.isArray(v)) cleaned[k] = v;
 		return JSON.stringify({
 			...viewConfig,
 			filters: Object.keys(cleaned).length ? cleaned : undefined
@@ -728,6 +732,14 @@
 			oncontextmenu={(e) => {
 				if (data.perm.views[v.id]) openCtx(e, v.id);
 			}}
+			ondblclick={(e) => {
+				if (!data.perm.views[v.id]) return;
+				e.preventDefault();
+				closeMenus();
+				milestonesOpen = false;
+				customizing = true;
+				if (activeView?.id !== v.id) goto(`?view=${v.id}`, { noScroll: true, keepFocus: true });
+			}}
 		>
 			{#if mode !== 'text'}<Icon name={VIEW_ICONS[v.type] ?? 'table'} size={14} />{/if}
 			{#if mode !== 'icon'}{v.name}{/if}
@@ -927,20 +939,23 @@
 
 <!-- Multi-select filter pill: label + count, popover of checkable items (stays open). -->
 {#snippet filterPill(group: { key: string; label: string; opts: [string, string][] })}
+	{@const on = isFilterActive(group.key)}
 	{@const chosen = filterChosen(group.key)}
-	<span class="cz-pill" class:cz-pill--on={chosen.length > 0}>
+	{@const hidden = on ? group.opts.length - chosen.length : 0}
+	<span class="cz-pill" class:cz-pill--on={on}>
 		<Popover ariaLabel={$t(group.label)}>
-			{#snippet trigger()}{$t(group.label)}{#if chosen.length}<span class="cz-count">{chosen.length}</span>{/if}{/snippet}
+			{#snippet trigger()}{$t(group.label)}{#if hidden > 0}<span class="cz-count">{hidden}</span>{/if}{/snippet}
 			{#snippet panel()}
 				<div class="cz-opts">
 					{#each group.opts as [val, lbl] (val)}
+						{@const ok = !on || chosen.includes(val)}
 						<button
 							class="cz-opt"
-							class:cz-opt--on={chosen.includes(val)}
+							class:cz-opt--on={ok}
 							type="button"
-							onclick={() => postViewConfig(toggleFilterConfig(group.key, val))}
+							onclick={() => postViewConfig(toggleFilterConfig(group.key, val, group.opts.map((o) => o[0])))}
 						>
-							<span class="cz-check">{#if chosen.includes(val)}<Icon name="check" size={13} />{/if}</span>
+							<span class="cz-check">{#if ok}<Icon name="check" size={13} />{/if}</span>
 							{lbl}
 						</button>
 					{:else}

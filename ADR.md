@@ -84,11 +84,21 @@ Twelve features shipped together on `feat/essential-features` (tracked as BASDEV
 
 ## Filter facets are exclusion sets (ADR-033)
 
+**Status.** Superseded by ADR-035 (back to inclusion, with a present/absent active flag).
+
 **Context.** The FilterBar facets (ADR-032 / BASDEV-2) originally stored the *selected/included* values: an empty facet meant "show all", and checking items narrowed to only those. With nothing checked by default, "all shown" and "show only X" looked identical until you opened the popover, and there was no intuitive "hide just this label" gesture.
 
 **Decision.** Each `view.config.filters` facet array now holds the **excluded (unchecked) values**. Every popover option renders **checked by default**; unchecking one hides tasks whose value matches. `matchTask` (in `src/lib/taskFilter.ts`) drops a task when its value for any facet is in that facet's array (labels: a task is hidden if it carries ANY excluded label; `_none` excludes unassigned / no-milestone / no-label / no-due). Empty/absent array = nothing hidden. `toggle`/`postFilters`/`hasActiveFilters` are unchanged (pure array-membership); only the interpreter (`matchTask`) and the renderer (FilterBar's checkmark predicate) flipped.
 
 **Consequences.** Storing the excluded set (vs. "all-but-one included") means newly-created statuses/labels/users are shown by default — they aren't in anyone's exclusion list. The persisted shape is unchanged (same keys), but the MEANING of `view.config.filters` and any `saved_filter` row inverted; `static/llms.txt` documents this. Free-text search stays inclusive (only matching tasks shown). `tests/unit/taskFilter.test.ts` rewritten to the exclusion model.
+
+## Filter facets back to inclusion sets (ADR-035)
+
+**Context.** The exclusion model (ADR-033) hid a multi-label task when ANY of its labels was unchecked, so checking only "inspection" still dropped a task tagged `[inspection, build]` — surprising when the user means "show tasks with inspection". Users expect **only checked items shown**.
+
+**Decision.** A facet array now holds the **CHECKED (included) values**, but a facet only filters when its key is **present** in `view.config.filters`. An **absent** key = inactive (everything shown; every option renders checked) — so new views (no `filters`) start all-checked. `matchTask` keeps a task only if its facet value is in the list (labels: kept if ANY of its labels is checked; `_none` = show unlabeled/unassigned/no-milestone/no-due). An **empty** present array shows nothing. `active()` now means "key present" (was "present and non-empty"). FilterBar/Customize `toggle` seeds the full option set on first uncheck and deletes the key when everything is re-checked; the facet badge shows the count of *unchecked* (hidden) options.
+
+**Consequences.** The persisted shape is the same arrays, but the MEANING re-inverted vs ADR-033 — **existing views with stored filters read backwards** until cleared and re-set (Clear button → reselect). Most views store no filters (absent → unaffected). `static/llms.txt` updated. A new label/status/user created after a facet went active will NOT appear checked (it isn't in the stored set) and is hidden by that facet until re-checked — the tradeoff for true inclusion.
 
 ## Tooltip action (ADR-034)
 

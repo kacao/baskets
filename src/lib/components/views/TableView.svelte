@@ -730,7 +730,7 @@
 	}
 
 	.group-row td {
-		padding: var(--sp-3) var(--sp-2) var(--sp-1);
+		padding: var(--sp-3) var(--sp-2) var(--sp-1) 0;
 		border-bottom: none;
 		background: none;
 	}
@@ -748,12 +748,14 @@
 	.group-toggle {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
+		width: 36px;
+		flex: 0 0 36px;
 		border: none;
 		background: none;
 		color: var(--color-muted);
 		cursor: pointer;
-		padding: 2px;
-		margin-left: -2px;
+		padding: 2px 0;
 		border-radius: var(--radius-field, 0.25rem);
 		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
 	}
@@ -877,7 +879,7 @@
 	}
 
 	.col-select {
-		width: 1%;
+		width: 36px;
 		white-space: nowrap;
 		text-align: center;
 		vertical-align: middle;

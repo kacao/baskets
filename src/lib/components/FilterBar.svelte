@@ -50,33 +50,36 @@
 	];
 
 	// Active filter set lives in view.config.filters (persisted via ?/updateView).
-	// Each facet array holds the EXCLUDED (unchecked) values; every option is
-	// checked by default and unchecking one hides tasks with that value.
+	// Inclusion semantics (ADR-035): a facet array holds the CHECKED (shown) values
+	// and a facet is active only when its key is present. An absent key = inactive
+	// (everything shown, every option rendered checked). New views have no filters.
 	const filters = $derived(
 		(config.filters && typeof config.filters === 'object'
 			? config.filters
 			: {}) as TaskFilters
 	);
 
+	const isActive = (key: keyof TaskFilters): boolean => Array.isArray(filters[key]);
 	const sel = (key: keyof TaskFilters): string[] =>
 		Array.isArray(filters[key]) ? (filters[key] as string[]) : [];
 
 	const activeCount = $derived(
 		(['statusIds', 'assigneeIds', 'milestoneIds', 'labelIds', 'priorities', 'dueBuckets'] as const).reduce(
-			(n, k) => n + sel(k).length,
+			(n, k) => n + (isActive(k) ? 1 : 0),
 			0
 		)
 	);
 	const anyActive = $derived(hasActiveFilters(filters, searchText));
 
 	// Posts the merged config the same way TableView's resize does (fetch + invalidateAll),
-	// so the filter set survives reloads without needing a new server action.
+	// so the filter set survives reloads without needing a new server action. Keeps
+	// every present array (incl. empty = show-nothing); inactive facets are absent.
 	async function postFilters(next: TaskFilters) {
 		if (!canEditView || !viewId) return;
 		const cleaned: TaskFilters = {};
 		(Object.keys(next) as (keyof TaskFilters)[]).forEach((k) => {
 			const v = next[k];
-			if (Array.isArray(v) && v.length) (cleaned[k] as unknown) = v;
+			if (Array.isArray(v)) (cleaned[k] as unknown) = v;
 		});
 		const fd = new FormData();
 		fd.set('id', viewId);
@@ -92,10 +95,16 @@
 		await invalidateAll();
 	}
 
-	function toggle(key: keyof TaskFilters, value: string) {
-		const cur = sel(key);
+	// Toggle a value's checked state. Starting from an inactive facet seeds the full
+	// option set (all checked) then drops the clicked one. Re-checking everything
+	// returns the facet to inactive (absent) so it shows "all" with no badge.
+	function toggle(key: keyof TaskFilters, value: string, allVals: string[]) {
+		const cur = isActive(key) ? sel(key) : allVals;
 		const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
-		postFilters({ ...filters, [key]: next });
+		const nextFilters: TaskFilters = { ...filters };
+		if (next.length === allVals.length) delete nextFilters[key];
+		else (nextFilters[key] as unknown) = next;
+		postFilters(nextFilters);
 	}
 
 	function clearAll() {
@@ -140,23 +149,25 @@
 </div>
 
 {#snippet facet(key: keyof TaskFilters, label: string, opts: [string, string][])}
-	{@const excluded = sel(key)}
-	<span class="facet" class:facet--on={excluded.length > 0}>
+	{@const on = isActive(key)}
+	{@const checked = sel(key)}
+	{@const hidden = on ? opts.length - checked.length : 0}
+	<span class="facet" class:facet--on={on}>
 	<Popover ariaLabel={label}>
 		{#snippet trigger()}
-			{label}{#if excluded.length > 0}<span class="facet-count">{excluded.length}</span>{/if}
+			{label}{#if hidden > 0}<span class="facet-count">{hidden}</span>{/if}
 		{/snippet}
 		{#snippet panel()}
 			{#each opts as [val, lbl] (val)}
-				{@const on = !excluded.includes(val)}
+				{@const checkedOpt = !on || checked.includes(val)}
 				<button
 					class="opt"
-					class:opt--on={on}
+					class:opt--on={checkedOpt}
 					type="button"
 					disabled={!canEditView}
-					onclick={() => toggle(key, val)}
+					onclick={() => toggle(key, val, opts.map((o) => o[0]))}
 				>
-					<span class="opt-check">{#if on}<Icon name="check" size={13} />{/if}</span>
+					<span class="opt-check">{#if checkedOpt}<Icon name="check" size={13} />{/if}</span>
 					{lbl}
 				</button>
 			{:else}

@@ -81,8 +81,8 @@ describe('hasActiveFilters', () => {
 		expect(hasActiveFilters(undefined)).toBe(false);
 	});
 
-	it('is false for a filter object with only empty arrays', () => {
-		expect(hasActiveFilters({ statusIds: [], priorities: [] })).toBe(false);
+	it('is true for a present (empty) facet array — present = active (ADR-035)', () => {
+		expect(hasActiveFilters({ statusIds: [], priorities: [] })).toBe(true);
 	});
 
 	it('is true when search text is non-empty', () => {
@@ -93,7 +93,7 @@ describe('hasActiveFilters', () => {
 		expect(hasActiveFilters(undefined, '   ')).toBe(false);
 	});
 
-	it('is true when any facet has a selected value', () => {
+	it('is true when any facet key is present', () => {
 		expect(hasActiveFilters({ statusIds: ['s-1'] })).toBe(true);
 		expect(hasActiveFilters({ dueBuckets: ['today'] })).toBe(true);
 		expect(hasActiveFilters({ labelIds: ['_none'] })).toBe(true);
@@ -138,126 +138,132 @@ describe('matchTask — free-text search', () => {
 	});
 });
 
-// Exclusion semantics: a facet array lists the UNCHECKED values to hide; a task
-// is dropped when its value for that facet is in the list. Default = all shown.
-describe('matchTask — status facet (exclusion)', () => {
-	it('drops a task whose status is excluded', () => {
+// Inclusion semantics (ADR-035): a present facet array lists the CHECKED values to
+// SHOW; a task is kept only if its value is in the list. Absent facet = inactive
+// (all shown). Empty present array = show nothing.
+describe('matchTask — status facet (inclusion)', () => {
+	it('keeps a task whose status is checked', () => {
 		const task = makeTask({ statusId: 's-backlog' });
-		expect(matchTask(task, { statusIds: ['s-backlog'] }, '', noLabels)).toBe(false);
-	});
-
-	it('keeps a task whose status is not excluded', () => {
-		const task = makeTask({ statusId: 's-progress' });
 		expect(matchTask(task, { statusIds: ['s-backlog'] }, '', noLabels)).toBe(true);
 	});
 
-	it('drops any status named in the excluded set', () => {
+	it('drops a task whose status is not in the checked set', () => {
+		const task = makeTask({ statusId: 's-progress' });
+		expect(matchTask(task, { statusIds: ['s-backlog'] }, '', noLabels)).toBe(false);
+	});
+
+	it('keeps any status named in the checked set', () => {
 		const task = makeTask({ statusId: 's-done' });
-		expect(matchTask(task, { statusIds: ['s-progress', 's-done'] }, '', noLabels)).toBe(false);
+		expect(matchTask(task, { statusIds: ['s-progress', 's-done'] }, '', noLabels)).toBe(true);
+	});
+
+	it('hides everything for an empty present facet', () => {
+		const task = makeTask({ statusId: 's-backlog' });
+		expect(matchTask(task, { statusIds: [] }, '', noLabels)).toBe(false);
 	});
 });
 
-describe('matchTask — priority facet (exclusion)', () => {
-	it('drops an excluded priority', () => {
+describe('matchTask — priority facet (inclusion)', () => {
+	it('keeps a checked priority', () => {
 		const task = makeTask({ priority: 'high' });
-		expect(matchTask(task, { priorities: ['high'] }, '', noLabels)).toBe(false);
+		expect(matchTask(task, { priorities: ['high'] }, '', noLabels)).toBe(true);
 	});
 
-	it('keeps a priority that is not excluded', () => {
+	it('drops a priority that is not checked', () => {
 		const task = makeTask({ priority: 'low' });
-		expect(matchTask(task, { priorities: ['high', 'urgent'] }, '', noLabels)).toBe(true);
+		expect(matchTask(task, { priorities: ['high', 'urgent'] }, '', noLabels)).toBe(false);
 	});
 });
 
-describe('matchTask — assignee facet (exclusion)', () => {
-	it('drops a task assigned to an excluded user', () => {
+describe('matchTask — assignee facet (inclusion)', () => {
+	it('keeps a task assigned to a checked user', () => {
 		const task = makeTask({ assigneeId: 'u-1' });
+		expect(matchTask(task, { assigneeIds: ['u-1'] }, '', noLabels)).toBe(true);
+	});
+
+	it('drops a task assigned to a non-checked user', () => {
+		const task = makeTask({ assigneeId: 'u-2' });
 		expect(matchTask(task, { assigneeIds: ['u-1'] }, '', noLabels)).toBe(false);
 	});
 
-	it('keeps a task assigned to a non-excluded user', () => {
-		const task = makeTask({ assigneeId: 'u-2' });
-		expect(matchTask(task, { assigneeIds: ['u-1'] }, '', noLabels)).toBe(true);
+	it('shows unassigned tasks only when _none is checked', () => {
+		const task = makeTask({ assigneeId: null });
+		expect(matchTask(task, { assigneeIds: ['_none'] }, '', noLabels)).toBe(true);
 	});
 
-	it('hides unassigned tasks when _none is excluded', () => {
+	it('hides an unassigned task when only a real user is checked', () => {
 		const task = makeTask({ assigneeId: null });
-		expect(matchTask(task, { assigneeIds: ['_none'] }, '', noLabels)).toBe(false);
-	});
-
-	it('keeps an unassigned task when only a real user is excluded', () => {
-		const task = makeTask({ assigneeId: null });
-		expect(matchTask(task, { assigneeIds: ['u-1'] }, '', noLabels)).toBe(true);
+		expect(matchTask(task, { assigneeIds: ['u-1'] }, '', noLabels)).toBe(false);
 	});
 });
 
-describe('matchTask — milestone facet (exclusion)', () => {
-	it('drops a task in an excluded milestone', () => {
+describe('matchTask — milestone facet (inclusion)', () => {
+	it('keeps a task in a checked milestone', () => {
 		const task = makeTask({ milestoneId: 'm-1' });
-		expect(matchTask(task, { milestoneIds: ['m-1'] }, '', noLabels)).toBe(false);
-	});
-
-	it('hides milestone-less tasks when _none is excluded', () => {
-		const task = makeTask({ milestoneId: null });
-		expect(matchTask(task, { milestoneIds: ['_none'] }, '', noLabels)).toBe(false);
-	});
-
-	it('keeps a milestone-less task when a real milestone is excluded', () => {
-		const task = makeTask({ milestoneId: null });
 		expect(matchTask(task, { milestoneIds: ['m-1'] }, '', noLabels)).toBe(true);
 	});
+
+	it('shows milestone-less tasks only when _none is checked', () => {
+		const task = makeTask({ milestoneId: null });
+		expect(matchTask(task, { milestoneIds: ['_none'] }, '', noLabels)).toBe(true);
+	});
+
+	it('hides a milestone-less task when only a real milestone is checked', () => {
+		const task = makeTask({ milestoneId: null });
+		expect(matchTask(task, { milestoneIds: ['m-1'] }, '', noLabels)).toBe(false);
+	});
 });
 
-describe('matchTask — due-date bucket facet (exclusion)', () => {
-	it('drops a task whose due date falls in an excluded bucket', () => {
+describe('matchTask — due-date bucket facet (inclusion)', () => {
+	it('keeps a task whose due date falls in a checked bucket', () => {
 		const task = makeTask({ dueDate: new Date(2026, 5, 14) }); // overdue
-		expect(matchTask(task, { dueBuckets: ['overdue'] }, '', noLabels)).toBe(false);
+		expect(matchTask(task, { dueBuckets: ['overdue'] }, '', noLabels)).toBe(true);
 	});
 
-	it('keeps a task whose bucket is not excluded', () => {
+	it('drops a task whose bucket is not checked', () => {
 		const task = makeTask({ dueDate: new Date(2026, 5, 14) }); // overdue
-		expect(matchTask(task, { dueBuckets: ['today', 'week'] }, '', noLabels)).toBe(true);
+		expect(matchTask(task, { dueBuckets: ['today', 'week'] }, '', noLabels)).toBe(false);
 	});
 
-	it('hides no-due-date tasks when the none bucket is excluded', () => {
+	it('shows no-due-date tasks only when the none bucket is checked', () => {
 		const task = makeTask({ dueDate: null });
-		expect(matchTask(task, { dueBuckets: ['none'] }, '', noLabels)).toBe(false);
+		expect(matchTask(task, { dueBuckets: ['none'] }, '', noLabels)).toBe(true);
 	});
 });
 
-describe('matchTask — label facet (multi-value exclusion)', () => {
-	it('drops a task that has an excluded label', () => {
+describe('matchTask — label facet (multi-value inclusion)', () => {
+	it('keeps a task when ANY of its labels is checked', () => {
 		const task = makeTask({ id: 't1' });
 		const helpers = labelsBy({ t1: ['l-a', 'l-b'] });
-		expect(matchTask(task, { labelIds: ['l-b'] }, '', helpers)).toBe(false);
+		expect(matchTask(task, { labelIds: ['l-b'] }, '', helpers)).toBe(true);
 	});
 
-	it('keeps a task when none of its labels are excluded', () => {
+	it('drops a task when none of its labels are checked', () => {
 		const task = makeTask({ id: 't1' });
 		const helpers = labelsBy({ t1: ['l-a'] });
-		expect(matchTask(task, { labelIds: ['l-z'] }, '', helpers)).toBe(true);
+		expect(matchTask(task, { labelIds: ['l-z'] }, '', helpers)).toBe(false);
 	});
 
-	it('hides a task that carries an excluded label even if its others stay checked', () => {
+	it('keeps a multi-label task if at least one label stays checked', () => {
 		const task = makeTask({ id: 't1' });
 		const helpers = labelsBy({ t1: ['l-a', 'l-b'] });
-		expect(matchTask(task, { labelIds: ['l-a'] }, '', helpers)).toBe(false);
+		expect(matchTask(task, { labelIds: ['l-a'] }, '', helpers)).toBe(true);
 	});
 
-	it('hides unlabeled tasks when _none is excluded', () => {
+	it('shows unlabeled tasks only when _none is checked', () => {
 		const task = makeTask({ id: 't1' });
-		expect(matchTask(task, { labelIds: ['_none'] }, '', labelsBy({}))).toBe(false);
+		expect(matchTask(task, { labelIds: ['_none'] }, '', labelsBy({}))).toBe(true);
 	});
 
-	it('keeps a labeled task when only _none is excluded', () => {
+	it('hides a labeled task when only _none is checked', () => {
 		const task = makeTask({ id: 't1' });
 		const helpers = labelsBy({ t1: ['l-a'] });
-		expect(matchTask(task, { labelIds: ['_none'] }, '', helpers)).toBe(true);
+		expect(matchTask(task, { labelIds: ['_none'] }, '', helpers)).toBe(false);
 	});
 });
 
-describe('matchTask — combined facets (hide if ANY facet excludes)', () => {
-	it('keeps a task when none of its values are excluded in any facet', () => {
+describe('matchTask — combined facets (keep only if EVERY active facet includes)', () => {
+	it('keeps a task when each active facet includes its value', () => {
 		const task = makeTask({
 			statusId: 's-progress',
 			priority: 'high',
@@ -265,68 +271,68 @@ describe('matchTask — combined facets (hide if ANY facet excludes)', () => {
 			dueDate: new Date(2026, 5, 15) // today
 		});
 		const filters: TaskFilters = {
-			statusIds: ['s-backlog'],
-			priorities: ['low'],
-			assigneeIds: ['u-2'],
-			dueBuckets: ['overdue']
+			statusIds: ['s-progress'],
+			priorities: ['high'],
+			assigneeIds: ['u-1'],
+			dueBuckets: ['today']
 		};
 		expect(matchTask(task, filters, '', noLabels)).toBe(true);
 	});
 
-	it('hides the task when a single facet excludes its value', () => {
+	it('hides the task when a single active facet excludes its value', () => {
 		const task = makeTask({ statusId: 's-progress', priority: 'low' });
-		const filters: TaskFilters = { statusIds: ['s-backlog'], priorities: ['low'] };
+		const filters: TaskFilters = { statusIds: ['s-progress'], priorities: ['high'] };
 		expect(matchTask(task, filters, '', noLabels)).toBe(false);
 	});
 
-	it('combines free-text search with exclusion (both must hold)', () => {
+	it('combines free-text search with inclusion (both must hold)', () => {
 		const task = makeTask({ title: 'Ship release', statusId: 's-progress' });
-		const filters: TaskFilters = { statusIds: ['s-backlog'] }; // does not exclude s-progress
+		const filters: TaskFilters = { statusIds: ['s-progress'] }; // includes s-progress
 		expect(matchTask(task, filters, 'ship', noLabels)).toBe(true);
 		expect(matchTask(task, filters, 'nope', noLabels)).toBe(false);
 	});
 });
 
-describe('filterTasks (exclusion)', () => {
+describe('filterTasks (inclusion)', () => {
 	it('returns the original array unchanged when no filters are active', () => {
 		const tasks = [makeTask({ id: 'a' }), makeTask({ id: 'b' })];
 		expect(filterTasks(tasks, undefined, '', noLabels)).toBe(tasks);
 	});
 
-	it('drops the excluded tasks for a flat list', () => {
+	it('keeps only the checked tasks for a flat list', () => {
 		const tasks = [
 			makeTask({ id: 'a', priority: 'high' }),
 			makeTask({ id: 'b', priority: 'low' })
 		];
-		const out = filterTasks(tasks, { priorities: ['high'] }, '', noLabels);
+		const out = filterTasks(tasks, { priorities: ['low'] }, '', noLabels);
 		expect(out.map((t) => t.id)).toEqual(['b']);
 	});
 
-	it('keeps a non-excluded sub-task and pulls in its parent for context', () => {
+	it('keeps a matching sub-task and pulls in its parent for context', () => {
 		const tasks = [
-			makeTask({ id: 'parent', priority: 'low' }), // excluded
-			makeTask({ id: 'child', parentId: 'parent', priority: 'high' }) // kept
+			makeTask({ id: 'parent', priority: 'low' }), // not checked
+			makeTask({ id: 'child', parentId: 'parent', priority: 'high' }) // checked
 		];
-		const out = filterTasks(tasks, { priorities: ['low'] }, '', noLabels);
+		const out = filterTasks(tasks, { priorities: ['high'] }, '', noLabels);
 		expect(out.map((t) => t.id).sort()).toEqual(['child', 'parent']);
 	});
 
-	it('keeps the sub-tasks of a non-excluded parent so an expanded parent retains its rows', () => {
+	it('keeps the sub-tasks of a matching parent so an expanded parent retains its rows', () => {
 		const tasks = [
-			makeTask({ id: 'parent', priority: 'high' }), // kept
-			makeTask({ id: 'child', parentId: 'parent', priority: 'low' }) // excluded but pulled in
+			makeTask({ id: 'parent', priority: 'high' }), // checked
+			makeTask({ id: 'child', parentId: 'parent', priority: 'low' }) // not checked but pulled in
 		];
-		const out = filterTasks(tasks, { priorities: ['low'] }, '', noLabels);
+		const out = filterTasks(tasks, { priorities: ['high'] }, '', noLabels);
 		expect(out.map((t) => t.id).sort()).toEqual(['child', 'parent']);
 	});
 
-	it('drops a parent whose children are also excluded', () => {
+	it('drops a parent whose children also fail the filter', () => {
 		const tasks = [
 			makeTask({ id: 'parent', priority: 'low' }),
 			makeTask({ id: 'child', parentId: 'parent', priority: 'low' }),
 			makeTask({ id: 'hit', priority: 'high' })
 		];
-		const out = filterTasks(tasks, { priorities: ['low'] }, '', noLabels);
+		const out = filterTasks(tasks, { priorities: ['high'] }, '', noLabels);
 		expect(out.map((t) => t.id)).toEqual(['hit']);
 	});
 
@@ -336,14 +342,14 @@ describe('filterTasks (exclusion)', () => {
 			makeTask({ id: 'b', priority: 'low' }),
 			makeTask({ id: 'c', priority: 'high' })
 		];
-		const out = filterTasks(tasks, { priorities: ['low'] }, '', noLabels);
+		const out = filterTasks(tasks, { priorities: ['high'] }, '', noLabels);
 		expect(out.map((t) => t.id)).toEqual(['a', 'c']);
 	});
 
-	it('hides tasks carrying an excluded label across the list', () => {
+	it('keeps only tasks carrying a checked label across the list', () => {
 		const tasks = [makeTask({ id: 'a' }), makeTask({ id: 'b' }), makeTask({ id: 'c' })];
 		const helpers = labelsBy({ a: ['l-1'], b: ['l-2'] });
-		const out = filterTasks(tasks, { labelIds: ['l-2'] }, '', helpers);
-		expect(out.map((t) => t.id)).toEqual(['a', 'c']);
+		const out = filterTasks(tasks, { labelIds: ['l-1'] }, '', helpers);
+		expect(out.map((t) => t.id)).toEqual(['a']);
 	});
 });
