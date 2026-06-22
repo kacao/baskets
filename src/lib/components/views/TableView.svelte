@@ -745,14 +745,18 @@
 		overflow: visible;
 	}
 
-	.group-row {
-		border-top: 3px solid black;
+	/* breathing space between groups — an empty spacer row before each group's tbody
+	   (every group is its own <tbody>; the first one has no preceding sibling) */
+	.table tbody + tbody::before {
+		content: '';
+		display: table-row;
+		height: 20px;
 	}
 
 	.group-row td {
 		padding: var(--sp-3) var(--sp-2) var(--sp-1) 0;
 		/* visible rule above each group to separate it from the previous group */
-		border-top: 1px solid var(--color-border-subtle);
+		border-top: 2px solid var(--color-border-subtle);
 		border-bottom: none;
 		background: none;
 	}
