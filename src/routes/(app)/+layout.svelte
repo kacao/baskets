@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { fade } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import { authClient } from '$lib/auth-client';
 	import Toaster from '$lib/components/Toaster.svelte';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
@@ -45,6 +45,29 @@
 
 	function isActive(href: string) {
 		return page.url.pathname === href || page.url.pathname.startsWith(href + '/');
+	}
+
+	// Per-project collapsible menu → tasks view + project-settings sections.
+	const projectNav = [
+		{ label: 'Tasks', icon: 'task-list', to: (id: string) => `/projects/${id}` },
+		{ label: 'Milestones', icon: 'flag', to: (id: string) => `/projects/${id}/milestones` },
+		{ label: 'Statuses', icon: 'circle', to: (id: string) => `/projects/${id}/statuses` },
+		{ label: 'Labels', icon: 'label', to: (id: string) => `/projects/${id}/labels` },
+		{ label: 'Custom fields', icon: 'input-field', to: (id: string) => `/projects/${id}/custom-fields` },
+		{ label: 'Locations', icon: 'map-pin', to: (id: string) => `/projects/${id}/locations` },
+		{ label: 'Settings', icon: 'settings', to: (id: string) => `/projects/${id}/settings` }
+	];
+
+	let expanded = $state<Record<string, boolean>>({});
+	const activeProjectId = $derived(page.url.pathname.match(/^\/projects\/([^/]+)/)?.[1] ?? null);
+	$effect(() => {
+		if (activeProjectId) expanded[activeProjectId] = true;
+	});
+
+	function subActive(href: string) {
+		const [path, hash] = href.split('#');
+		if (page.url.pathname !== path) return false;
+		return hash ? page.url.hash === `#${hash}` : page.url.hash === '';
 	}
 </script>
 
@@ -99,25 +122,44 @@
 				</div>
 			{/if}
 		</div>
-		<a
-			href="/projects"
-			class="nav-link"
-			class:active={isActive('/projects')}
-			onclick={() => (menuOpen = false)}
-		>
-			{$t('Projects')}
-		</a>
+		<div class="nav-section-label">{$t('Projects')}</div>
 		{#if currentProjects.length > 0}
-			<div class="nav-sub">
+			<div class="nav-projects">
 				{#each currentProjects as p (p.id)}
-					<a
-						href="/projects/{p.id}"
-						class="nav-sublink"
-						class:active={page.url.pathname === `/projects/${p.id}`}
-						onclick={() => (menuOpen = false)}
-					>
-						{#if p.icon}<span class="nav-icon"><EntityIcon value={p.icon} size={14} /></span>{:else if p.pinned}<span aria-hidden="true" style="margin-right: 4px;"><Icon name="star" size={12} /></span>{/if}{p.name}
-					</a>
+					<div class="proj">
+						<div class="proj-row" class:active={activeProjectId === p.id}>
+							<button
+								class="proj-toggle"
+								aria-expanded={!!expanded[p.id]}
+								aria-label={$t('Toggle project menu')}
+								onclick={() => (expanded[p.id] = !expanded[p.id])}
+							>
+								<span class="proj-chevron" class:open={expanded[p.id]} aria-hidden="true"><Icon name="nav-arrow-right" size={12} /></span>
+							</button>
+							<a
+								href="/projects/{p.id}"
+								class="proj-name"
+								onclick={() => (menuOpen = false)}
+							>
+								{#if p.icon}<span class="nav-icon"><EntityIcon value={p.icon} size={14} /></span>{:else if p.pinned}<span class="nav-icon" aria-hidden="true"><Icon name="star" size={12} /></span>{/if}{p.name}
+							</a>
+						</div>
+						{#if expanded[p.id]}
+							<div class="proj-sub" transition:slide={{ duration: 150 }}>
+								{#each projectNav as item (item.label)}
+									{@const href = item.to(p.id)}
+									<a
+										class="proj-subitem"
+										class:active={subActive(href)}
+										{href}
+										onclick={() => (menuOpen = false)}
+									>
+										<span class="sub-ic" aria-hidden="true"><Icon name={item.icon} size={13} /></span>{$t(item.label)}
+									</a>
+								{/each}
+							</div>
+						{/if}
+					</div>
 				{/each}
 			</div>
 		{/if}
@@ -353,9 +395,11 @@
 	.ws-gear {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		flex: 0 0 auto;
 		color: var(--color-muted);
-		padding: 4px 8px;
+		min-width: 32px;
+		padding: 8px;
 		opacity: 0;
 		transition:
 			opacity var(--dur-fast) ease,
@@ -489,6 +533,133 @@
 		display: inline-flex;
 		vertical-align: middle;
 		margin-right: 4px;
+	}
+
+	.nav-section-label {
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--color-muted);
+		padding: var(--sp-2) var(--sp-3) var(--sp-1);
+	}
+
+	.nav-projects {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		margin-bottom: var(--sp-1);
+	}
+
+	.proj-row {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		padding-right: var(--sp-2);
+		transition: background var(--dur-fast) ease;
+	}
+
+	.proj-row:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.proj-toggle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 auto;
+		width: 22px;
+		height: 26px;
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		padding: 0;
+		transition: color var(--dur-fast) ease;
+	}
+
+	.proj-toggle:hover {
+		color: var(--color-fg);
+	}
+
+	.proj-chevron {
+		display: inline-flex;
+		transition: transform var(--dur-fast) ease;
+	}
+
+	.proj-chevron.open {
+		transform: rotate(90deg);
+	}
+
+	.proj-name {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		font-family: var(--font-body);
+		font-size: 13px;
+		font-weight: 400;
+		color: var(--color-muted);
+		text-decoration: none;
+		padding: var(--sp-1) 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		transition: color var(--dur-fast) ease;
+	}
+
+	.proj-row:hover .proj-name {
+		color: var(--color-fg);
+	}
+
+	.proj-row.active .proj-name {
+		color: var(--color-fg);
+		font-weight: 600;
+	}
+
+	.proj-sub {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		padding-bottom: var(--sp-1);
+	}
+
+	.proj-subitem {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-1);
+		font-size: 12px;
+		font-weight: 400;
+		color: var(--color-muted);
+		text-decoration: none;
+		padding: 3px var(--sp-3) 3px calc(var(--sp-3) + 22px);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
+	}
+
+	.proj-subitem:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
+	}
+
+	.proj-subitem.active {
+		color: var(--color-fg);
+		font-weight: 600;
+	}
+
+	.sub-ic {
+		display: inline-flex;
+		flex: 0 0 auto;
+		color: var(--color-muted);
+	}
+
+	.proj-subitem:hover .sub-ic,
+	.proj-subitem.active .sub-ic {
+		color: inherit;
 	}
 
 	.content {

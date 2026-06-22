@@ -443,6 +443,11 @@
 	}
 
 	.tl-add {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 28px;
+		min-height: 28px;
 		border: none;
 		background: none;
 		font-size: 18px;
@@ -450,10 +455,15 @@
 		color: var(--color-muted);
 		cursor: pointer;
 		padding: 0 6px;
+		transition: color var(--dur-fast) ease, transform var(--dur-fast) ease;
 	}
 
 	.tl-add:hover {
 		color: var(--color-fg);
+	}
+
+	.tl-add:active {
+		transform: scale(0.96);
 	}
 
 	.tl-empty {
@@ -533,6 +543,7 @@
 	}
 
 	.tl-lane-toggle {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		border: none;
@@ -541,6 +552,17 @@
 		cursor: pointer;
 		padding: 2px;
 		border-radius: var(--radius-field, 0.25rem);
+		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+	}
+
+	.tl-lane-toggle::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 32px;
+		height: 32px;
+		transform: translate(-50%, -50%);
 	}
 
 	.tl-lane-toggle:hover {
@@ -556,6 +578,7 @@
 	.tl-lane-count {
 		font-size: 12px;
 		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.tl-row {

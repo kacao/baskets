@@ -27,6 +27,9 @@
 		border: 1px solid var(--color-border-subtle);
 		background: var(--color-bg);
 		padding: var(--sp-5) var(--sp-4);
+		box-shadow:
+			0 1px 2px color-mix(in srgb, var(--color-base-content) 6%, transparent),
+			0 8px 24px color-mix(in srgb, var(--color-base-content) 8%, transparent);
 		animation: drop-in 0.18s ease-out;
 	}
 

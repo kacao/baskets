@@ -186,6 +186,7 @@
 		font-size: 11px;
 		color: var(--color-muted);
 		padding: 0 8px 6px;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.ip-remove {

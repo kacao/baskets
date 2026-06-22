@@ -294,7 +294,7 @@
 		cursor: pointer;
 		padding: 4px;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: border-color 0.15s ease;
+		transition: border-color var(--dur) ease;
 	}
 
 	.nav-btn:hover {
@@ -309,7 +309,7 @@
 		padding: 4px 10px;
 		cursor: pointer;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: border-color 0.15s ease;
+		transition: border-color var(--dur) ease;
 	}
 
 	.today-btn:hover {
@@ -403,7 +403,7 @@
 		cursor: pointer;
 		padding: 0 4px;
 		opacity: 0;
-		transition: opacity 0.15s ease, color 0.15s ease;
+		transition: opacity var(--dur) ease, color var(--dur) ease;
 	}
 
 	.cal-day:hover .day-add {
@@ -435,7 +435,7 @@
 		padding: 1px 4px;
 		cursor: pointer;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: border-color 0.15s ease;
+		transition: border-color var(--dur) ease;
 	}
 
 	.chip:hover,
@@ -467,5 +467,6 @@
 		border-left-width: 1px;
 		color: var(--color-muted);
 		font-size: 10px;
+		font-variant-numeric: tabular-nums;
 	}
 </style>

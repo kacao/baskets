@@ -189,17 +189,25 @@
 
 	.pane-x {
 		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		margin: -5px -6px;
 		border: none;
 		background: none;
 		font-size: 18px;
 		line-height: 1;
 		cursor: pointer;
 		color: var(--color-muted);
-		padding: 2px 6px;
+		border-radius: var(--radius);
+		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
 	}
 
 	.pane-x:hover {
 		color: var(--color-fg);
+		background: var(--color-surface-muted);
 	}
 
 	.pane-body {

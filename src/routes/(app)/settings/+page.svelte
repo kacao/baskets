@@ -291,6 +291,14 @@
 </div>
 
 <style>
+	.btn-primary {
+		transition: transform var(--dur-fast);
+	}
+
+	.btn-primary:active {
+		transform: scale(0.96);
+	}
+
 	.token-reveal {
 		border: 1px solid var(--color-border-subtle);
 		background: var(--color-surface-muted);
@@ -302,6 +310,7 @@
 		font-size: 12px;
 		word-break: break-all;
 		flex: 1;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.keys {
@@ -324,11 +333,20 @@
 	.keys td {
 		border-bottom: 1px solid var(--color-border-subtle);
 		padding: var(--sp-1);
+		font-variant-numeric: tabular-nums;
+	}
+
+	#totp {
+		font-variant-numeric: tabular-nums;
 	}
 
 	.qr {
-		border: 1px solid var(--color-border-subtle);
+		outline: 1px solid rgba(0, 0, 0, 0.1);
 		display: block;
+	}
+
+	:global([data-theme='dark']) .qr {
+		outline-color: rgba(255, 255, 255, 0.1);
 	}
 
 	.codes {
@@ -339,5 +357,6 @@
 		background: var(--color-surface-muted);
 		padding: var(--sp-2);
 		font-size: 13px;
+		font-variant-numeric: tabular-nums;
 	}
 </style>

@@ -69,7 +69,7 @@
 			bind:value={password}
 		/>
 	</div>
-	<button class="btn btn-primary" type="submit" disabled={loading} style="width: 100%;">
+	<button class="btn btn-primary submit" type="submit" disabled={loading} style="width: 100%;">
 		{loading ? $t('Signing in…') : $t('Sign in')}
 	</button>
 </form>
@@ -77,3 +77,12 @@
 <p class="u-small" style="margin-top: var(--sp-3);">
 	{$t('No account?')} <a href="/register">{$t('Register')}</a>
 </p>
+
+<style>
+	.submit {
+		transition: transform var(--dur-fast);
+	}
+	.submit:active:not(:disabled) {
+		transform: scale(0.96);
+	}
+</style>

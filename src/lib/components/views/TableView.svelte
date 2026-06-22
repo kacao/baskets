@@ -164,8 +164,17 @@
 		'actions'
 	]);
 	const COL_DEFAULTS: Record<string, number> = {
-		select: 36, status: 120, title: 320, priority: 110, assignee: 140, milestone: 160, due: 120, labels: 160, actions: 44
+		select: 36, title: 320, priority: 110, assignee: 140, milestone: 160, due: 120, labels: 160, actions: 44
 	};
+	// status is a control column: its width fits the longest status pill in the current
+	// display mode (never frozen by a resize) — so the pill always fits and Title starts
+	// cleanly after it. ~7px/char at the 12px pill font + chrome (padding + icon + gap).
+	const statusColW = $derived.by(() => {
+		if (statusDisplay === 'icon') return 56;
+		const maxLen = Math.max(7, ...statuses.map((s) => s.name.length));
+		// ~6px/char at the 12px pill font + chrome (pill padding/border 26, icon+gap 20)
+		return Math.min(220, Math.round(maxLen * 6.5 + 26 + (statusDisplay === 'text-icon' ? 20 : 0)));
+	});
 	const colDefault = (key: string) => (key.startsWith('cf:') ? 160 : (COL_DEFAULTS[key] ?? 140));
 	const colWidths = $derived(
 		(config.colWidths && typeof config.colWidths === 'object' ? config.colWidths : {}) as Record<string, number>
@@ -176,7 +185,8 @@
 	const hasWidths = $derived(
 		resizing !== null || Object.keys(liveWidths).length > 0 || Object.keys(colWidths).length > 0
 	);
-	const effW = (key: string) => liveWidths[key] ?? colWidths[key] ?? colDefault(key);
+	const effW = (key: string) =>
+		key === 'status' ? statusColW : (liveWidths[key] ?? colWidths[key] ?? colDefault(key));
 	const colStyle = (key: string) => (hasWidths ? `width:${effW(key)}px` : '');
 	// explicit table width = sum of column widths (fixed layout needs a definite
 	// width; max-content would re-size columns to content and ignore the colgroup)
@@ -205,6 +215,7 @@
 			window.removeEventListener('pointermove', onMove);
 			window.removeEventListener('pointerup', onUp);
 			const widths = { ...colWidths, ...liveWidths };
+			delete widths.status; // control column, width is mode-derived not persisted
 			resizing = null;
 			if (canEditView && viewId) {
 				const fd = new FormData();
@@ -377,7 +388,7 @@
 									: selection.selectAll(orderedIds)}
 						/>
 					</th>
-					<th class="col-status">{$i18n('Status')}{@render rh('status')}</th>
+					<th class="col-status">{$i18n('Status')}</th>
 					<th>{$i18n('Title')}{@render rh('title')}</th>
 					{#if show('priority')}<th>{$i18n('Priority')}{@render rh('priority')}</th>{/if}
 					{#if show('assignee')}<th>{$i18n('Assignee')}{@render rh('assignee')}</th>{/if}
@@ -777,6 +788,7 @@
 	.group-count {
 		font-size: 12px;
 		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.group-agg {
@@ -837,6 +849,12 @@
 		font-weight: 600;
 		color: var(--color-muted);
 		position: relative;
+	}
+
+	/* due-date cells + count badges show dynamic numbers — keep digits monospaced */
+	.table :global(td.mono),
+	.table :global(.badge) {
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* once columns have explicit widths the layout is fixed (widths authoritative,
@@ -910,6 +928,12 @@
 		margin-right: 6px;
 		vertical-align: middle;
 		flex: 0 0 auto;
+		outline: 1px solid rgba(0, 0, 0, 0.1);
+		outline-offset: -1px;
+	}
+
+	:global([data-theme='dark']) .row-cover {
+		outline-color: rgba(255, 255, 255, 0.1);
 	}
 
 	.col-status {

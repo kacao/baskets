@@ -1443,6 +1443,10 @@
 	}
 
 	.dots-btn {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		border: none;
 		background: none;
 		font-size: 18px;
@@ -1454,6 +1458,13 @@
 		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
 	}
 
+	/* extend the icon-only hit area toward ~40px without shifting layout */
+	.dots-btn::before {
+		content: '';
+		position: absolute;
+		inset: -9px -4px;
+	}
+
 	.dots-btn:hover {
 		color: var(--color-fg);
 		background: var(--color-surface-muted);
@@ -1463,6 +1474,10 @@
 	.ctx-menu {
 		background: var(--color-bg);
 		border: 1px solid var(--color-border-subtle);
+		border-radius: var(--radius-box, 0.5rem);
+		box-shadow:
+			0 1px 2px rgba(0, 0, 0, 0.04),
+			0 8px 24px rgba(0, 0, 0, 0.12);
 		min-width: 200px;
 		max-width: 280px;
 		z-index: 30;
@@ -1615,6 +1630,10 @@
 		overflow-y: auto;
 		background: var(--color-bg);
 		border: 1px solid var(--color-border-subtle);
+		border-radius: var(--radius-box, 0.5rem);
+		box-shadow:
+			0 1px 2px rgba(0, 0, 0, 0.04),
+			0 8px 24px rgba(0, 0, 0, 0.12);
 		padding: var(--sp-1) 0;
 		z-index: 31;
 		display: none;
@@ -1760,6 +1779,10 @@
 		z-index: 9;
 		background: var(--color-bg);
 		border: 1px solid var(--color-border-subtle);
+		border-radius: var(--radius-box, 0.5rem);
+		box-shadow:
+			0 1px 2px rgba(0, 0, 0, 0.04),
+			0 8px 24px rgba(0, 0, 0, 0.12);
 		min-width: 160px;
 	}
 
@@ -1823,6 +1846,7 @@
 		font-size: 10px;
 		font-weight: 600;
 		line-height: 1;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.cz-opts {
@@ -1982,6 +2006,7 @@
 	}
 
 	.ms-del {
+		position: relative;
 		display: inline-flex;
 		border: none;
 		background: none;
@@ -1989,6 +2014,13 @@
 		color: var(--color-muted);
 		padding: 4px;
 		border-radius: var(--radius-field, 0.25rem);
+	}
+
+	/* extend the icon-only delete hit area toward ~40px */
+	.ms-del::before {
+		content: '';
+		position: absolute;
+		inset: -7px;
 	}
 
 	.ms-del:hover {
@@ -2075,6 +2107,15 @@
 		gap: var(--sp-2);
 		align-items: center;
 		width: 100%;
+	}
+
+	/* scale-on-press for the primary create CTA */
+	.ms-new :global(.btn-primary) {
+		transition: transform var(--dur-fast) ease;
+	}
+
+	.ms-new :global(.btn-primary:active) {
+		transform: scale(0.96);
 	}
 
 	.opt {

@@ -90,7 +90,7 @@
 			{#each section.labels as l (l.id)}
 				<div class="row">
 					<LabelChip label={l} />
-					<span class="u-tiny u-muted">{$t('{n} use(s)', { n: l.inUse })}</span>
+					<span class="u-tiny u-muted tnum">{$t('{n} use(s)', { n: l.inUse })}</span>
 					<span style="flex: 1;"></span>
 					<input
 						type="color"
@@ -255,6 +255,7 @@
 	}
 
 	.x-btn {
+		position: relative;
 		border: none;
 		background: none;
 		font-size: 18px;
@@ -262,6 +263,17 @@
 		cursor: pointer;
 		color: var(--color-muted);
 		padding: 2px 6px;
+		transition: color var(--dur-fast);
+	}
+
+	.x-btn::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 40px;
+		height: 40px;
+		transform: translate(-50%, -50%);
 	}
 
 	.x-btn:hover {
@@ -276,5 +288,17 @@
 		border-radius: var(--radius-field, 0.25rem);
 		background: none;
 		cursor: pointer;
+	}
+
+	.tnum {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.btn-primary {
+		transition: transform var(--dur-fast);
+	}
+
+	.btn-primary:active {
+		transform: scale(0.96);
 	}
 </style>

@@ -279,6 +279,7 @@
 	}
 
 	.cat-add {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		border: none;
@@ -288,6 +289,12 @@
 		padding: 2px;
 		border-radius: var(--radius-field, 0.25rem);
 		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+	}
+
+	.cat-add::before {
+		content: '';
+		position: absolute;
+		inset: -10px;
 	}
 
 	.cat-add:hover {
@@ -382,6 +389,10 @@
 		flex: 0 0 auto;
 	}
 
+	.use {
+		font-variant-numeric: tabular-nums;
+	}
+
 	.color-in {
 		width: 32px;
 		height: 32px;
@@ -408,6 +419,7 @@
 	}
 
 	.icon-btn {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		border: none;
@@ -418,6 +430,12 @@
 		border-radius: var(--radius-field, 0.25rem);
 		opacity: 0;
 		transition: color var(--dur-fast) ease, background var(--dur-fast) ease, opacity var(--dur-fast) ease;
+	}
+
+	.icon-btn::before {
+		content: '';
+		position: absolute;
+		inset: -8px -3px;
 	}
 
 	.srow:hover .icon-btn {

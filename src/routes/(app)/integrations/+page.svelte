@@ -31,7 +31,7 @@
 			{connected ? (data.slack?.enabled ? $t('ON') : $t('PAUSED')) : $t('OFF')}
 		</span>
 	</div>
-	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
+	<p class="u-small u-muted desc" style="margin-bottom: var(--sp-3);">
 		{$t('Posts to a Slack channel when projects are created and tasks are created or completed. Uses an incoming webhook — create one in Slack under Apps → Incoming Webhooks.')}
 	</p>
 
@@ -81,7 +81,7 @@
 				/>
 			</div>
 			<div class="u-flex">
-				<button class="btn btn-primary" type="submit" disabled={loading}>
+				<button class="btn btn-primary cta" type="submit" disabled={loading}>
 					{loading ? $t('Saving…') : connected ? $t('Update webhook') : $t('Connect Slack')}
 				</button>
 				{#if editing}
@@ -91,3 +91,15 @@
 		</form>
 	{/if}
 </div>
+
+<style>
+	.desc {
+		text-wrap: pretty;
+	}
+	.cta {
+		transition: transform var(--dur-fast);
+	}
+	.cta:active:not(:disabled) {
+		transform: scale(0.96);
+	}
+</style>

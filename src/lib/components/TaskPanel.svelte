@@ -1358,6 +1358,7 @@
 		color: var(--color-fg);
 		font-family: var(--font-mono);
 		font-size: 14px;
+		font-variant-numeric: tabular-nums;
 		text-align: center;
 		padding: 6px 4px;
 		outline: none;
@@ -1377,8 +1378,17 @@
 		gap: 6px;
 	}
 
+	.pop-actions :global(.btn-primary) {
+		transition: transform var(--dur-fast) ease;
+	}
+
+	.pop-actions :global(.btn-primary):active {
+		transform: scale(0.96);
+	}
+
 	.ord {
 		font-family: var(--font-mono);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.section {
@@ -1403,8 +1413,8 @@
 		padding: 1px 8px;
 		cursor: pointer;
 		transition:
-			background 0.15s ease,
-			color 0.15s ease;
+			background var(--dur) ease,
+			color var(--dur) ease;
 	}
 
 	.chip:hover {
@@ -1460,6 +1470,7 @@
 	.cf-task-count {
 		font-size: 12px;
 		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.sub-list {
@@ -1526,6 +1537,7 @@
 		color: var(--color-fg);
 		margin-right: var(--sp-1);
 		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
 	}
 	.sub-bulk-del,
 	.sub-bulk-clear {

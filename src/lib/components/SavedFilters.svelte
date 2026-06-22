@@ -171,6 +171,7 @@
 	}
 
 	.sf-del {
+		position: relative;
 		flex: 0 0 auto;
 		display: inline-flex;
 		align-items: center;
@@ -181,6 +182,12 @@
 		padding: 6px;
 		border-radius: var(--radius-field, 0.25rem);
 		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+	}
+
+	.sf-del::before {
+		content: '';
+		position: absolute;
+		inset: -7px;
 	}
 
 	.sf-del:hover {
@@ -203,5 +210,13 @@
 	.sf-save .input {
 		flex: 1 1 auto;
 		min-width: 0;
+	}
+
+	.sf-save .btn-primary {
+		transition: transform var(--dur-fast) ease;
+	}
+
+	.sf-save .btn-primary:active {
+		transform: scale(0.96);
 	}
 </style>

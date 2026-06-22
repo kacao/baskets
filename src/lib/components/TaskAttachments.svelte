@@ -194,6 +194,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+		--img-outline: rgba(0, 0, 0, 0.1);
+	}
+
+	:global([data-theme='dark']) .att {
+		--img-outline: rgba(255, 255, 255, 0.1);
 	}
 
 	.att-head {
@@ -213,6 +218,7 @@
 		border: 1px solid var(--color-border-subtle);
 		border-radius: 999px;
 		padding: 0 6px;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.dropzone {
@@ -227,6 +233,7 @@
 		font-size: 13px;
 		cursor: pointer;
 		text-align: center;
+		transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
 	}
 
 	.dropzone:hover,
@@ -252,6 +259,7 @@
 		background: none;
 		color: var(--color-fg);
 		cursor: pointer;
+		transition: background var(--dur-fast);
 	}
 
 	.act:hover:not(:disabled) {
@@ -298,6 +306,8 @@
 		height: 100%;
 		object-fit: cover;
 		display: block;
+		outline: 1px solid var(--img-outline);
+		outline-offset: -1px;
 	}
 
 	.thumb-doc {
@@ -352,6 +362,7 @@
 		background: color-mix(in oklab, var(--color-bg, #000) 60%, transparent);
 		color: #fff;
 		cursor: pointer;
+		transition: background var(--dur-fast), color var(--dur-fast);
 	}
 
 	.tb-btn:hover {
@@ -390,6 +401,8 @@
 		object-fit: contain;
 		border-radius: 4px;
 		cursor: default;
+		outline: 1px solid rgba(255, 255, 255, 0.1);
+		outline-offset: -1px;
 	}
 
 	.lb-name {
@@ -402,12 +415,15 @@
 		top: 16px;
 		right: 16px;
 		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		border: none;
 		background: rgba(255, 255, 255, 0.12);
 		color: #fff;
 		border-radius: 6px;
-		padding: 6px;
+		padding: 10px;
 		cursor: pointer;
+		transition: background var(--dur-fast);
 	}
 
 	.lb-close:hover {

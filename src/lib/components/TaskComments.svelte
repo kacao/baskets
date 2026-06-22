@@ -334,6 +334,7 @@
 	.time {
 		font-size: 11px;
 		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.spacer {
@@ -341,12 +342,24 @@
 	}
 
 	.icon-btn {
+		position: relative;
 		border: none;
 		background: none;
 		color: var(--color-muted);
 		cursor: pointer;
 		padding: 2px;
 		line-height: 0;
+		transition: color var(--dur-fast);
+	}
+
+	.icon-btn::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 28px;
+		height: 28px;
+		transform: translate(-50%, -50%);
 	}
 
 	.icon-btn:hover {
@@ -357,6 +370,7 @@
 		font-size: 13px;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
+		text-wrap: pretty;
 		margin: 0;
 	}
 

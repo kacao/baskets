@@ -95,6 +95,7 @@ body {
 	font-size: 16px;
 	font-weight: var(--body-weight);
 	line-height: 1.6;
+	text-wrap: pretty;
 	-webkit-font-smoothing: antialiased;
 }
 
@@ -104,6 +105,7 @@ h3,
 h4 {
 	font-family: var(--font-headline);
 	letter-spacing: var(--heading-tracking);
+	text-wrap: balance;
 }
 
 h1 {
@@ -212,6 +214,10 @@ code,
 
 .u-tiny {
 	font-size: 12px;
+}
+
+.tabular-nums {
+	font-variant-numeric: tabular-nums;
 }
 
 /* Themed tooltip (src/lib/tooltip.ts use:tooltip action) */

@@ -59,7 +59,7 @@
 			<span class="name">{s.name}</span>
 			<span class="badge">{categoryLabel(s.category)}</span>
 			<span class="badge">{$t('built-in')}</span>
-			<span class="u-tiny u-muted">{$t('{n} task(s)', { n: s.inUse })}</span>
+			<span class="u-tiny u-muted count">{$t('{n} task(s)', { n: s.inUse })}</span>
 		</div>
 	{/each}
 </div>
@@ -78,6 +78,7 @@
 	}
 
 	.ic-trigger {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -86,6 +87,16 @@
 		border-radius: var(--radius-field, 0.25rem);
 		cursor: pointer;
 		transition: background var(--dur-fast) ease;
+	}
+
+	.ic-trigger::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 40px;
+		height: 40px;
+		transform: translate(-50%, -50%);
 	}
 
 	.ic-trigger:hover {
@@ -101,5 +112,9 @@
 
 	.name {
 		font-weight: 500;
+	}
+
+	.count {
+		font-variant-numeric: tabular-nums;
 	}
 </style>

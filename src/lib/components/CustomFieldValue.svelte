@@ -131,13 +131,13 @@
 <!-- read-only value display (cell + pill trigger) -->
 {#snippet display()}
 	{#if field.type === 'rollup'}
-		<span class="v">{rollupText ?? '—'}</span>
+		<span class="v num">{rollupText ?? '—'}</span>
 	{:else if !hasValue}
 		<span class="ph">—</span>
 	{:else if field.type === 'checkbox'}
 		<Icon name="check" size={14} />
 	{:else if field.type === 'number'}
-		<span class="v">{formatNumber(Number(current), field.config)}</span>
+		<span class="v num">{formatNumber(Number(current), field.config)}</span>
 	{:else if field.type === 'date'}
 		<span class="v">{formatDate(current, field.config)}</span>
 	{:else if field.type === 'url'}
@@ -374,6 +374,10 @@
 		text-overflow: ellipsis;
 	}
 
+	.num {
+		font-variant-numeric: tabular-nums;
+	}
+
 	.link {
 		color: var(--color-link, var(--color-fg));
 		text-decoration: underline;
@@ -445,6 +449,7 @@
 	}
 
 	.chip-x {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -455,6 +460,13 @@
 		padding: 1px;
 		line-height: 0;
 		border-radius: 999px;
+		transition: color var(--dur-fast), background-color var(--dur-fast);
+	}
+
+	.chip-x::before {
+		content: '';
+		position: absolute;
+		inset: -7px;
 	}
 
 	.chip-x:hover {
@@ -512,6 +524,7 @@
 		padding: 5px 6px;
 		border-radius: var(--radius-field, 0.25rem);
 		cursor: pointer;
+		transition: background-color var(--dur-fast);
 	}
 
 	.pick-item:hover {
@@ -548,11 +561,23 @@
 	}
 
 	.rm {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		border: none;
 		background: none;
 		color: var(--color-muted);
 		cursor: pointer;
 		padding: 2px;
+		line-height: 0;
+		transition: color var(--dur-fast);
+	}
+
+	.rm::before {
+		content: '';
+		position: absolute;
+		inset: -10px;
 	}
 
 	.rm:hover {

@@ -355,6 +355,7 @@
 	.group-count {
 		font-size: 12px;
 		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.group-agg {
@@ -412,6 +413,7 @@
 	}
 
 	.chev {
+		position: relative;
 		width: 18px;
 		flex: 0 0 18px;
 		border: none;
@@ -421,6 +423,17 @@
 		cursor: pointer;
 		padding: 0;
 		text-align: center;
+		transition: color var(--dur-fast) ease;
+	}
+
+	.chev:not(.chev--blank)::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 32px;
+		height: 32px;
+		transform: translate(-50%, -50%);
 	}
 
 	.chev:hover {
@@ -437,6 +450,7 @@
 		font-size: 11px;
 		color: var(--color-muted);
 		text-align: right;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.row-title {

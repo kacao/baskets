@@ -91,4 +91,12 @@
 		cursor: pointer;
 		user-select: none;
 	}
+
+	.btn-primary {
+		transition: transform var(--dur-fast);
+	}
+
+	.btn-primary:active {
+		transform: scale(0.96);
+	}
 </style>

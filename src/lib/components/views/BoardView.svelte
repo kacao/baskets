@@ -570,6 +570,7 @@
 	.lane-count {
 		font-size: 12px;
 		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.lane-agg,
@@ -612,6 +613,7 @@
 	.col-count {
 		font-size: 12px;
 		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.col-spacer,
@@ -627,7 +629,7 @@
 		color: var(--color-muted);
 		cursor: pointer;
 		padding: 0 4px;
-		transition: color 0.15s ease;
+		transition: color var(--dur) ease;
 	}
 
 	.col-add:hover {
@@ -652,10 +654,10 @@
 		background: var(--color-bg);
 		padding: var(--sp-2);
 		transition:
-			border-color 0.15s ease,
-			box-shadow 0.15s ease,
-			opacity 0.15s ease,
-			transform 0.15s ease;
+			border-color var(--dur) ease,
+			box-shadow var(--dur) ease,
+			opacity var(--dur) ease,
+			transform var(--dur) ease;
 	}
 
 	.bcard[draggable='true'] {
@@ -686,8 +688,14 @@
 		height: 96px;
 		object-fit: cover;
 		border-radius: var(--radius-field, 0.25rem);
+		outline: 1px solid rgb(0 0 0 / 0.1);
+		outline-offset: -1px;
 		margin-bottom: 6px;
 		display: block;
+	}
+
+	:global([data-theme='dark']) .bcard-cover {
+		outline-color: rgb(255 255 255 / 0.1);
 	}
 
 	.bcard-top {

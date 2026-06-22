@@ -163,7 +163,9 @@
 		background: var(--color-base-100);
 		border: 1px solid var(--color-base-300);
 		border-radius: var(--radius-box, 0.5rem);
-		box-shadow: var(--shadow);
+		box-shadow:
+			0 1px 2px rgb(0 0 0 / 0.06),
+			0 8px 24px rgb(0 0 0 / 0.12);
 		padding: 4px;
 		transform-origin: top left;
 	}

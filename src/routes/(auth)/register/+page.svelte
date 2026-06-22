@@ -77,3 +77,12 @@
 <p class="u-small" style="margin-top: var(--sp-3);">
 	{$t('Already registered?')} <a href="/login">{$t('Sign in')}</a>
 </p>
+
+<style>
+	.btn-primary {
+		transition: transform var(--dur-fast);
+	}
+	.btn-primary:active:not(:disabled) {
+		transform: scale(0.96);
+	}
+</style>

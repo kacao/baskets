@@ -157,10 +157,22 @@
 		font-size: 0.7rem;
 	}
 
+	.sub-count {
+		font-variant-numeric: tabular-nums;
+	}
+
 	.tpl-actions {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--sp-1);
 		flex-shrink: 0;
+	}
+
+	.tpl-actions .btn-primary {
+		transition: transform var(--dur-fast);
+	}
+
+	.tpl-actions .btn-primary:active {
+		transform: scale(0.96);
 	}
 </style>

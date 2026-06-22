@@ -163,7 +163,9 @@
 		background: var(--color-base-100);
 		border: 1px solid var(--color-base-300);
 		border-radius: var(--radius-lg, 10px);
-		box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+		box-shadow:
+			0 1px 2px rgb(0 0 0 / 0.08),
+			0 8px 24px rgb(0 0 0 / 0.18);
 		max-width: calc(100vw - 2 * var(--sp-4));
 	}
 
@@ -172,6 +174,7 @@
 		font-weight: 600;
 		color: var(--color-fg);
 		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.bulk-actions {
@@ -193,6 +196,7 @@
 		padding: 4px 6px;
 		border-radius: var(--radius, 6px);
 		white-space: nowrap;
+		transition: background var(--dur-fast), color var(--dur-fast);
 	}
 
 	.bulk-trigger:hover {
@@ -228,6 +232,7 @@
 		cursor: pointer;
 		padding: 6px 10px;
 		white-space: nowrap;
+		transition: background var(--dur-fast);
 	}
 
 	.bulk-opt:hover {
@@ -248,6 +253,7 @@
 	}
 
 	.bulk-clear {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -257,6 +263,17 @@
 		cursor: pointer;
 		padding: 4px;
 		border-radius: var(--radius, 6px);
+		transition: background var(--dur-fast), color var(--dur-fast);
+	}
+
+	.bulk-clear::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 40px;
+		height: 40px;
+		transform: translate(-50%, -50%);
 	}
 
 	.bulk-clear:hover {

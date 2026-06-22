@@ -121,6 +121,7 @@
 		font-weight: 700;
 		letter-spacing: var(--heading-tracking);
 		line-height: 1;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.stat-label {
@@ -166,6 +167,7 @@
 		text-align: right;
 		font-size: 12px;
 		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	@media (max-width: 600px) {

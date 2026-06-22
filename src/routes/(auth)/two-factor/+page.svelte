@@ -46,7 +46,7 @@
 		<label class="label" for="code">{useBackup ? $t('Backup code') : $t('Code')}</label>
 		<input
 			id="code"
-			class="input mono"
+			class="input mono tabular-nums"
 			type="text"
 			inputmode={useBackup ? 'text' : 'numeric'}
 			autocomplete="one-time-code"
@@ -55,7 +55,7 @@
 			bind:value={code}
 		/>
 	</div>
-	<button class="btn btn-primary" type="submit" disabled={loading} style="width: 100%;">
+	<button class="btn btn-primary submit-btn" type="submit" disabled={loading} style="width: 100%;">
 		{loading ? $t('Verifying…') : $t('Verify')}
 	</button>
 </form>
@@ -70,3 +70,12 @@
 >
 	{useBackup ? $t('Use authenticator code') : $t('Use a backup code')}
 </button>
+
+<style>
+	.submit-btn {
+		transition: transform var(--dur-fast);
+	}
+	.submit-btn:active:not(:disabled) {
+		transform: scale(0.96);
+	}
+</style>

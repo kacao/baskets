@@ -219,4 +219,12 @@
 		background: var(--color-surface-muted);
 		color: var(--color-muted);
 	}
+
+	.btn-primary {
+		transition: transform var(--dur-fast);
+	}
+
+	.btn-primary:active {
+		transform: scale(0.96);
+	}
 </style>

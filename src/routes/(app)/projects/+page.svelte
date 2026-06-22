@@ -46,7 +46,7 @@
 					</p>
 				{/if}
 			</div>
-			<button class="btn btn-primary" type="submit">{$t('Create project')}</button>
+			<button class="btn btn-primary create-btn" type="submit">{$t('Create project')}</button>
 		</form>
 	</div>
 {/if}
@@ -77,9 +77,9 @@
 							<span class="badge">{ws.name}</span>
 						{/if}
 					{/if}
-					<span class="badge">{$t('{n} tasks', { n: p.taskCount })}</span>
+					<span class="badge tabular-nums">{$t('{n} tasks', { n: p.taskCount })}</span>
 					{#if p.taskCount > 0}
-						<span class="badge" class:badge-success={p.doneCount === p.taskCount}>
+						<span class="badge tabular-nums" class:badge-success={p.doneCount === p.taskCount}>
 							{$t('{done}/{total} done', { done: p.doneCount, total: p.taskCount })}
 						</span>
 					{/if}
@@ -107,7 +107,7 @@
 		padding: var(--sp-3);
 		color: var(--color-fg);
 		text-decoration: none;
-		transition: border-color 0.15s ease;
+		transition: border-color var(--dur) ease;
 		background: var(--color-bg);
 	}
 
@@ -122,6 +122,7 @@
 
 	.desc {
 		margin-bottom: var(--sp-2);
+		text-wrap: pretty;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
@@ -145,6 +146,14 @@
 	.progress-fill {
 		height: 100%;
 		background: var(--color-fg);
-		transition: width 0.3s ease;
+		transition: width var(--dur-slow) ease;
+	}
+
+	.create-btn {
+		transition: transform var(--dur-fast);
+	}
+
+	.create-btn:active {
+		transform: scale(0.96);
 	}
 </style>

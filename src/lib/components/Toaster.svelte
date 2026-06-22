@@ -35,7 +35,7 @@
 
 	.toast {
 		pointer-events: auto;
-		border: 1px solid var(--color-border);
+		border: 1px solid transparent;
 		background: var(--color-fg);
 		color: var(--color-bg);
 		font-family: var(--font-body);
@@ -43,9 +43,16 @@
 		line-height: 1.3;
 		padding: var(--sp-2) var(--sp-3);
 		border-radius: var(--radius-field, 0.25rem);
-		box-shadow: var(--shadow);
+		box-shadow:
+			0 1px 2px rgba(0, 0, 0, 0.08),
+			0 8px 24px rgba(0, 0, 0, 0.16);
 		cursor: pointer;
 		max-width: min(90vw, 360px);
 		text-align: left;
+		transition: transform var(--dur-fast);
+	}
+
+	.toast:active {
+		transform: scale(0.96);
 	}
 </style>

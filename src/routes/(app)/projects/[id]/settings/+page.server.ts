@@ -109,7 +109,7 @@ function createsCycle(edges: Map<string, string[]>, from: string, to: string) {
 	return false;
 }
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) error(404, 'Project not found');
 	if (!(await canEditProject(locals.user, params.id)))
@@ -254,6 +254,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		perm: { admin }
 	};
 };
+
+export const load: PageServerLoad = loadImpl;
+
+/** Shared with the per-section sub-pages (statuses/labels/milestones/…) that reuse this load. */
+export type ProjectSettingsData = Awaited<ReturnType<typeof loadImpl>>;
 
 export const actions: Actions = {
 

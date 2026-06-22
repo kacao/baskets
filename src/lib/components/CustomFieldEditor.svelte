@@ -243,7 +243,7 @@
 					{#if typeHint(f)}<span class="u-tiny u-muted">{typeHint(f)}</span>{/if}
 					{#if (f.appliesTo ?? 'all') !== 'all'}<span class="badge">{$t(appliesToLabel(f.appliesTo))}</span>{/if}
 					<span class="spacer"></span>
-					{#if (f.entity ?? 'task') === 'task'}<span class="u-tiny u-muted">{$t('{n} task(s)', { n: f.inUse })}</span>{/if}
+					{#if (f.entity ?? 'task') === 'task'}<span class="u-tiny u-muted in-use">{$t('{n} task(s)', { n: f.inUse })}</span>{/if}
 					<button class="icon-btn" type="button" aria-label={$t('Edit')} onclick={() => openEdit(f)}>
 						<Icon name="edit-pencil" size={14} />
 					</button>
@@ -527,6 +527,10 @@
 		flex: 0 0 auto;
 	}
 
+	.in-use {
+		font-variant-numeric: tabular-nums;
+	}
+
 	.icon-btn {
 		display: inline-flex;
 		align-items: center;
@@ -581,5 +585,15 @@
 
 	.reorder-form {
 		display: none;
+	}
+
+	.cf-row--edit :global(.btn-primary),
+	.opt--edit :global(.btn-primary) {
+		transition: transform var(--dur-fast) ease;
+	}
+
+	.cf-row--edit :global(.btn-primary:active),
+	.opt--edit :global(.btn-primary:active) {
+		transform: scale(0.96);
 	}
 </style>

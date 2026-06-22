@@ -33,7 +33,7 @@
 					</button>
 					<!-- svelte-ignore a11y_autofocus -->
 					<button
-						class="btn btn-sm"
+						class="btn btn-sm cm-confirm"
 						class:btn-error={req.danger}
 						class:btn-primary={!req.danger}
 						type="button"
@@ -63,9 +63,10 @@
 	.cm-card {
 		width: min(92vw, 380px);
 		background: var(--color-base-100);
-		border: 1px solid var(--color-base-300);
 		border-radius: var(--radius-box, 0.5rem);
-		box-shadow: var(--shadow);
+		box-shadow:
+			0 1px 2px color-mix(in oklab, black 8%, transparent),
+			0 8px 24px color-mix(in oklab, black 18%, transparent);
 		padding: var(--sp-4);
 	}
 
@@ -80,5 +81,13 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: var(--sp-2);
+	}
+
+	.cm-confirm {
+		transition: transform var(--dur-fast);
+	}
+
+	.cm-confirm:active {
+		transform: scale(0.96);
 	}
 </style>
