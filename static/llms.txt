@@ -38,6 +38,346 @@ Identity of the current session/key holder.
 
 The web UI receives live updates and presence over a WebSocket at `/ws` (same origin), authenticated by the **browser session cookie** only — it is not part of the bearer-key REST surface. After any mutation through the API or UI, connected viewers of the affected project auto-refresh. Agents using a bearer key don't need to connect; just poll the REST endpoints. Messages are JSON: client→server `{type:'subscribe',projectId}` / `{type:'unsubscribe'}` / `{type:'ping'}`; server→client `{type:'changed',projectId}` (refetch) and `{type:'presence',projectId,users:[{id,name}]}`.
 
+## Workspaces
+
+Every project belongs to one workspace. A workspace owns its custom statuses and ALL labels/groups, and (per ADR-019) defines visibility. Workspace meta + structure edits need admin, the workspace owner, or a workspace `permission` grant (`canEditWorkspace`); reads need access (`canAccessWorkspace`). Inaccessible workspaces 404, not 403.
+
+### GET /api/workspaces
+List accessible workspaces (admins see all; others see ones they own / hold a grant on, plus any workspace holding a project they're directly granted).
+- 200: `{ "workspaces": [ <workspace>, ... ] }`
+
+### POST /api/workspaces
+Create a workspace (any signed-in user; they become its owner).
+- Body: `name` string, required (trimmed, non-empty, max 120). `400 "A workspace with that name already exists"` on a case-insensitive name collision.
+- The caller's FIRST workspace is auto-seeded with sample projects/milestones/tasks.
+- 201: `{ "workspace": <workspace> }`. Errors: 400, 401.
+
+### GET /api/workspaces/{id}
+Fetch one workspace.
+- 200: `{ "workspace": <workspace> }`. `404` if missing or inaccessible.
+
+### PATCH /api/workspaces/{id}
+Rename a workspace.
+- Body: `name` string, required (else `400 "No fields to update"`; trimmed non-empty, max 120; `400` on name collision).
+- 200: `{ "workspace": <workspace> }`. `404` if missing/inaccessible; `403 "No edit permission on this workspace"` if accessible but not editable.
+
+### DELETE /api/workspaces/{id}
+Delete an EMPTY workspace.
+- `400 "Move or delete its projects first"` if it still has projects; `400 "At least one workspace must exist"` if it's the only one.
+- `404` if missing/inaccessible; `403` if accessible but not editable. 204: empty body.
+
+### GET /api/workspaces/{id}/statuses
+List the workspace's own custom statuses (access only).
+- 200: `{ "statuses": [<status>...] }`. `404` if inaccessible.
+
+### POST /api/workspaces/{id}/statuses
+Create a workspace-scoped status (editable).
+- Body: `name` (required, trimmed, max 40), `description` (string|null, max 200), `category` (one of the status categories, default `backlog`; `400` otherwise), `color` (`#rrggbb` hex or null), `icon` (emoji or `iconoir:<name>`, else null). `400 "A status with that name already exists here"` if the name collides with defaults, workspace siblings, or any of its projects' statuses.
+- 201: `{ "status": <status> }`. `404`/`403` as for workspace edits.
+
+### PATCH /api/workspaces/{id}/statuses
+Reorder the workspace's custom statuses.
+- Body: `order` — array listing EXACTLY this workspace's status ids (`400` otherwise). Customs are kept positioned after the built-in defaults.
+- 200: `{ "statuses": [<status>...] }`.
+
+### GET /api/workspaces/{id}/labels
+List the workspace's labels (access only).
+- 200: `{ "labels": [<label>...] }`. `404` if inaccessible.
+
+### POST /api/workspaces/{id}/labels
+Create a workspace label (editable).
+- Body: `name` (required, trimmed, max 40; `400 "A label with that name exists"` on collision), `color` (`#rrggbb` or null), `icon` (emoji/`iconoir:<name>` or null), `groupId` (string|null — must be a group of this workspace, else `400 "Unknown group"`).
+- 201: `{ "label": <label> }`. `404`/`403` as for workspace edits.
+
+### GET /api/workspaces/{id}/label-groups
+List the workspace's label groups (access only).
+- 200: `{ "groups": [<labelGroup>...] }`. `404` if inaccessible.
+
+### POST /api/workspaces/{id}/label-groups
+Create a label group (editable).
+- Body: `name` (required, trimmed, max 40; `400 "A group with that name exists"` on collision).
+- 201: `{ "group": <labelGroup> }`. `404`/`403` as for workspace edits.
+
+### GET /api/workspaces/{id}/grants
+List the workspace's permission grants. Managed by ADMINS or the workspace OWNER only.
+- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("workspace"), "resourceId" }...] }`. `404` if inaccessible; `403 "Only admins or the owner can view workspace grants"` for accessible non-managers.
+
+### POST /api/workspaces/{id}/grants
+Grant a user access to the workspace (admin or owner).
+- Body: `userId` string, required (`400 "Invalid grant"` if missing, `400 "Unknown user"` if no such user). Idempotent (conflicts are ignored).
+- 201: `{ "grants": [...] }` (the updated list). `404`/`403` as above.
+
+### DELETE /api/workspaces/{id}/grants
+Revoke a grant (admin or owner). Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither.
+- 204: empty body. `404`/`403` as above.
+
+## Statuses
+
+Status definitions are table-driven and scoped (built-in app-wide / workspace / project). Create workspace statuses via `POST /api/workspaces/{id}/statuses`, project statuses via `POST /api/projects/{id}/statuses`. The endpoints below edit/delete an existing status by id.
+
+### PATCH /api/statuses/{id}
+Update a status. Gating depends on the status's scope:
+- **Built-in app-wide default** (no project/workspace): ADMIN only (`403 "Admins only"`); ONLY its `icon` is settable (`400 "Pick an icon"` if absent).
+- **Workspace-scoped**: needs workspace edit (`404` if inaccessible, `403` otherwise).
+- **Project-scoped**: needs project edit (`404` if inaccessible, `403` otherwise).
+- Editable fields (custom statuses): `name` (trimmed, max 40; `400` on collision), `description` (string|null, max 200), `category`, `color` (`#rrggbb`|null), `icon`. At least one (else `400 "No fields to update"`).
+- 200: `{ "status": <status> }`. `404 "Status not found"` if missing.
+
+### DELETE /api/statuses/{id}
+Delete a custom status. `400 "Built-in statuses cannot be deleted"` for defaults; `400 "Status is used by N task(s)"` if any task uses it. Gating by scope (as PATCH). `404` if missing/inaccessible; `403` if not editable. 204: empty body.
+
+## Labels
+
+Workspace labels are created via `POST /api/workspaces/{id}/labels`; project-scoped labels via `POST /api/projects/{id}/labels`. The endpoints here edit/delete an existing label (workspace OR project scoped) by id; gating follows the label's owner (`404` if inaccessible, `403` if not editable).
+
+### PATCH /api/labels/{id}
+Update a label. Body: `name` (trimmed, max 40; uniqueness scoped to its owner; `400` on collision), `color` (`#rrggbb`|null), `icon` (emoji/`iconoir:<name>`|null). At least one (else `400 "No fields to update"`).
+- 200: `{ "label": <label> }`.
+
+### DELETE /api/labels/{id}
+Delete a label (also drops it from its tasks/projects). 204: empty body.
+
+### DELETE /api/label-groups/{id}
+Delete a workspace label group (workspace edit). Its labels survive (their `groupId` is cleared). `404` if missing/inaccessible; `403` if not editable. 204: empty body.
+
+## Project labels
+
+The project-facing label pool (workspace pool ∪ this project's own labels) and attachment of workspace labels onto a project.
+
+### GET /api/projects/{id}/labels
+List the labels available to a project (access only).
+- 200: `{ "labels": [<label>...], "workspaceLabels": [...], "projectLabels": [...], "attachedLabelIds": [string...] }`. `available` = project-scoped labels (always available) + the workspace pool. `404` if inaccessible.
+
+### POST /api/projects/{id}/labels
+Create a PROJECT-scoped label (project edit).
+- Body: `name` (required, trimmed, max 40; `400 "A label with that name exists"` on collision among this project's labels), `color` (`#rrggbb`|null), `icon`.
+- 201: `{ "label": <label> }`. `404`/`403` as for project edits.
+
+### PATCH (or PUT) /api/projects/{id}/labels
+Toggle a WORKSPACE label onto/off this project (via `project_label`). Project edit.
+- Body: `labelId` string, required (`400 "Unknown label"` if it isn't a label of this project's workspace).
+- 200: `{ "labelId": string, "attached": boolean }` (the new membership state).
+
+## Milestones
+
+Milestones are per-project; create via `POST /api/projects/{id}/milestones`. CRUD + dependencies need project edit; reads need access (`404` if inaccessible).
+
+### GET /api/projects/{id}/milestones
+List a project's milestones (position, then createdAt).
+- 200: `{ "milestones": [<milestone>...] }`. `404` if inaccessible.
+
+### POST /api/projects/{id}/milestones
+Create a milestone (project edit).
+- Body: `name` (required, trimmed, max 120), `description` (string|null), `startDate` (string|null — `YYYY-MM-DD`/ISO), `targetDate` (string|null). Bad dates → `400`.
+- 201: `{ "milestone": <milestone> }`. `404`/`403` as for project edits.
+
+### PATCH /api/milestones/{id}
+Update a milestone (project edit). Body: `name` (trimmed non-empty, max 120), `description` (string|null), `startDate` (string|null), `targetDate` (string|null). At least one (else `400 "No fields to update"`).
+- 200: `{ "milestone": <milestone> }`. `404` if missing/inaccessible; `403` if not editable.
+
+### DELETE /api/milestones/{id}
+Delete a milestone (project edit). Tasks keep their row but lose the ref. 204: empty body.
+
+### GET /api/milestones/{id}/dependencies
+List the milestone ids this milestone depends on (access only).
+- 200: `{ "dependsOnIds": [string...] }`. `404` if missing/inaccessible.
+
+### POST /api/milestones/{id}/dependencies
+Add ONE dependency (project edit). Body: `dependsOnId` string, required. `400` if it's the milestone itself, not a milestone of the same project, or would create a cycle (DFS-checked).
+- 201: `{ "success": true }`.
+
+### PUT /api/milestones/{id}/dependencies
+Replace the FULL dependency set (project edit). Body: `dependsOnIds` array (`400` if not an array). Invalid ids, self-refs, and cycle-forming edges are silently dropped.
+- 200: `{ "dependsOnIds": [string...] }` (the accepted set).
+
+### DELETE /api/milestones/{id}/dependencies?dependsOnId={id}
+Remove one dependency edge (project edit; `dependsOnId` query param required). 204: empty body.
+
+## Locations
+
+Project-scoped saved places; create via `POST /api/projects/{id}/locations`. CRUD needs project edit (picking one onto a task only needs task edit, via PATCH `/api/tasks`).
+
+### GET /api/projects/{id}/locations
+List a project's locations (position, then title). 200: `{ "locations": [<location>...] }`. `404` if inaccessible.
+
+### POST /api/projects/{id}/locations
+Create a location (project edit).
+- Body: `title` (required, trimmed, max 120), `address` (string|null, max 240), `latitude` (number|string|null, -90…90), `longitude` (number|string|null, -180…180). Out-of-range coords → `400 "<field> must be between …"`.
+- 201: `{ "location": <location> }`. `404`/`403` as for project edits.
+
+### PATCH /api/locations/{id}
+Update a location (project edit). Body: `title` (trimmed non-empty, max 120), `address` (string|null, max 240), `latitude`, `longitude` (ranges as above). At least one (else `400 "No fields to update"`).
+- 200: `{ "location": <location> }`.
+
+### DELETE /api/locations/{id}
+Delete a location (project edit). Tasks referencing it keep their row (FK set null). 204: empty body.
+
+## Views
+
+One project view per row (table/board/list/timeline/calendar/dashboard/map). Create/reorder need project edit; per-view PATCH/DELETE need `canEditView` (cascades from project edit). Reads need project access.
+
+### GET /api/projects/{id}/views
+List a project's views (position, then createdAt). 200: `{ "views": [<view>...] }`. `404` if inaccessible.
+
+### POST /api/projects/{id}/views
+Create a view, OR duplicate one (project edit).
+- **Create** body: `type` (one of the view types, required; `400` otherwise), `name` (optional — trimmed non-empty, max 120, unique-per-project; auto-derived from the type if omitted). New views start with `config = "{}"`.
+- **Duplicate** body: `duplicateViewId` (a view id of this project; copies its type + config; the name gets a " copy"/" copy N" suffix).
+- 201: `{ "view": <view> }`. `404`/`403` as for project edits.
+
+### PATCH /api/projects/{id}/views
+Reorder views (project edit). Body: `order` — a non-empty array of this project's view ids (`400` otherwise).
+- 200: `{ "views": [<view>...] }`.
+
+### PATCH /api/views/{id}
+Update one view (view edit). Body (at least one, else `400 "No fields to update"`): `name` (trimmed non-empty, max 120), `config` (a JSON object OR a JSON-object string — `400` if it isn't valid JSON / isn't an object; stored stringified), `hidden` (boolean — hiding the last visible view is rejected with `400 "A project must keep at least one visible view"`).
+- 200: `{ "view": <view> }`. `404` if missing/inaccessible; `403 "No edit permission on this view"` otherwise.
+
+### DELETE /api/views/{id}
+Delete a view (view edit). `400 "A project must keep at least one view"` if it's the last visible one (a hidden view may always be removed). `404`/`403` as PATCH. 204: empty body.
+
+## Custom field definitions
+
+CRUD for a project's custom-field DEFINITIONS + their select options. Field/option create + reorder + edit + delete need project edit; reads need project access (`404` if inaccessible). Field `type` is IMMUTABLE after creation. (Task VALUES are still written via the `customFields` map on `/api/tasks`; project-entity VALUES via `/api/projects/{id}/custom-values`.)
+
+### GET /api/projects/{id}/custom-fields
+List a project's field definitions (config parsed, display order).
+- 200: `{ "customFields": [<customField>...] }`. `404` if inaccessible.
+
+### POST /api/projects/{id}/custom-fields
+Create a field definition (project edit).
+- Body: `name` (required, trimmed, max 60; `400 "A field with that name already exists"` on collision), `type` (a valid custom-field type, else `400 "Invalid field type"`), `appliesTo` (`all|tasks|subtasks`, default `all`; `400 "Invalid appliesTo"`), `entity` (`task` default | `project`), `config` (a JSON object or JSON string; canonicalized for the type).
+- 201: `{ "customField": <customField> }` (with `config` as a parsed object). `404`/`403` as for project edits.
+
+### PATCH /api/projects/{id}/custom-fields
+Reorder field definitions (project edit). Body: `order` — array listing EVERY field of this project exactly once (`400` otherwise).
+- 200: `{ "customFields": [<customField>...] }`.
+
+### PATCH /api/custom-fields/{id}
+Update one field definition (project edit). Body: `name` (trimmed, max 60, unique), `appliesTo` (`all|tasks|subtasks`), `config` (JSON object/string, re-validated for the field's type). `type` is rejected if it differs (`400 "type is immutable after creation"`). At least one (else `400 "No fields to update"`).
+- 200: `{ "customField": <customField> }`. `404` if missing/inaccessible; `403` otherwise.
+
+### DELETE /api/custom-fields/{id}
+Delete a field definition (project edit). For a `files` field its uploaded bytes are unlinked first. `404`/`403` as PATCH. 204: empty body.
+
+### POST /api/custom-fields/{id}/options
+Add a `select` option (project edit; `400 "Not a select field"` for other types).
+- Body: `title` (required, trimmed, max 60), `color` (`#rrggbb`|null), `icon`.
+- 201: `{ "option": <customFieldOption> }`. `404` if the field is missing/inaccessible; `403` otherwise.
+
+### PATCH /api/custom-fields/{id}/options
+Reorder a field's options (project edit). Body: `order` — array listing EVERY option of this field exactly once (`400` otherwise).
+- 200: `{ "options": [<customFieldOption>...] }`.
+
+### PATCH /api/custom-field-options/{id}
+Update one option (project edit). Body: `title` (trimmed non-empty, max 60), `color` (`#rrggbb`|null), `icon`. At least one (else `400 "No fields to update"`).
+- 200: `{ "option": <customFieldOption> }`. `404`/`403` by the option's project.
+
+### DELETE /api/custom-field-options/{id}
+Delete an option (project edit). Its id is stripped from every task value of the field first (rows that become empty are removed). `404`/`403` by the option's project. 204: empty body.
+
+## Project custom values
+
+Read/write the project's OWN (entity=`project`) custom-field values. Reads need project access; writes need project edit.
+
+### GET /api/projects/{id}/custom-values
+- 200: `{ "values": { "<fieldId>": decodedValue, ... } }` (only `entity:'project'` fields). `404` if inaccessible.
+
+### PATCH /api/projects/{id}/custom-values
+Set project-entity field values (project edit).
+- Body: `customFields` — a `{ "<fieldId>": value }` map (required, else `400 "customFields object is required"`); each value validated against its field; a validation failure → `400` and nothing is written.
+- 200: `{ "values": { ... } }` (the refreshed map).
+
+## Dependencies
+
+Informational, DFS cycle-checked dependency edges between projects and between tasks. Adds/removes need edit; reads need access. (Milestone dependencies are under **Milestones**.)
+
+### GET /api/projects/{id}/dependencies
+List the project ids this project depends on (access only). 200: `{ "dependsOn": [string...] }`. `404` if inaccessible.
+
+### POST /api/projects/{id}/dependencies
+Add a project dependency (project edit). Body: `dependsOnId` string. `400 "Invalid dependency"` if empty/self; `400 "Unknown project"` if the target is missing or inaccessible (no cross-project oracle); `400` if it would create a cycle.
+- 201: `{ "dependsOn": [string...] }`.
+
+### DELETE /api/projects/{id}/dependencies?dependsOnId={id}
+Remove a project dependency (project edit; `dependsOnId` query param required). 204: empty body.
+
+### GET /api/tasks/{id}/dependencies
+List the task ids this task depends on (project access only). 200: `{ "dependsOnIds": [string...] }`. `404` if missing/inaccessible.
+
+### POST /api/tasks/{id}/dependencies
+Add a task dependency (task edit). Body: `dependsOnId` string, required. `400` if it's the task itself, not a task of the same project, a cross-level link (sub-tasks may only depend on sibling sub-tasks of the same parent), or would create a cycle.
+- 201: `{ "dependsOnIds": [string...] }`. `404` if missing/inaccessible; `403` if not editable.
+
+### DELETE /api/tasks/{id}/dependencies?dependsOnId={id}
+Remove a task dependency (task edit; `dependsOnId` query param required). 204: empty body.
+
+## Task labels
+
+A task's attached labels. Read needs project access; writes need task edit (`404` if missing/inaccessible, `403` if not editable). A label is valid only if it's a workspace label of the task's project's workspace OR scoped to the task's project.
+
+### GET /api/tasks/{id}/labels
+- 200: `{ "labelIds": [string...] }`. `404` if missing/inaccessible.
+
+### POST /api/tasks/{id}/labels
+Attach one label (task edit). Body: `labelId` string, required (`400 "Unknown label"` if invalid). Idempotent.
+- 200: `{ "labelIds": [string...] }`.
+
+### PUT /api/tasks/{id}/labels
+Replace the FULL label set (task edit). Body: `labelIds` array of strings (deduped; `400` if not an array of strings, `400 "Too many labels (max 100)"`, `400 "Unknown label: <id>"` for any invalid id).
+- 200: `{ "labelIds": [string...] }`.
+
+### DELETE /api/tasks/{id}/labels?labelId={id}
+Detach one label (task edit; `labelId` query param required). 204: empty body.
+
+## Bulk task actions
+
+Operate on a SELECTION of tasks (`ids`), which must all belong to ONE project (`400 "All ids must belong to the same project"`). Inaccessible ids are silently dropped (ADR-019); if none remain → `404 "No tasks found"`. Only tasks the caller can edit are mutated.
+
+### PATCH /api/tasks/bulk
+Set fields on every editable selected task.
+- Body: `ids` (non-empty string array) + `set` (object). `set` may include: `statusId` or `status` (name; must be eligible in the project), `assigneeId` (string|null; validated user), `milestoneId` (string|null; same project), `priority` (priority enum), `parentId` (string|null — re-parent under a top-level task; `""`/null promotes to top-level; `400` if it targets a selected id, a non-top-level task, or a task with sub-tasks). At least one effective field (else `400 "No fields to update"`).
+- Setting a `completed`-category status cascades to the selected tasks' sub-tasks.
+- 200: `{ "success": true, "updated": number }`.
+
+### POST /api/tasks/bulk
+Create a new top-level task and re-parent the selection under it (Move → create).
+- Body: `ids` (non-empty array) + `title` (required, trimmed, max 240). Selected tasks must be childless (`400 "cannot move a task that has sub-tasks"`).
+- 201: `{ "success": true, "parentId": string, "moved": number }`.
+
+### DELETE /api/tasks/bulk
+Delete every deletable selected task (and their sub-tasks).
+- Body: `ids` (non-empty array). 204: empty body.
+
+## Saved filters
+
+Per-project named filter configs (schemaless JSON). Reads need project access; create/delete need project edit.
+
+### GET /api/projects/{id}/saved-filters
+List a project's saved filters (oldest first). 200: `{ "savedFilters": [<savedFilter>...] }`. `404` if inaccessible.
+
+### POST /api/projects/{id}/saved-filters
+Create a saved filter (project edit). Body: `name` (required, trimmed, max 120), `config` (a JSON object; `400 "Invalid filter config"` otherwise).
+- 201: `{ "savedFilter": <savedFilter> }`. `404`/`403` as for project edits.
+
+### DELETE /api/saved-filters/{id}
+Delete a saved filter (project edit, by the filter's project). `404` if missing/inaccessible; `403` otherwise. 204: empty body.
+
+## API keys
+
+The caller's own API keys. Owner-scoped; the token/hash are NEVER returned (the plaintext key is shown exactly ONCE, at creation).
+
+### GET /api/keys
+List the caller's keys (no token/hash).
+- 200: `{ "keys": [{ "id", "name", "prefix", "lastUsedAt", "createdAt" }...] }` (newest first).
+
+### POST /api/keys
+Create a key. Body: `name` string, required (trimmed, max 60).
+- 201: `{ "key": { "id", "name", "prefix", "lastUsedAt" (null), "createdAt" }, "token": "bsk_…" }`. The `token` is the only time the plaintext is returned.
+
+### DELETE /api/keys
+Delete one of the caller's keys. Body: `id` string, required (`400 "Missing key id"`). A key the caller doesn't own is indistinguishable from missing → `404 "Key not found"`. 204: empty body.
+
 ## Projects
 
 ### GET /api/projects
@@ -60,7 +400,14 @@ Fetch one project with nested resources.
 
 ### PATCH /api/projects/{id}
 Update project metadata. At least one field required (else `400 "No fields to update"`).
-- Body: `name` (string, trimmed non-empty, max 120), `description` (string|null).
+- Body (any of):
+  - `name` string, trimmed non-empty, max 120.
+  - `description` string|null.
+  - `pinned` boolean (`400` if not a boolean) — sidebar pin / sort-first.
+  - `icon` string|null — an emoji / glyph (≤8 chars; longer is truncated) or `iconoir:<name>` (`400 "Unknown icon"` if the iconoir name is invalid). `null`/`""` clears it.
+  - `statusId` string|null — the project's own status (validated against the built-in defaults + this project's workspace statuses; `400 "Status not available to this project"` otherwise; no FK). `null`/`""` clears.
+  - `statusDisplay` `text|icon|text-icon` (`400 "Invalid status display"` otherwise).
+  - `startDate` / `dueDate` string|null — `YYYY-MM-DD` (parsed at midnight; `400 "Invalid startDate"` / `"Invalid dueDate"` on a bad date). `null`/`""` clears.
 - `404` if missing OR inaccessible; `403 "No edit permission on this project"` only if accessible but the caller can't edit it.
 - 200: `{ "project": <project> }`
 
@@ -104,9 +451,9 @@ Fetch one task and its sub-tasks.
 
 ### PATCH /api/tasks/{id}
 Update a task. At least one field (else `400 "No fields to update"`).
-- Body: any of `title` (non-empty, max 240), `statusId` or `status` (name), `priority`, `description`, `assigneeId` (string|null), `milestoneId` (string|null, same project), `locationId` (string|null, same project), `location` (string|null, legacy text), `order` (integer|null), `dueDate` (string|null), `parentId` (string|null — re-parent this task), `customFields` (`{ "<fieldId>": value }` map; see Custom fields — an empty/null value clears the field).
+- Body: any of `title` (non-empty, max 240), `statusId` or `status` (name), `priority`, `description`, `assigneeId` (string|null), `milestoneId` (string|null, same project), `locationId` (string|null, same project), `location` (string|null, legacy text), `order` (integer|null), `dueDate` (string|null), `startDate` (string|null — `YYYY-MM-DD` or full ISO), `recurrence` (string|null — a repeat-rule string, validated; `400 "Invalid recurrence rule"` if malformed; `null`/`""` clears), `coverFileId` (string|null — must reference an IMAGE file attached to THIS task, else `400`; `null`/`""` clears), `parentId` (string|null — re-parent this task), `customFields` (`{ "<fieldId>": value }` map; see Custom fields — an empty/null value clears the field).
 - `parentId`: move the task under another top-level task of the SAME project (makes it a sub-task), or `null`/`""` to detach it back to top-level. Rejected (`400`) if the target is itself a sub-task (only one nesting level), if it's the task itself, or if this task already has sub-tasks of its own.
-- Done-cascade: setting a parent to a `completed`-category status cascades that status to all its sub-tasks.
+- Done-cascade: setting a parent to a `completed`-category status cascades that status to all its sub-tasks. If the task has a `recurrence` rule, completing it ALSO spawns the next occurrence (a fresh backlog-status copy with the next due date).
 - 200: `{ "task": <task> }`
 - `404` if missing or its project is inaccessible; `403 "No edit permission on this task"` if accessible but the caller can't edit it.
 
@@ -117,7 +464,7 @@ Delete a task and its sub-tasks.
 
 ## Custom fields
 
-Projects define custom fields (created/edited in the project settings UI — no field-definition REST write endpoints). Each task stores a value per field. Field definitions + their select options are returned by `GET /api/projects/{id}`; task values appear as the per-task `customFields` map on task responses and are written via the `customFields` map on POST/PATCH `/api/tasks`.
+Projects define custom fields. Each task stores a value per field. Field definitions + their select options are returned by `GET /api/projects/{id}` and managed via the REST endpoints under **Custom field definitions** (below). Task values appear as the per-task `customFields` map on task responses and are written via the `customFields` map on POST/PATCH `/api/tasks`; PROJECT-entity field values are read/written via `GET`/`PATCH /api/projects/{id}/custom-values`.
 
 Value encoding in the `customFields` map (key = field id):
 - `text` / `email` / `phone` / `url`: string. (email/phone/url are format-validated.)
@@ -211,6 +558,9 @@ Create a template, OR instantiate one into the project (the body shape selects t
 - **Instantiate** body: `{ "templateId": string }` (or `{ "instantiate": true, "templateId": ... }`) → `201 { "taskId": string }` (the new top-level task id); creates the task + its sub-tasks + custom values. Only needs project access. `400` if `templateId` is missing or the template can't be instantiated.
 - `400` on invalid JSON body; `401` if unauthenticated; `404` if the project is inaccessible.
 
+### DELETE /api/templates/{id}
+Delete a template. A PROJECT-scoped template needs project-edit rights; a WORKSPACE-scoped template needs workspace-edit rights. `404` if missing or inaccessible (incl. an orphaned template with neither scope); `403 "No edit permission on this template"` if accessible but not editable. 204: empty body.
+
 ## Export
 
 ### GET /api/projects/{id}/export?format=csv
@@ -218,15 +568,20 @@ Download all project tasks as CSV (UTF-8 BOM, CRLF, RFC-4180 quoting). Columns: 
 
 ## Object shapes
 
+- workspace: `id, name, ownerId, createdAt, updatedAt`.
 - project: `id, name, description, workspaceId, statusId, icon, statusDisplay, pinned, startDate, dueDate, createdBy, createdAt, updatedAt` (`icon` = emoji or `iconoir:<name>` (nullable); `statusDisplay` ∈ `text|icon|text-icon`; `startDate`/`dueDate` nullable ISO date strings)
 - task: `id, projectId, parentId, title, description, statusId, priority, assigneeId, milestoneId, locationId, location, order, position, startDate, dueDate, recurrence, coverFileId, createdBy, createdAt, updatedAt` (`startDate`/`dueDate` nullable ISO dates; `recurrence` = repeat-rule string|null; `coverFileId` = a task-attachment file id|null), plus `customFields` (a `{ "<fieldId>": decodedValue }` map on API task responses). `locationId` → a saved project `location` (below; settable via POST/PATCH /api/tasks); `location` is the legacy freeform `"lat, lng"` text (still accepted; map views prefer `locationId`).
-- location: `id, projectId, title, address, latitude, longitude, position, createdAt, updatedAt` — project-scoped saved places (`title` required; `address`/`latitude`/`longitude` nullable). Plotted by map views only when both lat+lng are set. Listed under `GET /api/projects/{id}`; reference one from a task via `locationId`. The records are created/edited/deleted in the project settings UI (no location write REST endpoints).
+- location: `id, projectId, title, address, latitude, longitude, position, createdAt, updatedAt` — project-scoped saved places (`title` required; `address`/`latitude`/`longitude` nullable). Plotted by map views only when both lat+lng are set. Listed under `GET /api/projects/{id}`; reference one from a task via `locationId`. CRUD via the **Locations** endpoints (below).
 - status: `id, name, description, category, color, icon, projectId, workspaceId, position, builtIn, createdAt`. Built-in ids → category: `status-backlog` (backlog), `status-planned` (planned), `status-in-progress` (in-progress), `status-completed` (completed), `status-canceled` (canceled).
 - customField: `id, projectId, entity, name, type, config (JSON object), appliesTo, position, createdAt`. `entity` ∈ `task | project` (project-entity fields ARE returned in `GET /api/projects/{id}` `customFields`, but their values live on the project, not tasks). `type` ∈ `text|number|select|date|person|files|task|checkbox|email|phone|place|url|rollup` (`rollup` is computed client-side and never stored, so it never appears in a task's `customFields` map). `appliesTo` ∈ `all | tasks (top-level only) | subtasks` — a value can only be set on a task at the matching level (else `400`). `config` is type-specific: number `{numberFormat, currencyCode?, formatString?}`; select `{multi, displayOption}`; date `{dateFormat, timeFormat}`; person/place/files/task `{multi}`; rollup `{relation, targetFieldId, formula}`.
 - customFieldOption: `id, fieldId, title, color, icon, position, createdAt` — members of a `select` field.
 - file: `id, projectId, fieldId, taskId, filename, mimeType, size, createdBy, createdAt` (the on-disk path is never exposed; fetch bytes via `GET /api/files/{id}`).
 - view: `id, projectId, name, type (table|board|list|timeline|calendar|dashboard|map), config (JSON string), position, isDefault, hidden, createdBy, createdAt, updatedAt`. `config` is schemaless per-view JSON; known **table/list** keys: `groupBy` (`status|milestone|assignee|due|label`; omit = ungrouped), `sortBy` (`priority|order|title|due|status|assignee|createdAt`, each optionally `:desc`; omit = natural order), `filters` (each array lists the **checked (shown)** values for that facet: `{ statusIds?, priorities?, assigneeIds?, milestoneIds?, labelIds?, dueBuckets? }`. A facet filters only when its key is **present**: absent = inactive = all shown; a present array shows only those values; an empty present array shows nothing; `_none` shows unassigned / no-milestone / no-label / no-due; a task is shown if ANY of its labels is checked), column toggles `priority|assignee|milestone|due|labels` and per-custom-field `cf:<fieldId>` (boolean; absent = shown; table only), `colWidths` (table only — `{ "<colKey>": px }`, colKey ∈ `status|title|priority|assignee|milestone|due|labels|cf:<fieldId>|actions`; presence switches the table to fixed-width columns), `statusIds` (array of status ids to show; absent = all). **board** key: `groupBy` (`status` default `|milestone|assignee|label` — non-status values become swimlanes). `display` (`text|text-icon|icon`) applies to any view's tab.
-- milestone: `id, projectId, name, description, startDate, targetDate, position, createdAt, updatedAt` (`startDate`/`targetDate` nullable ISO dates). Returned under `GET /api/projects/{id}` and assignable via a task's `milestoneId`; created/edited/deleted in the UI only (no milestone write REST endpoints).
+- milestone: `id, projectId, name, description, startDate, targetDate, position, createdAt, updatedAt` (`startDate`/`targetDate` nullable ISO dates). Returned under `GET /api/projects/{id}` and assignable via a task's `milestoneId`; CRUD + dependencies via the **Milestones** endpoints (below).
+- label: `id, name, workspaceId, projectId, groupId, color, icon, position, createdAt` — exactly ONE of `workspaceId` (shared pool, attached to projects via `project_label`) / `projectId` (owned by one project) is set. `color` = `#rrggbb`|null; `icon` = emoji/`iconoir:<name>`|null; `groupId` → a label group|null.
+- labelGroup: `id, name, workspaceId, position, createdAt` — a named grouping of workspace labels.
+- savedFilter: `id, projectId, name, config (JSON string), createdBy, createdAt` — `config` is the same schemaless filter JSON as a view's `filters`/`groupBy`/`sortBy`.
+- apiKey (as listed by `GET /api/keys`): `id, name, prefix, lastUsedAt, createdAt` — `prefix` is the displayable start (e.g. `bsk_a1b2c3`); the hash and full token are never returned.
 
 ## Example
 

@@ -5,7 +5,8 @@ import { customField, customFieldOption, location, milestone, project, task, vie
 import { apiError, readJson, optionalString, ApiValidationError } from '$lib/server/api';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject, canEditProject } from '$lib/server/permissions';
-import { listProjectStatuses } from '$lib/server/statuses';
+import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
+import { ICONOIR_NAMES } from '$lib/iconoirNames';
 import { customValuesByTask, listCustomFieldOptions, listProjectCustomFields } from '$lib/server/customFields';
 import type { RequestHandler } from './$types';
 
@@ -89,6 +90,78 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		} catch (err) {
 			if (err instanceof ApiValidationError) return apiError(400, err.message);
 			throw err;
+		}
+	}
+
+	if (body.pinned !== undefined) {
+		if (typeof body.pinned !== 'boolean') return apiError(400, 'pinned must be a boolean');
+		updates.pinned = body.pinned;
+	}
+
+	if (body.icon !== undefined) {
+		// emoji / legacy glyph (≤8 chars) or `iconoir:<name>` (validated); null/'' clears it
+		if (body.icon === null) {
+			updates.icon = null;
+		} else if (typeof body.icon !== 'string') {
+			return apiError(400, 'icon must be a string or null');
+		} else {
+			const raw = body.icon.trim();
+			if (raw.startsWith('iconoir:')) {
+				if (!ICONOIR_NAMES.includes(raw.slice(8))) return apiError(400, 'Unknown icon');
+				updates.icon = raw;
+			} else {
+				updates.icon = raw.slice(0, 8) || null;
+			}
+		}
+	}
+
+	if (body.statusId !== undefined) {
+		// validate against defaults + this project's workspace statuses (no FK), like setProjectStatus
+		if (body.statusId === null || body.statusId === '') {
+			updates.statusId = null;
+		} else if (typeof body.statusId !== 'string') {
+			return apiError(400, 'statusId must be a string or null');
+		} else {
+			const options = [
+				...(await listStatuses()),
+				...(proj.workspaceId ? await listWorkspaceStatuses(proj.workspaceId) : [])
+			];
+			if (!options.some((s) => s.id === body.statusId))
+				return apiError(400, 'Status not available to this project');
+			updates.statusId = body.statusId;
+		}
+	}
+
+	if (body.statusDisplay !== undefined) {
+		if (
+			typeof body.statusDisplay !== 'string' ||
+			!['text', 'icon', 'text-icon'].includes(body.statusDisplay)
+		)
+			return apiError(400, 'Invalid status display');
+		updates.statusDisplay = body.statusDisplay;
+	}
+
+	if (body.startDate !== undefined) {
+		if (body.startDate === null || body.startDate === '') {
+			updates.startDate = null;
+		} else if (typeof body.startDate !== 'string') {
+			return apiError(400, 'startDate must be a date string or null');
+		} else {
+			const d = new Date(body.startDate.trim() + 'T00:00:00');
+			if (Number.isNaN(d.getTime())) return apiError(400, 'Invalid startDate');
+			updates.startDate = d;
+		}
+	}
+
+	if (body.dueDate !== undefined) {
+		if (body.dueDate === null || body.dueDate === '') {
+			updates.dueDate = null;
+		} else if (typeof body.dueDate !== 'string') {
+			return apiError(400, 'dueDate must be a date string or null');
+		} else {
+			const d = new Date(body.dueDate.trim() + 'T00:00:00');
+			if (Number.isNaN(d.getTime())) return apiError(400, 'Invalid dueDate');
+			updates.dueDate = d;
 		}
 	}
 

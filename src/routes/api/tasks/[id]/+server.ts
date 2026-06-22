@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { location, milestone, project, task, user } from '$lib/server/db/schema';
+import { file, location, milestone, project, task, user } from '$lib/server/db/schema';
 import {
 	apiError,
 	readJson,
@@ -9,6 +9,7 @@ import {
 	ApiValidationError,
 	PRIORITIES
 } from '$lib/server/api';
+import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
 import { dispatchEvent } from '$lib/server/integrations';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { create as createNotification } from '$lib/server/notifications';
@@ -158,6 +159,47 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		}
 	}
 
+	if (body.startDate !== undefined) {
+		if (body.startDate === null || body.startDate === '') {
+			updates.startDate = null;
+		} else if (typeof body.startDate === 'string') {
+			const startDate = new Date(
+				body.startDate.includes('T') ? body.startDate : body.startDate + 'T00:00:00'
+			);
+			if (isNaN(startDate.getTime())) return apiError(400, 'startDate must be a valid date');
+			updates.startDate = startDate;
+		} else {
+			return apiError(400, 'startDate must be a string or null');
+		}
+	}
+
+	if (body.recurrence !== undefined) {
+		if (body.recurrence === null || body.recurrence === '') {
+			updates.recurrence = null;
+		} else if (typeof body.recurrence === 'string') {
+			const rule = body.recurrence.trim();
+			if (!isValidRecurrence(rule)) return apiError(400, 'Invalid recurrence rule');
+			updates.recurrence = rule;
+		} else {
+			return apiError(400, 'recurrence must be a string or null');
+		}
+	}
+
+	// coverFileId: must reference an image file attached to THIS task (mirror setTaskCover)
+	if (body.coverFileId !== undefined) {
+		if (body.coverFileId === null || body.coverFileId === '') {
+			updates.coverFileId = null;
+		} else if (typeof body.coverFileId === 'string') {
+			const [f] = await db.select().from(file).where(eq(file.id, body.coverFileId));
+			if (!f || f.taskId !== params.id || f.projectId !== existing.projectId)
+				return apiError(400, 'coverFileId must reference a file attached to this task');
+			if (!f.mimeType.startsWith('image/')) return apiError(400, 'cover must be an image');
+			updates.coverFileId = body.coverFileId;
+		} else {
+			return apiError(400, 'coverFileId must be a string or null');
+		}
+	}
+
 	// re-parent: move under another task, or null/"" to make it top-level. Depth-1 only.
 	if (body.parentId !== undefined) {
 		if (body.parentId === null || body.parentId === '') {
@@ -201,6 +243,34 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	// Completing a parent completes its sub-tasks (same rule as the form action)
 	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
 	if (targetStatus?.category === 'completed' && !wasDone) {
+		// Recurring task: spawn the next occurrence (mirror the setStatus form action)
+		if (existing.recurrence) {
+			const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
+			const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
+			if (backlog) {
+				const spawnNow = new Date();
+				await db.insert(task).values({
+					id: crypto.randomUUID(),
+					projectId: existing.projectId,
+					parentId: existing.parentId,
+					title: existing.title,
+					description: existing.description,
+					priority: existing.priority,
+					statusId: backlog.id,
+					assigneeId: existing.assigneeId,
+					milestoneId: existing.milestoneId,
+					locationId: existing.locationId,
+					startDate: existing.startDate,
+					dueDate: nextDue,
+					recurrence: existing.recurrence,
+					createdBy: locals.user.id,
+					position: spawnNow.getTime(),
+					createdAt: spawnNow,
+					updatedAt: spawnNow
+				});
+			}
+		}
+
 		await db
 			.update(task)
 			.set({ statusId: targetStatus.id, updatedAt: new Date() })
