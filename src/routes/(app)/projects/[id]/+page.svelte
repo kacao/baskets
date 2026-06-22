@@ -253,6 +253,11 @@
 	const setFlowMilestonesConfig = () =>
 		JSON.stringify({ ...viewConfig, flowMilestones: flowMilestonesOn ? false : undefined });
 
+	// Table grouped view: show the per-group task count (config.showCount, default off).
+	const showCountOn = $derived(viewConfig.showCount === true);
+	const setShowCountConfig = () =>
+		JSON.stringify({ ...viewConfig, showCount: showCountOn ? undefined : true });
+
 	// Milestones pane: name → its dependencies (other milestones of this project)
 	const milestoneName = (id: string) => data.milestones.find((m) => m.id === id)?.name ?? id;
 	const milestoneDepsOf = (id: string) =>
@@ -1018,6 +1023,15 @@
 						>
 					</span>
 				{/if}
+			</div>
+			<span class="label">{$t('Task count')}</span>
+			<div class="chips-row">
+				<form method="POST" action="?/updateView" use:enhance>
+					<input type="hidden" name="id" value={activeView.id} />
+					<input type="hidden" name="name" value={activeView.name} />
+					<input type="hidden" name="config" value={setShowCountConfig()} />
+					<button class="chip" class:chip--on={showCountOn} type="submit">{$t('Show task count')}</button>
+				</form>
 			</div>
 			<span class="label">{$t('Columns')}</span>
 			<div class="chips-row">

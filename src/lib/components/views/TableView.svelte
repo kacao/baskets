@@ -103,6 +103,7 @@
 	}
 
 	const show = (key: string) => config[key] !== false; // columns default on
+	const showCount = $derived(config.showCount === true); // group task count — default off
 	const statusFilter = $derived(
 		Array.isArray(config.statusIds) ? (config.statusIds as string[]) : null
 	);
@@ -479,7 +480,7 @@
 							<td colspan={colCount - 1}>
 								<div class="group-head">
 									<span class="group-title">{g.title}</span>
-									<span class="group-count">{g.tasks.length}</span>
+									{#if showCount}<span class="group-count">{g.tasks.length}</span>{/if}
 									{#each fieldAggregations(aggFieldIds, customFields, g.tasks, taskCustomValues, tasks) as a (a.id)}
 										<span class="group-agg" use:tooltip={a.name}>({a.text})</span>
 									{/each}
@@ -744,6 +745,10 @@
 		overflow: visible;
 	}
 
+	.group-row {
+		border-top: 3px solid black;
+	}
+
 	.group-row td {
 		padding: var(--sp-3) var(--sp-2) var(--sp-1) 0;
 		border-bottom: none;
@@ -917,6 +922,7 @@
 	.col-select input {
 		display: block;
 		margin: 0;
+		padding-right: 0;
 	}
 
 	/* row checkbox shows on hover or when checked; header select-all always shows */
@@ -948,6 +954,7 @@
 	.col-status {
 		width: 1%;
 		white-space: nowrap;
+		padding-left: 0;
 	}
 
 	.col-actions {
