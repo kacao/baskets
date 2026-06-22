@@ -487,20 +487,6 @@ export const notification = sqliteTable('notification', {
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
 });
 
-// Named, reusable filter sets for a project's views (BASDEV-7).
-export const savedFilter = sqliteTable('saved_filter', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	name: text('name').notNull(),
-	config: text('config').notNull().default('{}'), // schemaless filter JSON
-	createdBy: text('created_by')
-		.notNull()
-		.references(() => user.id),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
-});
-
 // Reusable task templates, workspace- or project-scoped (BASDEV-8).
 export const template = sqliteTable('template', {
 	id: text('id').primaryKey(),

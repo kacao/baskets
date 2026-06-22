@@ -31,7 +31,6 @@ import {
 	deleteComment,
 	getComment
 } from '$lib/server/comments';
-import { listSavedFilters, createSavedFilter, deleteSavedFilter } from '$lib/server/savedFilters';
 import {
 	listTemplatesForProject,
 	createTemplate,
@@ -233,7 +232,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.where(eq(file.projectId, params.id))
 	]);
 
-	const savedFilters = await listSavedFilters(params.id);
 	const templates = await listTemplatesForProject(params.id);
 
 	const admin = isAdmin(locals.user);
@@ -281,7 +279,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		customFieldOptions,
 		taskCustomValues,
 		files,
-		savedFilters,
 		templates,
 		perm: { admin, project: canEditProj, views: editableViews }
 	};
@@ -919,57 +916,6 @@ export const actions: Actions = {
 		return { success: true, deleted: allowed.length };
 	},
 
-	/* -------------------------- saved filters (BASDEV-7) -------------------------- */
-
-	createSavedFilter: async ({ request, params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-
-		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		const configRaw = String(form.get('config') ?? '{}');
-
-		if (!name) return fail(400, { message: 'Filter name is required' });
-		if (name.length > 120) return fail(400, { message: 'Filter name too long (max 120)' });
-
-		let config: unknown;
-		try {
-			config = JSON.parse(configRaw);
-		} catch {
-			return fail(400, { message: 'Invalid filter config' });
-		}
-		if (!config || typeof config !== 'object' || Array.isArray(config))
-			return fail(400, { message: 'Invalid filter config' });
-
-		try {
-			await createSavedFilter({
-				projectId: params.id,
-				name,
-				config: config as Record<string, unknown>,
-				createdBy: locals.user.id
-			});
-		} catch (e) {
-			return fail(400, { message: e instanceof Error ? e.message : 'Could not save filter' });
-		}
-
-		broadcastProjectChange(params.id, locals.user.id);
-		return { success: true };
-	},
-
-	deleteSavedFilter: async ({ request, params, locals }) => {
-		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
-
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const ok = await deleteSavedFilter(id, params.id);
-		if (!ok) return fail(400, { message: 'Invalid saved filter' });
-
-		broadcastProjectChange(params.id, locals.user.id);
-		return { success: true };
-	},
 
 	/* ------------------------ templates + recurring (BASDEV-8) ------------------------ */
 

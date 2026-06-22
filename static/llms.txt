@@ -214,7 +214,7 @@ Delete a location (project edit). Tasks referencing it keep their row (FK set nu
 
 ## Views
 
-One project view per row (table/board/list/timeline/calendar/dashboard/map). Create/reorder need project edit; per-view PATCH/DELETE need `canEditView` (cascades from project edit). Reads need project access.
+One project view per row (table/board/list/timeline/calendar/dashboard/map/flow — flow is a Svelte Flow dependency graph of tasks + milestones, display-only). Create/reorder need project edit; per-view PATCH/DELETE need `canEditView` (cascades from project edit). Reads need project access.
 
 ### GET /api/projects/{id}/views
 List a project's views (position, then createdAt). 200: `{ "views": [<view>...] }`. `404` if inaccessible.
@@ -348,20 +348,6 @@ Create a new top-level task and re-parent the selection under it (Move → creat
 ### DELETE /api/tasks/bulk
 Delete every deletable selected task (and their sub-tasks).
 - Body: `ids` (non-empty array). 204: empty body.
-
-## Saved filters
-
-Per-project named filter configs (schemaless JSON). Reads need project access; create/delete need project edit.
-
-### GET /api/projects/{id}/saved-filters
-List a project's saved filters (oldest first). 200: `{ "savedFilters": [<savedFilter>...] }`. `404` if inaccessible.
-
-### POST /api/projects/{id}/saved-filters
-Create a saved filter (project edit). Body: `name` (required, trimmed, max 120), `config` (a JSON object; `400 "Invalid filter config"` otherwise).
-- 201: `{ "savedFilter": <savedFilter> }`. `404`/`403` as for project edits.
-
-### DELETE /api/saved-filters/{id}
-Delete a saved filter (project edit, by the filter's project). `404` if missing/inaccessible; `403` otherwise. 204: empty body.
 
 ## API keys
 
@@ -563,8 +549,8 @@ Delete a template. A PROJECT-scoped template needs project-edit rights; a WORKSP
 
 ## Export
 
-### GET /api/projects/{id}/export?format=csv
-Download all project tasks as CSV (UTF-8 BOM, CRLF, RFC-4180 quoting). Columns: Title, Parent, Status, Priority, Assignee, Milestone, Due Date, one per custom field. Access-gated (`404` otherwise); `400 "Unsupported format (only csv)"` if `format` is anything but `csv` (case-insensitive); served as a `Content-Disposition: attachment` download.
+### GET /api/projects/{id}/export?format=csv|json
+Download a project. `format=csv` (default) = all tasks as CSV (UTF-8 BOM, CRLF, RFC-4180 quoting; columns: Title, Parent, Status, Priority, Assignee, Milestone, Due Date, one per custom field). `format=json` = a full-project document (`{ version, project, statuses, milestones, locations, labels, customFields, tasks }`, project-scoped structure only; statuses referenced by name) suitable for re-import via the project-settings Import. Access-gated (`404` otherwise); `400` for any other format; served as a `Content-Disposition: attachment` download. (Import itself is a web-only form action, not a REST endpoint.)
 
 ## Object shapes
 
@@ -576,11 +562,10 @@ Download all project tasks as CSV (UTF-8 BOM, CRLF, RFC-4180 quoting). Columns: 
 - customField: `id, projectId, entity, name, type, config (JSON object), appliesTo, position, createdAt`. `entity` ∈ `task | project` (project-entity fields ARE returned in `GET /api/projects/{id}` `customFields`, but their values live on the project, not tasks). `type` ∈ `text|number|select|date|person|files|task|checkbox|email|phone|place|url|rollup` (`rollup` is computed client-side and never stored, so it never appears in a task's `customFields` map). `appliesTo` ∈ `all | tasks (top-level only) | subtasks` — a value can only be set on a task at the matching level (else `400`). `config` is type-specific: number `{numberFormat, currencyCode?, formatString?}`; select `{multi, displayOption}`; date `{dateFormat, timeFormat}`; person/place/files/task `{multi}`; rollup `{relation, targetFieldId, formula}`.
 - customFieldOption: `id, fieldId, title, color, icon, position, createdAt` — members of a `select` field.
 - file: `id, projectId, fieldId, taskId, filename, mimeType, size, createdBy, createdAt` (the on-disk path is never exposed; fetch bytes via `GET /api/files/{id}`).
-- view: `id, projectId, name, type (table|board|list|timeline|calendar|dashboard|map), config (JSON string), position, isDefault, hidden, createdBy, createdAt, updatedAt`. `config` is schemaless per-view JSON; known **table/list** keys: `groupBy` (`status|milestone|assignee|due|label`; omit = ungrouped), `sortBy` (`priority|order|title|due|status|assignee|createdAt`, each optionally `:desc`; omit = natural order), `filters` (each array lists the **checked (shown)** values for that facet: `{ statusIds?, priorities?, assigneeIds?, milestoneIds?, labelIds?, dueBuckets? }`. A facet filters only when its key is **present**: absent = inactive = all shown; a present array shows only those values; an empty present array shows nothing; `_none` shows unassigned / no-milestone / no-label / no-due; a task is shown if ANY of its labels is checked), column toggles `priority|assignee|milestone|due|labels` and per-custom-field `cf:<fieldId>` (boolean; absent = shown; table only), `colWidths` (table only — `{ "<colKey>": px }`, colKey ∈ `status|title|priority|assignee|milestone|due|labels|cf:<fieldId>|actions`; presence switches the table to fixed-width columns), `statusIds` (array of status ids to show; absent = all). **board** key: `groupBy` (`status` default `|milestone|assignee|label` — non-status values become swimlanes). `display` (`text|text-icon|icon`) applies to any view's tab.
+- view: `id, projectId, name, type (table|board|list|timeline|calendar|dashboard|map|flow), config (JSON string), position, isDefault, hidden, createdBy, createdAt, updatedAt`. `config` is schemaless per-view JSON; known **table/list** keys: `groupBy` (`status|milestone|assignee|due|label`; omit = ungrouped), `sortBy` (`priority|order|title|due|status|assignee|createdAt`, each optionally `:desc`; omit = natural order), `filters` (each array lists the **checked (shown)** values for that facet: `{ statusIds?, priorities?, assigneeIds?, milestoneIds?, labelIds?, dueBuckets? }`. A facet filters only when its key is **present**: absent = inactive = all shown; a present array shows only those values; an empty present array shows nothing; `_none` shows unassigned / no-milestone / no-label / no-due; a task is shown if ANY of its labels is checked), column toggles `priority|assignee|milestone|due|labels` and per-custom-field `cf:<fieldId>` (boolean; absent = shown; table only), `colWidths` (table only — `{ "<colKey>": px }`, colKey ∈ `status|title|priority|assignee|milestone|due|labels|cf:<fieldId>|actions`; presence switches the table to fixed-width columns), `statusIds` (array of status ids to show; absent = all). **board** key: `groupBy` (`status` default `|milestone|assignee|label` — non-status values become swimlanes). `display` (`text|text-icon|icon`) applies to any view's tab.
 - milestone: `id, projectId, name, description, startDate, targetDate, position, createdAt, updatedAt` (`startDate`/`targetDate` nullable ISO dates). Returned under `GET /api/projects/{id}` and assignable via a task's `milestoneId`; CRUD + dependencies via the **Milestones** endpoints (below).
 - label: `id, name, workspaceId, projectId, groupId, color, icon, position, createdAt` — exactly ONE of `workspaceId` (shared pool, attached to projects via `project_label`) / `projectId` (owned by one project) is set. `color` = `#rrggbb`|null; `icon` = emoji/`iconoir:<name>`|null; `groupId` → a label group|null.
 - labelGroup: `id, name, workspaceId, position, createdAt` — a named grouping of workspace labels.
-- savedFilter: `id, projectId, name, config (JSON string), createdBy, createdAt` — `config` is the same schemaless filter JSON as a view's `filters`/`groupBy`/`sortBy`.
 - apiKey (as listed by `GET /api/keys`): `id, name, prefix, lastUsedAt, createdAt` — `prefix` is the displayable start (e.g. `bsk_a1b2c3`); the hash and full token are never returned.
 
 ## Example

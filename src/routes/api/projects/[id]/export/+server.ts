@@ -16,6 +16,7 @@ import { canAccessProject } from '$lib/server/permissions';
 import { listProjectStatuses } from '$lib/server/statuses';
 import { listProjectCustomFields } from '$lib/server/customFields';
 import { decodeValue, formatDate, formatNumber, MULTI_CAPABLE } from '$lib/customFields';
+import { buildProjectExport } from '$lib/server/projectIO';
 import type { RequestHandler } from './$types';
 
 /** Escape one CSV cell. First, neutralize formula injection: if the cell
@@ -43,7 +44,21 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Project not found');
 
 	const format = (url.searchParams.get('format') ?? 'csv').toLowerCase();
-	if (format !== 'csv') return apiError(400, 'Unsupported format (only csv)');
+	if (format !== 'csv' && format !== 'json')
+		return apiError(400, 'Unsupported format (csv or json)');
+
+	const safeName = (proj.name || 'project').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 60) || 'project';
+
+	if (format === 'json') {
+		const doc = await buildProjectExport(params.id);
+		return new Response(JSON.stringify(doc, null, 2), {
+			headers: {
+				'Content-Type': 'application/json; charset=utf-8',
+				'Content-Disposition': `attachment; filename="${safeName}.json"`,
+				'Cache-Control': 'no-store'
+			}
+		});
+	}
 
 	const [tasks, milestones, locations, statuses, customFields] = await Promise.all([
 		db
@@ -187,7 +202,6 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 
 	// UTF-8 BOM so spreadsheet apps detect encoding; CRLF line endings (RFC 4180)
 	const body = '﻿' + lines.join('\r\n') + '\r\n';
-	const safeName = (proj.name || 'project').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 60) || 'project';
 
 	return new Response(body, {
 		headers: {

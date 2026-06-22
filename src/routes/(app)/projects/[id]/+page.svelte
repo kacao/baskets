@@ -21,8 +21,8 @@
 	import CalendarView from '$lib/components/views/CalendarView.svelte';
 	import DashboardView from '$lib/components/views/DashboardView.svelte';
 	import MapView from '$lib/components/views/MapView.svelte';
+	import FlowView from '$lib/components/views/FlowView.svelte';
 	import FilterBar from '$lib/components/FilterBar.svelte';
-	import SavedFilters from '$lib/components/SavedFilters.svelte';
 	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
 	import { filterTasks } from '$lib/taskFilter';
 	import { sortTasks, parseSortBy } from '$lib/taskSort';
@@ -109,17 +109,6 @@
 			{ statusRank: statusRankFn, assigneeName: assigneeNameFn }
 		)
 	);
-
-	// Apply a saved filter's config onto the active view (BASDEV-7).
-	async function applySavedFilter(filterConfig: Record<string, unknown>) {
-		if (!activeView || !canEditActiveView) return;
-		const fd = new FormData();
-		fd.set('id', activeView.id);
-		fd.set('name', activeView.name);
-		fd.set('config', JSON.stringify({ ...viewConfig, ...filterConfig }));
-		await fetch(`${page.url.pathname}?/updateView`, { method: 'POST', body: fd });
-		await invalidateAll();
-	}
 
 	// Clear selection whenever the active project changes (and on unmount). (BASDEV-6)
 	$effect(() => {
@@ -259,6 +248,11 @@
 		});
 	}
 
+	// Flow view: show milestone nodes/membership (config.flowMilestones, default on).
+	const flowMilestonesOn = $derived(viewConfig.flowMilestones !== false);
+	const setFlowMilestonesConfig = () =>
+		JSON.stringify({ ...viewConfig, flowMilestones: flowMilestonesOn ? false : undefined });
+
 	// Milestones pane: name → its dependencies (other milestones of this project)
 	const milestoneName = (id: string) => data.milestones.find((m) => m.id === id)?.name ?? id;
 	const milestoneDepsOf = (id: string) =>
@@ -323,7 +317,7 @@
 			.join('')
 			.toUpperCase();
 
-	const VIEW_TYPES = ['table', 'board', 'list', 'timeline', 'calendar', 'dashboard', 'map'] as const;
+	const VIEW_TYPES = ['table', 'board', 'list', 'timeline', 'calendar', 'dashboard', 'map', 'flow'] as const;
 	const VIEW_ICONS: Record<string, string> = {
 		table: 'table',
 		board: 'view-grid',
@@ -331,7 +325,8 @@
 		timeline: 'calendar',
 		calendar: 'calendar',
 		dashboard: 'dashboard-dots',
-		map: 'map-pin'
+		map: 'map-pin',
+		flow: 'git-fork'
 	};
 	const displayOf = (v: { config: string }) => {
 		const d = parseConfig(v.config).display;
@@ -1086,7 +1081,49 @@
 			</div>
 		{/if}
 
-		{#if ['table', 'board', 'list'].includes(activeView.type)}
+		{#if activeView.type === 'flow'}
+			<span class="label">{$t('Milestones')}</span>
+			<div class="chips-row">
+				<form method="POST" action="?/updateView" use:enhance>
+					<input type="hidden" name="id" value={activeView.id} />
+					<input type="hidden" name="name" value={activeView.name} />
+					<input type="hidden" name="config" value={setFlowMilestonesConfig()} />
+					<button class="chip" class:chip--on={flowMilestonesOn} type="submit">{$t('Show milestones')}</button>
+				</form>
+			</div>
+			<span class="label">{$t('Sort by')}</span>
+			<div class="chips-row">
+				{@render selectPill($t('Sort by'), SORT_FIELD_OPTIONS, sortFieldValue, setSortFieldConfig)}
+				{#if sortFieldValue}
+					<span class="seg">
+						<button
+							class="seg-btn"
+							class:seg-btn--on={!sortParsed.desc}
+							type="button"
+							onclick={() => postViewConfig(setSortDirConfig(false))}>{$t('A–Z')}</button
+						><button
+							class="seg-btn"
+							class:seg-btn--on={sortParsed.desc}
+							type="button"
+							onclick={() => postViewConfig(setSortDirConfig(true))}>{$t('Z–A')}</button
+						>
+					</span>
+				{/if}
+			</div>
+			<span class="label">{$t('Statuses shown')}</span>
+			<div class="chips-row">
+				{#each data.statuses as s (s.id)}
+					<form method="POST" action="?/updateView" use:enhance>
+						<input type="hidden" name="id" value={activeView.id} />
+						<input type="hidden" name="name" value={activeView.name} />
+						<input type="hidden" name="config" value={toggleStatusConfig(s.id)} />
+						<button class="chip" class:chip--on={shownStatusIds.includes(s.id)} type="submit">{s.name}</button>
+					</form>
+				{/each}
+			</div>
+		{/if}
+
+		{#if ['table', 'board', 'list', 'flow'].includes(activeView.type)}
 			<span class="label">{$t('Filters')}</span>
 			<div class="chips-row">
 				{#each filterGroups as group (group.key)}
@@ -1264,7 +1301,7 @@
 	<NewMilestonePane onClose={() => (newMilestoneOpen = false)} />
 {/if}
 
-{#if activeView && ['table', 'board', 'list'].includes(activeView.type)}
+{#if activeView && ['table', 'board', 'list', 'flow'].includes(activeView.type)}
 	<div class="filter-row">
 		<FilterBar
 			tasks={data.tasks}
@@ -1278,14 +1315,6 @@
 			viewName={activeView.name}
 			canEditView={canEditActiveView}
 		/>
-		<div class="saved-filters-slot">
-			<SavedFilters
-				savedFilters={data.savedFilters}
-				currentConfig={viewConfig}
-				canEdit={canEditActiveView}
-				onApply={applySavedFilter}
-			/>
-		</div>
 	</div>
 {/if}
 
@@ -1410,6 +1439,28 @@
 	<DashboardView tasks={data.tasks} statuses={data.statuses} milestones={data.milestones} />
 {:else if activeView?.type === 'map'}
 	<MapView tasks={data.tasks} locations={data.locations} />
+{:else if activeView?.type === 'flow'}
+	<FlowView
+		tasks={filteredTasks}
+		allTasks={data.tasks}
+		statusIds={shownStatusIds}
+		showMilestones={flowMilestonesOn}
+		users={data.users}
+		statuses={data.statuses}
+		milestones={data.milestones}
+		locations={data.locations}
+		labels={data.labels}
+		taskLabels={data.taskLabels}
+		taskDeps={data.taskDeps}
+		milestoneDeps={data.milestoneDeps}
+		customFields={data.customFields}
+		customFieldOptions={data.customFieldOptions}
+		taskCustomValues={data.taskCustomValues}
+		files={data.files}
+		templates={data.templates}
+		{statusDisplay}
+		{canEditTask}
+	/>
 {/if}
 
 {#if templatePickerOpen}
@@ -1712,11 +1763,6 @@
 	.filter-row :global(.filterbar) {
 		flex: 1 1 auto;
 		margin-bottom: 0;
-	}
-
-	.saved-filters-slot {
-		margin-left: auto;
-		flex: 0 0 auto;
 	}
 
 	.view-tab {

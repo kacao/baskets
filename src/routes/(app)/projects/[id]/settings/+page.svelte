@@ -152,6 +152,42 @@
 	</div>
 {/if}
 
+<!-- Import / Export -->
+<h4 class="section-title">{$t('Import / Export')}</h4>
+<div class="card section">
+	<div class="u-flex" style="gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-3);">
+		<a class="btn btn-sm" href="/api/projects/{data.project.id}/export?format=json">
+			{$t('Export project (JSON)')}
+		</a>
+		<a class="btn btn-sm" href="/api/projects/{data.project.id}/export?format=csv">
+			{$t('Export tasks (CSV)')}
+		</a>
+	</div>
+	<form
+		method="POST"
+		action="?/importProject"
+		enctype="multipart/form-data"
+		use:enhance
+		class="u-flex"
+		style="gap: var(--sp-2); flex-wrap: wrap; align-items: center;"
+	>
+		<input
+			type="file"
+			name="file"
+			accept="application/json,.json"
+			required
+			class="input"
+			style="width: auto;"
+		/>
+		<button class="btn btn-sm btn-primary" type="submit">{$t('Import')}</button>
+	</form>
+	<p class="u-tiny u-muted" style="margin-top: var(--sp-2);">
+		{$t(
+			'Creates a new project in this workspace. Assignees, attachments, and people fields are not imported.'
+		)}
+	</p>
+</div>
+
 <!-- Danger -->
 <h4 class="section-title">{$t('Danger zone')}</h4>
 <div class="card section">

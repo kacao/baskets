@@ -259,3 +259,43 @@ code,
 		transition-duration: 0.01ms !important;
 	}
 }
+
+/* ======================== HIGH CONTRAST ==========================
+   User setting (/settings → Theming). Forces black text + borders on a
+   white background by overriding the bridged + DaisyUI theme tokens that
+   every component reads. Data-driven accents (status pill --c, label
+   colors) keep their own inline colors. Applied via <html data-contrast>.
+   ================================================================== */
+[data-contrast='high'] {
+	color-scheme: light;
+	--color-base-100: #ffffff;
+	--color-base-200: #ffffff;
+	--color-base-300: #000000;
+	--color-base-content: #000000;
+	--color-primary: #000000;
+	--color-primary-content: #ffffff;
+	--color-secondary: #000000;
+	--color-secondary-content: #ffffff;
+	--color-accent: #000000;
+	--color-accent-content: #ffffff;
+	--color-neutral: #000000;
+	--color-neutral-content: #ffffff;
+	/* legacy bridge vars (component-scoped <style> blocks) */
+	--color-bg: #ffffff;
+	--color-fg: #000000;
+	--color-bg-inverted: #000000;
+	--color-fg-inverted: #ffffff;
+	--color-link: #000000;
+	--color-border: #000000;
+	--color-border-subtle: #000000;
+	--color-surface-muted: #ffffff;
+	--color-muted: #000000;
+	--color-disabled-border: #000000;
+	--color-disabled-fill: #ffffff;
+	--border-width: 1px;
+}
+
+[data-contrast='high'] body {
+	background: #ffffff;
+	color: #000000;
+}

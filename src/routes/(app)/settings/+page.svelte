@@ -4,9 +4,21 @@
 	import { slide } from 'svelte/transition';
 	import QRCode from 'qrcode';
 	import { authClient } from '$lib/auth-client';
+	import { browser } from '$app/environment';
 	import { t } from '$lib/i18n';
 
 	let { data, form } = $props();
+
+	// High-contrast accessibility mode — black text/borders on white. Mirrors the
+	// `contrast` cookie that hooks.server.ts applies to <html data-contrast> at SSR.
+	let highContrast = $state(browser && document.documentElement.dataset.contrast === 'high');
+	function toggleHighContrast() {
+		highContrast = !highContrast;
+		document.documentElement.dataset.contrast = highContrast ? 'high' : '';
+		document.cookie = highContrast
+			? 'contrast=high; path=/; max-age=31536000; samesite=lax'
+			: 'contrast=; path=/; max-age=0; samesite=lax';
+	}
 
 	let keyLoading = $state(false);
 	let copied = $state(false);
@@ -105,6 +117,24 @@
 	<p class="u-small"><strong>{$t('Name')}:</strong> {data.user?.name}</p>
 	<p class="u-small"><strong>{$t('Email')}:</strong> <span class="mono">{data.user?.email}</span></p>
 	<p class="u-small"><strong>{$t('Role')}:</strong> {$t(data.user?.role ?? 'user')}</p>
+</div>
+
+<div class="card" style="max-width: 560px; margin-bottom: var(--sp-4);">
+	<h4 style="margin-bottom: var(--sp-2);">{$t('Theming')}</h4>
+	<label class="u-flex" style="gap: var(--sp-2); cursor: pointer; align-items: flex-start;">
+		<input
+			type="checkbox"
+			class="checkbox"
+			checked={highContrast}
+			onchange={toggleHighContrast}
+		/>
+		<span>
+			<span style="font-weight: 500;">{$t('High contrast')}</span>
+			<span class="u-tiny u-muted" style="display: block;"
+				>{$t('Black text and borders on a white background.')}</span
+			>
+		</span>
+	</label>
 </div>
 
 <div class="card" style="max-width: 560px;">

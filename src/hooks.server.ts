@@ -14,13 +14,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 		await ensureDefaultWorkspace();
 	}
 
-	// DaisyUI theme: cookie-driven, applied to <html data-theme> at SSR (no flash)
+	// DaisyUI theme + high-contrast accessibility flag: cookie-driven, applied to
+	// <html data-theme / data-contrast> at SSR (no flash)
 	const cookieTheme = event.cookies.get('theme');
 	const theme = cookieTheme && THEMES.includes(cookieTheme) ? cookieTheme : 'light';
+	const contrastAttr = event.cookies.get('contrast') === 'high' ? ' data-contrast="high"' : '';
 	const themed = (ev: typeof event) =>
 		resolve(ev, {
 			transformPageChunk: ({ html }) =>
-				html.replace('data-theme="light"', `data-theme="${theme}"`)
+				html.replace('data-theme="light"', `data-theme="${theme}"${contrastAttr}`)
 		});
 
 	// Bearer API key (REST clients): Authorization: Bearer bsk_...

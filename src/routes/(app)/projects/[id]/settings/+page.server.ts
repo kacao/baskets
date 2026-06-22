@@ -45,6 +45,7 @@ import {
 	validateFieldConfig
 } from '$lib/server/customFields';
 import { deleteFilesForField } from '$lib/server/uploads';
+import { importProjectFromExport } from '$lib/server/projectIO';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Defaults + the project's workspace statuses + its own statuses are assignable here. */
@@ -312,6 +313,44 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 		await db.delete(project).where(eq(project.id, params.id));
 		redirect(303, '/projects');
+	},
+
+	// Import a project export (JSON) → creates a NEW project in this project's
+	// workspace. Gated on edit permission (it creates a project).
+	importProject: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const file = form.get('file');
+		if (!(file instanceof File) || file.size === 0)
+			return fail(400, { message: 'Choose a JSON file to import' });
+		if (file.size > 5 * 1024 * 1024) return fail(400, { message: 'File too large (max 5 MB)' });
+
+		let doc: unknown;
+		try {
+			doc = JSON.parse(await file.text());
+		} catch {
+			return fail(400, { message: 'Invalid JSON file' });
+		}
+
+		const [proj] = await db
+			.select({ workspaceId: project.workspaceId })
+			.from(project)
+			.where(eq(project.id, params.id));
+		if (!proj?.workspaceId) return fail(400, { message: 'Project has no workspace' });
+
+		let newId: string;
+		try {
+			newId = await importProjectFromExport(doc, {
+				workspaceId: proj.workspaceId,
+				creator: { id: locals.user.id, role: locals.user.role }
+			});
+		} catch (e) {
+			return fail(400, { message: e instanceof Error ? e.message : 'Import failed' });
+		}
+		redirect(303, '/projects/' + newId);
 	},
 
 	/* ----------------------- project-scoped statuses ----------------------- */
