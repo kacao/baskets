@@ -106,7 +106,7 @@
 
 				<Popover ariaLabel={$i18n('Set milestone')} up>
 					{#snippet trigger()}
-						<span class="bulk-trigger"><Icon name="flag" size={14} />{$i18n('Milestone')}</span>
+						<span class="bulk-trigger"><Icon name="triangle-flag" size={14} />{$i18n('Milestone')}</span>
 					{/snippet}
 					{#snippet panel(close)}
 						<div class="bulk-menu">
