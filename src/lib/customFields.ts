@@ -225,6 +225,51 @@ export function decodeValue(field: { type: string }, raw: string | null | undefi
 /** Build the canonical stored string for a multi-capable type's id array. */
 export const encodeIds = (ids: string[]) => JSON.stringify([...new Set(ids)]);
 
+/** Per-task searchable text from custom-field values, resolved to display labels
+ * (reference ids → titles, since raw ids are useless to match). Folded into both
+ * the FilterBar free-text search and the `task`-cf link picker so they search cf
+ * content. checkbox/rollup excluded (boolean / computed). */
+export function buildTaskCfSearch(
+	fields: { id: string; type: string }[],
+	values: { taskId: string; fieldId: string; value: string }[],
+	resolve: {
+		option: (id: string) => string;
+		user: (id: string) => string;
+		location: (id: string) => string;
+		task: (id: string) => string;
+		file: (id: string) => string;
+	}
+): Map<string, string> {
+	const typeById = new Map(fields.map((f) => [f.id, f.type]));
+	const parts = new Map<string, string[]>();
+	for (const v of values) {
+		const type = typeById.get(v.fieldId);
+		if (!type || type === 'rollup' || type === 'checkbox') continue;
+		const d = decodeValue({ type }, v.value);
+		let text: string;
+		if (Array.isArray(d)) {
+			const r =
+				type === 'select' ? d.map(resolve.option)
+				: type === 'person' ? d.map(resolve.user)
+				: type === 'place' ? d.map(resolve.location)
+				: type === 'task' ? d.map(resolve.task)
+				: type === 'files' ? d.map(resolve.file)
+				: d.map(String);
+			text = r.join(' ');
+		} else {
+			text = String(d ?? '');
+		}
+		if (text.trim()) {
+			const arr = parts.get(v.taskId) ?? [];
+			arr.push(text);
+			parts.set(v.taskId, arr);
+		}
+	}
+	const out = new Map<string, string>();
+	for (const [id, p] of parts) out.set(id, p.join(' '));
+	return out;
+}
+
 /* ---------------------------- pure formatters ---------------------------- */
 
 export function formatNumber(n: number, config: FieldConfig): string {

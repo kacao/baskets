@@ -3,6 +3,8 @@
 	import { invalidateAll } from '$app/navigation';
 	import Icon from '$lib/components/Icon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
+	import { tooltip } from '$lib/tooltip';
+	import { popover } from '$lib/transitions';
 	import { t as i18n } from '$lib/i18n';
 	import type { DueBucket, TaskFilters } from '$lib/taskFilter';
 	import { hasActiveFilters } from '$lib/taskFilter';
@@ -111,7 +113,18 @@
 		searchText = '';
 		postFilters({});
 	}
+
+	// Facets live behind an icon button to the right of the search box. Plain toggle
+	// + outside-click (not the shared Popover, which clips its scroll box and would
+	// hide each facet's own nested popover).
+	let filtersOpen = $state(false);
+	let menuEl = $state<HTMLElement | null>(null);
+	const onWinClick = (e: MouseEvent) => {
+		if (filtersOpen && menuEl && !menuEl.contains(e.target as Node)) filtersOpen = false;
+	};
 </script>
+
+<svelte:window onclick={onWinClick} />
 
 <div class="filterbar">
 	<label class="search" aria-label={$i18n('Search tasks')}>
@@ -124,28 +137,46 @@
 		/>
 	</label>
 
-	{@render facet('statusIds', $i18n('Status'), statuses.map((s) => [s.id, s.name]))}
-	{@render facet('priorities', $i18n('Priority'), PRIORITIES.map(([v, l]) => [v, $i18n(l)]))}
-	{@render facet('assigneeIds', $i18n('Assignee'), [
-		['_none', $i18n('Unassigned')],
-		...users.map((u) => [u.id, u.name] as [string, string])
-	])}
-	{@render facet('milestoneIds', $i18n('Milestone'), [
-		['_none', $i18n('No milestone')],
-		...milestones.map((m) => [m.id, m.name] as [string, string])
-	])}
-	{@render facet('labelIds', $i18n('Labels'), [
-		['_none', $i18n('No label')],
-		...labels.map((l) => [l.id, l.name] as [string, string])
-	])}
-	{@render facet('dueBuckets', $i18n('Due'), DUE_BUCKETS.map(([v, l]) => [v, $i18n(l)]))}
-
-	{#if anyActive}
-		<button class="clear-btn" type="button" onclick={clearAll}>
-			<Icon name="xmark" size={12} />
-			{$i18n('Clear')}{#if activeCount}<span class="count">{activeCount}</span>{/if}
+	<div class="filter-menu" bind:this={menuEl}>
+		<button
+			class="filter-btn"
+			type="button"
+			aria-haspopup="dialog"
+			aria-expanded={filtersOpen}
+			aria-label={$i18n('Filters')}
+			use:tooltip={$i18n('Filters')}
+			onclick={() => (filtersOpen = !filtersOpen)}
+		>
+			<Icon name="filter-list" size={14} />
+			{#if activeCount > 0}<span class="count">{activeCount}</span>{/if}
 		</button>
-	{/if}
+		{#if filtersOpen}
+			<div class="filter-pop" role="dialog" transition:popover>
+				{@render facet('statusIds', $i18n('Status'), statuses.map((s) => [s.id, s.name]))}
+				{@render facet('priorities', $i18n('Priority'), PRIORITIES.map(([v, l]) => [v, $i18n(l)]))}
+				{@render facet('assigneeIds', $i18n('Assignee'), [
+					['_none', $i18n('Unassigned')],
+					...users.map((u) => [u.id, u.name] as [string, string])
+				])}
+				{@render facet('milestoneIds', $i18n('Milestone'), [
+					['_none', $i18n('No milestone')],
+					...milestones.map((m) => [m.id, m.name] as [string, string])
+				])}
+				{@render facet('labelIds', $i18n('Labels'), [
+					['_none', $i18n('No label')],
+					...labels.map((l) => [l.id, l.name] as [string, string])
+				])}
+				{@render facet('dueBuckets', $i18n('Due'), DUE_BUCKETS.map(([v, l]) => [v, $i18n(l)]))}
+
+				{#if anyActive}
+					<button class="clear-btn" type="button" onclick={clearAll}>
+						<Icon name="xmark" size={12} />
+						{$i18n('Clear all')}
+					</button>
+				{/if}
+			</div>
+		{/if}
+	</div>
 </div>
 
 {#snippet facet(key: keyof TaskFilters, label: string, opts: [string, string][])}
@@ -216,17 +247,66 @@
 		min-width: 0;
 	}
 
-	.facet {
+	.filter-menu {
+		position: relative;
 		display: inline-flex;
+	}
+
+	.filter-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-bg);
+		color: var(--color-muted);
+		border-radius: var(--radius-field, 0.25rem);
+		padding: 4px 8px;
+		cursor: pointer;
+		transition:
+			border-color var(--dur-fast) ease,
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
+	}
+
+	.filter-btn:hover {
+		border-color: var(--color-fg);
+		color: var(--color-fg);
+	}
+
+	.filter-pop {
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 40;
+		min-width: 210px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		background: var(--color-base-100);
+		border: 1px solid var(--color-base-300);
+		border-radius: var(--radius-box, 0.5rem);
+		box-shadow: var(--shadow);
+		padding: 8px;
+		transform-origin: top left;
+	}
+
+	.facet {
+		display: flex;
+	}
+
+	.facet :global(.pop-wrap) {
+		width: 100%;
 	}
 
 	/* style the Popover's own .pill trigger — no inner border (avoids double border) */
 	.facet :global(.pill) {
+		width: 100%;
+		justify-content: space-between;
 		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--color-muted);
 		gap: 4px;
-		padding: 2px 8px;
+		padding: 4px 8px;
 	}
 
 	.facet--on :global(.pill) {

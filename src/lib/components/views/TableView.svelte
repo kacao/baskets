@@ -38,6 +38,7 @@
 
 	let {
 		tasks,
+		allTasks = tasks,
 		users,
 		statuses,
 		milestones,
@@ -59,6 +60,7 @@
 		templates = []
 	}: {
 		tasks: Task[];
+		allTasks?: Task[];
 		users: { id: string; name: string }[];
 		statuses: Status[];
 		milestones: { id: string; name: string }[];
@@ -138,7 +140,7 @@
 			const n = raw == null ? null : Number(raw);
 			return n != null && Number.isFinite(n) ? n : null;
 		};
-		const n = computeTaskRollup(cfg, taskId, { tasks, taskDeps, valueOf });
+		const n = computeTaskRollup(cfg, taskId, { tasks: allTasks, taskDeps, valueOf });
 		const target = customFields.find((f) => f.id === cfg.targetFieldId);
 		return target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
 	}
@@ -589,7 +591,7 @@
 										mode="cell"
 										{users}
 										{locations}
-										{tasks}
+										tasks={allTasks}
 										files={files.filter((f) => f.taskId === t.id)}
 									/>
 								</td>
@@ -645,7 +647,7 @@
 												mode="cell"
 												{users}
 												{locations}
-												{tasks}
+												tasks={allTasks}
 												files={files.filter((f) => f.taskId === s.id)}
 											/>
 										{:else}<span class="u-muted">—</span>{/if}
@@ -661,7 +663,7 @@
 {#if selected}
 	<TaskPanel
 		task={selected}
-		{tasks}
+		tasks={allTasks}
 		{users}
 		{statuses}
 		{milestones}

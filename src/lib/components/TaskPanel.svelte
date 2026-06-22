@@ -14,7 +14,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { tooltip } from '$lib/tooltip';
-	import { fieldAppliesTo, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
+	import { fieldAppliesTo, computeTaskRollup, formatNumber, buildTaskCfSearch, decodeValue, encodeIds, type RollupConfig } from '$lib/customFields';
 	import { describeRecurrence } from '$lib/recurrence';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
@@ -136,6 +136,44 @@
 	const cfValue = (fieldId: string) =>
 		taskCustomValues.find((v) => v.taskId === task.id && v.fieldId === fieldId)?.value ?? null;
 	const cfOptions = (fieldId: string) => customFieldOptions.filter((o) => o.fieldId === fieldId);
+
+	// per-task cf search text so the `task`-cf link picker searches by cf values too
+	const cfSearchByTask = $derived(
+		buildTaskCfSearch(customFields, taskCustomValues, {
+			option: (id) => customFieldOptions.find((o) => o.id === id)?.title ?? '',
+			user: (id) => users.find((u) => u.id === id)?.name ?? '',
+			location: (id) => locations.find((l) => l.id === id)?.title ?? '',
+			task: (id) => tasks.find((t) => t.id === id)?.title ?? '',
+			file: (id) => files.find((f) => f.id === id)?.filename ?? ''
+		})
+	);
+	const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';
+
+	// A `task`-type custom field renders as a collapsible sub-task-style list of its
+	// linked tasks (same block UI + editable pills). Membership edits post the cf
+	// value (cf_<id>) to patchTask, like CustomFieldValue does.
+	let cfCollapsed = $state<Record<string, boolean>>({});
+	let cfAddQuery = $state('');
+	const cfIds = (field: { id: string; type: string }): string[] => {
+		const d = decodeValue(field, cfValue(field.id));
+		return Array.isArray(d) ? (d as string[]) : [];
+	};
+	const cfLinked = (field: { id: string; type: string }): Task[] =>
+		cfIds(field)
+			.map((id) => tasks.find((t) => t.id === id))
+			.filter((t): t is Task => !!t);
+	const cfRemoveVal = (ids: string[], id: string) => {
+		const next = ids.filter((x) => x !== id);
+		return next.length ? encodeIds(next) : '';
+	};
+	const cfAddVal = (ids: string[], id: string, multi: boolean) =>
+		encodeIds(multi ? [...ids, id] : [id]);
+	const cfAddCandidates = (ids: string[]): Task[] => {
+		const q = cfAddQuery.trim().toLowerCase();
+		return tasks.filter(
+			(t) => t.id !== task.id && !ids.includes(t.id) && (!q || t.title.toLowerCase().includes(q))
+		);
+	};
 
 	// Rollup fields are computed (aggregate a target field over related tasks).
 	function rollupText(field: { type: string; config: Record<string, unknown> }): string | null {
@@ -664,19 +702,24 @@
 	{#if visibleCustomFields.length > 0}
 		<div class="section" style="display: flex; flex-direction: column; gap: 8px;">
 			{#each visibleCustomFields as f (f.id)}
-				<CustomFieldValue
-					field={f}
-					options={cfOptions(f.id)}
-					value={cfValue(f.id)}
-					rollupText={rollupText(f)}
-					mode="pill"
-					taskId={task.id}
-					{users}
-					{locations}
-					{tasks}
-					files={taskFiles}
-					canEdit={editable}
-				/>
+				{#if f.type === 'task'}
+					{@render taskCfList(f)}
+				{:else}
+					<CustomFieldValue
+						field={f}
+						options={cfOptions(f.id)}
+						value={cfValue(f.id)}
+						rollupText={rollupText(f)}
+						mode="pill"
+						taskId={task.id}
+						{users}
+						{locations}
+						{tasks}
+						taskSearch={taskCfSearch}
+						files={taskFiles}
+						canEdit={editable}
+					/>
+				{/if}
 			{/each}
 		</div>
 	{/if}
@@ -985,6 +1028,83 @@
 		{/if}
 	</div>
 </SidePane>
+
+<!-- A `task`-type custom field as a collapsible sub-task-style list of linked tasks -->
+{#snippet taskCfList(field: { id: string; name: string; type: string; config: Record<string, unknown> })}
+	{@const ids = cfIds(field)}
+	{@const linked = cfLinked(field)}
+	{@const fmulti = field.config?.multi === true}
+	{@const open = !cfCollapsed[field.id]}
+	<div class="cf-task">
+		<button class="cf-task-head" type="button" onclick={() => (cfCollapsed[field.id] = open)}>
+			<span class="label cf-task-name">{field.name}</span>
+			<span class="cf-task-count">{linked.length}</span>
+			<Icon name={open ? 'nav-arrow-down' : 'nav-arrow-right'} size={14} class="cf-task-chev" />
+		</button>
+		{#if open}
+			{#if linked.length > 0}
+				<div class="sub-list">
+					{#each linked as lt (lt.id)}
+						{@const ltEdit = canEditTask(lt)}
+						<div class="sub-item" class:is-done={cat(lt.statusId) === 'completed'}>
+							<div class="sub-head">
+								<button class="sub-title-btn" type="button" onclick={() => onSelectTask?.(lt.id)}>{lt.title}</button>
+								<span class="spacer"></span>
+								{#if editable}
+									<div class="sub-actions">
+										<form method="POST" action="?/patchTask" use:enhance>
+											<input type="hidden" name="id" value={task.id} />
+											<input type="hidden" name={`cf_${field.id}`} value={cfRemoveVal(ids, lt.id)} />
+											<button
+												class="sub-act sub-act--del"
+												type="submit"
+												aria-label={$t('Remove')}
+												use:tooltip={$t('Remove')}
+											>
+												<Icon name="xmark" size={14} />
+											</button>
+										</form>
+									</div>
+								{/if}
+							</div>
+							<div class="sub-pills">
+								<StatusSelect taskId={lt.id} statusId={lt.statusId} {statuses} canEdit={ltEdit} display={statusDisplay} />
+								{@render subPriority(lt, ltEdit)}
+								{@render subAssignee(lt, ltEdit)}
+								{@render subMilestone(lt, ltEdit)}
+								{@render subDue(lt, ltEdit)}
+							</div>
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">{$t('none')}</p>
+			{/if}
+			{#if editable && (fmulti || linked.length === 0)}
+				<div class="sub-add">
+					<Popover ariaLabel={field.name}>
+						{#snippet trigger()}
+							<span class="pill-val pill-ph"><Icon name="plus" size={12} /> {$t('Add')}</span>
+						{/snippet}
+						{#snippet panel(close)}
+							<!-- svelte-ignore a11y_autofocus -->
+							<input class="pop-search" placeholder={$t('Search tasks…')} bind:value={cfAddQuery} autofocus />
+							{#each cfAddCandidates(ids) as c (c.id)}
+								<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
+									<input type="hidden" name="id" value={task.id} />
+									<input type="hidden" name={`cf_${field.id}`} value={cfAddVal(ids, c.id, fmulti)} />
+									<button class="opt" type="submit">{c.title}</button>
+								</form>
+							{:else}
+								<span class="opt-empty">{$t('No tasks')}</span>
+							{/each}
+						{/snippet}
+					</Popover>
+				</div>
+			{/if}
+		{/if}
+	</div>
+{/snippet}
 
 <!-- Editable property pills for a sub-task row (mirror the main task pills) -->
 {#snippet subPriority(s: Task, canEdit: boolean)}
@@ -1316,6 +1436,32 @@
 		color: var(--color-fg);
 	}
 
+	.cf-task-head {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		padding: 0;
+		text-align: left;
+		margin-bottom: var(--sp-1);
+	}
+
+	.cf-task-head:hover {
+		color: var(--color-fg);
+	}
+
+	.cf-task-name {
+		margin-bottom: 0;
+	}
+
+	.cf-task-count {
+		font-size: 12px;
+		color: var(--color-muted);
+	}
+
 	.sub-list {
 		border: 1px solid var(--color-border-subtle);
 		border-radius: var(--radius-box, 0.5rem);
@@ -1476,10 +1622,6 @@
 		color: var(--color-error);
 	}
 
-	/* declutter: empty property pills appear only on row hover (no blank pills at rest) */
-	.sub-item:not(:hover) .sub-pills :global(.pop-wrap:has(.pill-ph)) {
-		display: none;
-	}
 
 	/* Save-as-template footer control (morphs button ↔ search field) */
 	.save-tpl-slot {

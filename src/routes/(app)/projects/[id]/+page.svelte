@@ -26,7 +26,7 @@
 	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
 	import { filterTasks } from '$lib/taskFilter';
 	import { sortTasks, parseSortBy } from '$lib/taskSort';
-	import { fieldAppliesTo } from '$lib/customFields';
+	import { fieldAppliesTo, buildTaskCfSearch } from '$lib/customFields';
 	import { selection } from '$lib/selection.svelte';
 	import { toast } from '$lib/toast.svelte';
 	import { t } from '$lib/i18n';
@@ -81,6 +81,21 @@
 		return i < 0 ? Number.MAX_SAFE_INTEGER : i;
 	};
 	const assigneeNameFn = (id: string | null) => data.users.find((u) => u.id === id)?.name ?? null;
+
+	// Per-task searchable text from custom-field values (resolved to display labels).
+	// Lets free-text search + the task-cf link picker hit custom fields. ponytail:
+	// rebuilt on any data change, O(values) — fine at app scale.
+	const cfSearchByTask = $derived(
+		buildTaskCfSearch(data.customFields, data.taskCustomValues, {
+			option: (id) => data.customFieldOptions.find((o) => o.id === id)?.title ?? '',
+			user: (id) => data.users.find((u) => u.id === id)?.name ?? '',
+			location: (id) => data.locations.find((l) => l.id === id)?.title ?? '',
+			task: (id) => data.tasks.find((t) => t.id === id)?.title ?? '',
+			file: (id) => data.files.find((f) => f.id === id)?.filename ?? ''
+		})
+	);
+	const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';
+
 	// tasks after the active view's saved filters + the live search box, then sorted.
 	const filteredTasks = $derived(
 		sortTasks(
@@ -88,7 +103,7 @@
 				data.tasks,
 				(viewConfig.filters as Record<string, unknown>) ?? undefined,
 				searchText,
-				{ labelIdsOf }
+				{ labelIdsOf, searchableText: taskCfSearch }
 			),
 			typeof viewConfig.sortBy === 'string' ? (viewConfig.sortBy as string) : null,
 			{ statusRank: statusRankFn, assigneeName: assigneeNameFn }
@@ -1239,6 +1254,7 @@
 		tasks={data.tasks}
 		customFields={data.customFields}
 		customFieldOptions={data.customFieldOptions}
+		taskSearch={taskCfSearch}
 		prefill={newTaskPrefill}
 		onClose={() => (newTaskOpen = false)}
 	/>
@@ -1277,6 +1293,7 @@
 {#if activeView?.type === 'table'}
 	<TableView
 		tasks={filteredTasks}
+		allTasks={data.tasks}
 		users={data.users}
 		statuses={data.statuses}
 		milestones={data.milestones}
@@ -1300,6 +1317,7 @@
 {:else if activeView?.type === 'board'}
 	<BoardView
 		tasks={filteredTasks}
+		allTasks={data.tasks}
 		statuses={data.statuses}
 		users={data.users}
 		labels={data.labels}
@@ -1323,6 +1341,7 @@
 {:else if activeView?.type === 'list'}
 	<ListView
 		tasks={filteredTasks}
+		allTasks={data.tasks}
 		statuses={data.statuses}
 		users={data.users}
 		labels={data.labels}
@@ -1342,6 +1361,7 @@
 {:else if activeView?.type === 'timeline'}
 	<TimelineView
 		tasks={filteredTasks}
+		allTasks={data.tasks}
 		statuses={data.statuses}
 		users={data.users}
 		labels={data.labels}
@@ -1365,6 +1385,7 @@
 {:else if activeView?.type === 'calendar'}
 	<CalendarView
 		tasks={filteredTasks}
+		allTasks={data.tasks}
 		statuses={data.statuses}
 		users={data.users}
 		labels={data.labels}

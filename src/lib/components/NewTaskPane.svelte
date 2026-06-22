@@ -23,6 +23,7 @@
 		tasks = [],
 		customFields = [],
 		customFieldOptions = [],
+		taskSearch = () => '',
 		prefill = {},
 		onClose
 	}: {
@@ -33,6 +34,7 @@
 		tasks?: { id: string; title: string; parentId: string | null }[];
 		customFields?: { id: string; name: string; type: string; config: Record<string, unknown>; appliesTo?: string }[];
 		customFieldOptions?: { id: string; fieldId: string; title: string; color: string | null; icon: string | null }[];
+		taskSearch?: (taskId: string) => string;
 		prefill?: Prefill;
 		onClose: () => void;
 	} = $props();
@@ -167,6 +169,7 @@
 					{users}
 					{locations}
 					{tasks}
+					{taskSearch}
 				/>
 			</div>
 		{/each}

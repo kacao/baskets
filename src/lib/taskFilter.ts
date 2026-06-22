@@ -33,9 +33,11 @@ export type TaskFilters = {
 };
 
 // Per-task label lookup is injected so this helper stays independent of how the
-// caller stores the task↔label join.
+// caller stores the task↔label join. `searchableText` (optional) returns extra
+// free-text for a task (e.g. resolved custom-field values) folded into search.
 export type FilterHelpers = {
 	labelIdsOf: (taskId: string) => string[];
+	searchableText?: (taskId: string) => string;
 };
 
 export function dueBucketOf(due: Date | string | null): DueBucket {
@@ -84,7 +86,8 @@ export function matchTask(
 ): boolean {
 	const q = (searchText ?? '').trim().toLowerCase();
 	if (q) {
-		const hay = `${task.title ?? ''} ${task.description ?? ''}`.toLowerCase();
+		const cf = helpers.searchableText?.(task.id) ?? '';
+		const hay = `${task.title ?? ''} ${task.description ?? ''} ${cf}`.toLowerCase();
 		if (!hay.includes(q)) return false;
 	}
 

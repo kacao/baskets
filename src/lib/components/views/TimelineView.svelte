@@ -31,6 +31,7 @@
 
 	let {
 		tasks,
+		allTasks = tasks,
 		statuses,
 		users,
 		labels,
@@ -52,6 +53,7 @@
 		onNewTask
 	}: {
 		tasks: Task[];
+		allTasks?: Task[];
 		statuses: Status[];
 		users: { id: string; name: string }[];
 		labels: { id: string; name: string }[];
@@ -380,7 +382,7 @@
 {#if selected}
 	<TaskPanel
 		task={selected}
-		{tasks}
+		tasks={allTasks}
 		{users}
 		{statuses}
 		{milestones}

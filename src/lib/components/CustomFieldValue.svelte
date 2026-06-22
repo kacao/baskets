@@ -23,6 +23,7 @@
 		tasks = [],
 		files = [],
 		canEdit = true,
+		taskSearch = () => '',
 		onUpload
 	}: {
 		field: { id: string; name: string; type: string; config: FieldConfig };
@@ -37,6 +38,7 @@
 		tasks?: { id: string; title: string; parentId: string | null }[];
 		files?: FileRef[];
 		canEdit?: boolean;
+		taskSearch?: (taskId: string) => string;
 		onUpload?: (fileId: string) => void;
 	} = $props();
 
@@ -93,7 +95,11 @@
 	const matchUsers = $derived(users.filter((u) => u.name.toLowerCase().includes(query.toLowerCase())));
 	const matchLocs = $derived(locations.filter((l) => l.title.toLowerCase().includes(query.toLowerCase())));
 	const matchTasks = $derived(
-		tasks.filter((tk) => tk.id !== taskId && tk.title.toLowerCase().includes(query.toLowerCase()))
+		tasks.filter(
+			(tk) =>
+				tk.id !== taskId &&
+				`${tk.title} ${taskSearch(tk.id)}`.toLowerCase().includes(query.toLowerCase())
+		)
 	);
 
 	let uploading = $state(false);

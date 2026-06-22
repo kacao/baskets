@@ -136,6 +136,16 @@ describe('matchTask — free-text search', () => {
 		const task = makeTask({ title: 'Solo', description: null });
 		expect(matchTask(task, undefined, 'solo', noLabels)).toBe(true);
 	});
+
+	it('matches text supplied by searchableText (resolved custom-field values)', () => {
+		const task = makeTask({ id: 't1', title: 'Inspect', description: null });
+		const helpers: FilterHelpers = {
+			labelIdsOf: () => [],
+			searchableText: (id) => (id === 't1' ? 'Roof drainage report' : '')
+		};
+		expect(matchTask(task, undefined, 'drainage', helpers)).toBe(true);
+		expect(matchTask(task, undefined, 'absent', helpers)).toBe(false);
+	});
 });
 
 // Inclusion semantics (ADR-035): a present facet array lists the CHECKED values to

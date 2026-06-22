@@ -58,8 +58,22 @@ export function attachRealtime(httpServer) {
 	function baseUrl() {
 		if (!_baseUrl) {
 			const addr = httpServer.address();
-			const port = addr && typeof addr === 'object' ? addr.port : 5173;
-			_baseUrl = `http://127.0.0.1:${port}`;
+			if (addr && typeof addr === 'object') {
+				// use the server's OWN bound address+family — hardcoding 127.0.0.1 breaks
+				// when it's bound IPv6-only (e.g. Vite dev binds ::1, refusing IPv4). For a
+				// wildcard bind fall back to the matching-family loopback.
+				const wildcard = !addr.address || addr.address === '::' || addr.address === '0.0.0.0';
+				const host = wildcard
+					? addr.family === 'IPv6'
+						? '[::1]'
+						: '127.0.0.1'
+					: addr.family === 'IPv6'
+						? `[${addr.address}]`
+						: addr.address;
+				_baseUrl = `http://${host}:${addr.port}`;
+			} else {
+				_baseUrl = 'http://127.0.0.1:5173';
+			}
 		}
 		return _baseUrl;
 	}
