@@ -465,17 +465,19 @@
 				<tbody>
 					{#if groupBy}
 						<tr class="group-row">
-							<td colspan={colCount}>
+							<td class="col-select">
+								<button
+									class="group-toggle"
+									type="button"
+									aria-expanded={!collapsed[g.key]}
+									aria-label={$i18n('Toggle group')}
+									onclick={() => (collapsed[g.key] = !collapsed[g.key])}
+								>
+									<Icon name={collapsed[g.key] ? 'nav-arrow-right' : 'nav-arrow-down'} size={14} />
+								</button>
+							</td>
+							<td colspan={colCount - 1}>
 								<div class="group-head">
-									<button
-										class="group-toggle"
-										type="button"
-										aria-expanded={!collapsed[g.key]}
-										aria-label={$i18n('Toggle group')}
-										onclick={() => (collapsed[g.key] = !collapsed[g.key])}
-									>
-										<Icon name={collapsed[g.key] ? 'nav-arrow-right' : 'nav-arrow-down'} size={14} />
-									</button>
 									<span class="group-title">{g.title}</span>
 									<span class="group-count">{g.tasks.length}</span>
 									{#each fieldAggregations(aggFieldIds, customFields, g.tasks, taskCustomValues, tasks) as a (a.id)}
@@ -748,6 +750,15 @@
 		background: none;
 	}
 
+	/* the group toggle lives in the select column — left-align it so the chevron
+	   lines up with the row checkboxes (which sit at the cell's content start) */
+	.group-row td.col-select {
+		text-align: left;
+		vertical-align: middle;
+		padding-left: var(--sp-3);
+		padding-right: 0;
+	}
+
 	.table tbody:first-of-type .group-row td {
 		padding-top: var(--sp-2);
 	}
@@ -762,8 +773,6 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 36px;
-		flex: 0 0 36px;
 		border: none;
 		background: none;
 		color: var(--color-muted);
@@ -907,7 +916,7 @@
 
 	.col-select input {
 		display: block;
-		margin: 0 auto;
+		margin: 0;
 	}
 
 	/* row checkbox shows on hover or when checked; header select-all always shows */
