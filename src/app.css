@@ -299,3 +299,10 @@ code,
 	background: #ffffff;
 	color: #000000;
 }
+
+/* DaisyUI's table cell separators use a ~5%-alpha line — force solid black so the
+   lines between table rows are visible in high contrast. */
+[data-contrast='high'] :where(.table) td,
+[data-contrast='high'] :where(.table) th {
+	border-color: #000000;
+}
