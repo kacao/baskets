@@ -390,7 +390,7 @@
 						/>
 					</th>
 					<th class="col-status">{$i18n('Status')}</th>
-					<th>{$i18n('Title')}{@render rh('title')}</th>
+					<th class="col-title">{$i18n('Title')}{@render rh('title')}</th>
 					{#if show('priority')}<th>{$i18n('Priority')}{@render rh('priority')}</th>{/if}
 					{#if show('assignee')}<th>{$i18n('Assignee')}{@render rh('assignee')}</th>{/if}
 					{#if show('milestone')}<th>{$i18n('Milestone')}{@render rh('milestone')}</th>{/if}
@@ -751,8 +751,16 @@
 
 	.group-row td {
 		padding: var(--sp-3) var(--sp-2) var(--sp-1) 0;
+		/* visible rule above each group to separate it from the previous group */
+		border-top: 1px solid var(--color-border-subtle);
 		border-bottom: none;
 		background: none;
+	}
+
+	/* header text of the Title column aligns with the task titles, which are indented
+	   past the sub-task chevron spacer (chev 16px + title-cell gap) */
+	.col-title {
+		text-indent: calc(16px + var(--sp-1));
 	}
 
 	/* the group toggle lives in the select column — left-align it so the chevron
@@ -765,6 +773,7 @@
 	}
 
 	.table tbody:first-of-type .group-row td {
+		border-top: none;
 		padding-top: var(--sp-2);
 	}
 
