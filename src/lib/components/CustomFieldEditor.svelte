@@ -3,6 +3,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
+	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import { tooltip } from '$lib/tooltip';
 	import { confirmDialog } from '$lib/confirm.svelte';
@@ -72,8 +73,10 @@
 
 	// per-field option draft icons (keyed by fieldId) + the single option being edited
 	let newOptIcon = $state<Record<string, string>>({});
+	let newOptColor = $state<Record<string, string>>({});
 	let editingOptId = $state<string | null>(null);
 	let editOptIcon = $state('');
+	let editOptColor = $state('#71717a');
 
 	const optionsFor = (fieldId: string) => options.filter((o) => o.fieldId === fieldId);
 
@@ -146,6 +149,24 @@
 		{/snippet}
 	</Popover>
 	<input type="hidden" name="icon" {value} />
+{/snippet}
+
+{#snippet colorField(value: string, onPick: (v: string) => void)}
+	<Popover ariaLabel={$t('Color')}>
+		{#snippet trigger()}
+			<span class="cp-swatch" style="--c: {value}" aria-hidden="true"></span>
+		{/snippet}
+		{#snippet panel(close)}
+			<ColorPicker
+				{value}
+				onSelect={(v) => {
+					onPick(v);
+					close();
+				}}
+			/>
+		{/snippet}
+	</Popover>
+	<input type="hidden" name="color" {value} />
 {/snippet}
 
 {#snippet configFields(type: string, cfg: Record<string, any>)}
@@ -288,7 +309,7 @@
 									}}
 							>
 								<input type="hidden" name="id" value={o.id} />
-								<input type="color" name="color" value={o.color ?? '#71717a'} class="color-in" aria-label={$t('Color')} />
+								{@render colorField(editOptColor, (v) => (editOptColor = v))}
 								{@render iconField(editOptIcon, (v) => (editOptIcon = v))}
 								<input name="title" class="input" value={o.title} required maxlength="60" style="flex:1; min-width:100px;" />
 								<button class="btn btn-sm" type="button" onclick={() => (editingOptId = null)}>{$t('Cancel')}</button>
@@ -299,7 +320,7 @@
 								{#if o.icon}<EntityIcon value={o.icon} size={14} />{:else}<span class="dot" style="--c: {o.color || 'var(--color-muted)'}"></span>{/if}
 								<span class="opt-title">{o.title}</span>
 								<span class="spacer"></span>
-								<button class="icon-btn" type="button" aria-label={$t('Edit')} onclick={() => { editingOptId = o.id; editOptIcon = o.icon ?? ''; }}>
+								<button class="icon-btn" type="button" aria-label={$t('Edit')} onclick={() => { editingOptId = o.id; editOptIcon = o.icon ?? ''; editOptColor = o.color ?? '#71717a'; }}>
 									<Icon name="edit-pencil" size={12} />
 								</button>
 								<form method="POST" action="?/deleteCustomFieldOption" use:enhance>
@@ -316,12 +337,12 @@
 						method="POST"
 						action="?/createCustomFieldOption"
 						use:enhance={() => async ({ result, update }) => {
-							if (result.type === 'success') newOptIcon[f.id] = '';
+							if (result.type === 'success') { newOptIcon[f.id] = ''; newOptColor[f.id] = '#71717a'; }
 							await update();
 						}}
 					>
 						<input type="hidden" name="fieldId" value={f.id} />
-						<input type="color" name="color" value="#71717a" class="color-in" aria-label={$t('Color')} />
+						{@render colorField(newOptColor[f.id] ?? '#71717a', (v) => (newOptColor[f.id] = v))}
 						{@render iconField(newOptIcon[f.id] ?? '', (v) => (newOptIcon[f.id] = v))}
 						<input name="title" class="input" placeholder={$t('New option…')} required maxlength="60" style="flex:1; min-width:100px;" />
 						<button class="btn btn-sm" type="submit">{$t('Add option')}</button>
@@ -486,15 +507,13 @@
 		flex: 1;
 	}
 
-	.color-in {
-		width: 32px;
-		height: 32px;
-		padding: 2px;
-		border: 1px solid var(--color-base-300);
+	.cp-swatch {
+		display: block;
+		width: 18px;
+		height: 18px;
 		border-radius: var(--radius-field, 0.25rem);
-		background: var(--color-base-100);
-		cursor: pointer;
-		flex: 0 0 auto;
+		background: var(--c, var(--color-muted));
+		border: 1px solid color-mix(in oklab, var(--color-fg) 18%, transparent);
 	}
 
 	.opts {

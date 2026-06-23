@@ -3,6 +3,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
+	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import { categoryLabel } from '$lib/statuses';
 	import { t } from '$lib/i18n';
@@ -40,8 +41,10 @@
 	let editingId = $state<string | null>(null);
 	let creatingCat = $state<string | null>(null);
 	let newIcon = $state('');
+	let newColor = $state('#71717a');
 	let createError = $state('');
 	let editIcon = $state('');
+	let editColor = $state('#71717a');
 
 	// Local mirror so drag can reorder optimistically; re-synced to the persisted
 	// order whenever the server data (statuses prop) changes after an action.
@@ -61,12 +64,14 @@
 		creatingCat = creatingCat === c ? null : c;
 		editingId = null;
 		newIcon = '';
+		newColor = '#71717a';
 		createError = '';
 	}
 	function openEdit(s: Editable) {
 		editingId = s.id;
 		creatingCat = null;
 		editIcon = s.icon ?? '';
+		editColor = s.color ?? '#71717a';
 	}
 
 	function onDragOver(e: DragEvent, overId: string, cat: string) {
@@ -108,6 +113,24 @@
 	<input type="hidden" name="icon" {value} />
 {/snippet}
 
+{#snippet colorField(value: string, onPick: (v: string) => void)}
+	<Popover ariaLabel={$t('Color')}>
+		{#snippet trigger()}
+			<span class="cp-swatch" style="--c: {value}" aria-hidden="true"></span>
+		{/snippet}
+		{#snippet panel(close)}
+			<ColorPicker
+				{value}
+				onSelect={(v) => {
+					onPick(v);
+					close();
+				}}
+			/>
+		{/snippet}
+	</Popover>
+	<input type="hidden" name="color" {value} />
+{/snippet}
+
 <div class="status-editor">
 	{#each categories as c (c)}
 		{@const inh = inheritedIn(c)}
@@ -145,7 +168,7 @@
 				>
 					<span class="drag drag--ghost"><Icon name="drag" size={14} /></span>
 					<input type="hidden" name="category" value={c} />
-					<input type="color" name="color" value="#71717a" class="color-in" aria-label={$t('Color')} />
+					{@render colorField(newColor, (v) => (newColor = v))}
 					{@render iconField(newIcon, (v) => (newIcon = v))}
 					<input name="name" class="input name-in" placeholder={$t('Name')} required maxlength="40" autocomplete="off" oninput={() => (createError = '')} />
 					<input name="description" class="input desc-in" placeholder={$t('Description…')} maxlength="200" autocomplete="off" />
@@ -184,7 +207,7 @@
 					>
 						<span class="drag drag--ghost"><Icon name="drag" size={14} /></span>
 						<input type="hidden" name="id" value={s.id} />
-						<input type="color" name="color" value={s.color ?? '#71717a'} class="color-in" aria-label={$t('Color')} />
+						{@render colorField(editColor, (v) => (editColor = v))}
 						{@render iconField(editIcon, (v) => (editIcon = v))}
 						<input name="name" class="input name-in" value={s.name} required maxlength="40" autocomplete="off" />
 						<input name="description" class="input desc-in" value={s.description ?? ''} placeholder={$t('Description…')} maxlength="200" autocomplete="off" />
@@ -393,15 +416,13 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.color-in {
-		width: 32px;
-		height: 32px;
-		padding: 2px;
-		border: 1px solid var(--color-base-300);
+	.cp-swatch {
+		display: block;
+		width: 18px;
+		height: 18px;
 		border-radius: var(--radius-field, 0.25rem);
-		background: var(--color-base-100);
-		cursor: pointer;
-		flex: 0 0 auto;
+		background: var(--c, var(--color-muted));
+		border: 1px solid color-mix(in oklab, var(--color-fg) 18%, transparent);
 	}
 
 	.name-in {

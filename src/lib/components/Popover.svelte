@@ -134,6 +134,9 @@
 		max-width: 280px;
 		max-height: min(320px, 60vh);
 		overflow-y: auto;
+		/* a popover never scrolls horizontally — clip rather than show an x-scrollbar
+		   (e.g. when a vertical scrollbar narrows the panel by a few px) */
+		overflow-x: hidden;
 		overscroll-behavior: contain;
 		background: var(--color-base-100);
 		border: 1px solid var(--color-base-300);

@@ -543,6 +543,17 @@
 		margin-top: 0;
 	}
 
+	/* high contrast: a horizontal rule between swimlane groups (every lane-head is
+	   always rendered, even when its board is collapsed, so the line is collapse-proof). */
+	:global([data-contrast='high']) .lane-head {
+		border-top: var(--border-width) solid var(--color-border);
+		padding-top: var(--sp-3);
+	}
+	:global([data-contrast='high']) .lane-head:first-child {
+		border-top: none;
+		padding-top: 0;
+	}
+
 	.lane-toggle {
 		display: inline-flex;
 		align-items: center;

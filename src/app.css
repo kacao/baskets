@@ -306,3 +306,10 @@ code,
 [data-contrast='high'] :where(.table) th {
 	border-color: #000000;
 }
+
+/* High contrast squares the large container surfaces (cards, table-view cards) for
+   a flatter, clearer look — pills, badges, inputs, buttons KEEP their radius. Scoped
+   to .card here; the table-view group cards square themselves in TableView.svelte. */
+[data-contrast='high'] .card {
+	border-radius: 0;
+}

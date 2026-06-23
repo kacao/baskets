@@ -745,18 +745,25 @@
 		overflow: visible;
 	}
 
-	/* breathing space between groups — an empty spacer row before each group's tbody
-	   (every group is its own <tbody>; the first one has no preceding sibling) */
+	/* Each group's <tbody> is its own card (frame borders below). The empty spacer
+	   rows between cards have NO cells, so the card's per-cell side borders break
+	   there → clean gaps with no continuous full-height side line. */
 	.table tbody + tbody::before {
 		content: '';
 		display: table-row;
 		height: 20px;
 	}
+	/* small gap between the column header and the first card */
+	.table thead + tbody::before {
+		content: '';
+		display: table-row;
+		height: 8px;
+	}
 
 	.group-row td {
 		padding: var(--sp-3) var(--sp-2) var(--sp-1) 0;
-		/* visible rule above each group to separate it from the previous group */
-		border-top: 2px solid var(--color-border-subtle);
+		/* no divider under the group header — it sits flush atop its first task row
+		   (the card's top border comes from the tbody-first-row rule below) */
 		border-bottom: none;
 		background: none;
 	}
@@ -776,10 +783,6 @@
 		padding-right: 0;
 	}
 
-	.table tbody:first-of-type .group-row td {
-		border-top: none;
-		padding-top: var(--sp-2);
-	}
 
 	.group-head {
 		display: flex;
@@ -857,13 +860,54 @@
 	   pane scroll horizontally when the side pane narrows it (Notion-style — no squish) */
 	.table {
 		width: 100%;
-		/* separate (not the Tailwind-preflight default of collapse) so the table's
-		   own border + radius render — Firefox drops a collapsed table's border
-		   when border-radius is set. spacing:0 keeps inner cell lines tight. */
+		/* separate (not Tailwind-preflight's collapse default) so each group renders
+		   as its own bordered+rounded card and the empty spacer rows between groups
+		   stay clean (no continuous full-height side border). spacing:0 keeps inner
+		   cell lines tight. */
 		border-collapse: separate;
 		border-spacing: 0;
-		border: var(--border-width) solid var(--color-base-300);
-		border-radius: var(--radius-box, 0.5rem);
+	}
+
+	/* per-group card frame: borders on the edge cells (first/last column) + the
+	   group's first/last row, with rounded corners. Structural selectors so they
+	   hit group-row, task-row AND sub-row alike; :global because rows render in a
+	   snippet. The between-group spacer rows have no cells → the frame breaks. */
+	.table :global(tbody > tr > td:first-child) {
+		border-left: var(--border-width) solid var(--color-base-300);
+	}
+	.table :global(tbody > tr > td:last-child) {
+		border-right: var(--border-width) solid var(--color-base-300);
+	}
+	.table :global(tbody > tr:first-child > td) {
+		border-top: var(--border-width) solid var(--color-base-300);
+	}
+	.table :global(tbody > tr:last-child > td) {
+		border-bottom: var(--border-width) solid var(--color-base-300);
+	}
+	.table :global(tbody > tr:first-child > td:first-child) {
+		border-top-left-radius: var(--radius-box, 0.5rem);
+	}
+	.table :global(tbody > tr:first-child > td:last-child) {
+		border-top-right-radius: var(--radius-box, 0.5rem);
+	}
+	.table :global(tbody > tr:last-child > td:first-child) {
+		border-bottom-left-radius: var(--radius-box, 0.5rem);
+	}
+	.table :global(tbody > tr:last-child > td:last-child) {
+		border-bottom-right-radius: var(--radius-box, 0.5rem);
+	}
+	/* no underline beneath the column header — the first card carries its own top edge */
+	.table :global(thead th) {
+		border-bottom: none;
+	}
+
+	/* high contrast squares the group cards (drop the rounded corners; the frame
+	   borders stay). Pills/badges/etc. keep their radius — only the cards flatten. */
+	:global([data-contrast='high']) .table :global(tbody > tr:first-child > td:first-child),
+	:global([data-contrast='high']) .table :global(tbody > tr:first-child > td:last-child),
+	:global([data-contrast='high']) .table :global(tbody > tr:last-child > td:first-child),
+	:global([data-contrast='high']) .table :global(tbody > tr:last-child > td:last-child) {
+		border-radius: 0;
 	}
 
 	.table :global(th),

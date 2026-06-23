@@ -4,6 +4,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
+	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import StatusEditor from '$lib/components/StatusEditor.svelte';
@@ -12,6 +13,7 @@
 	let { data, form } = $props();
 
 	let newLabelIcon = $state('');
+	let newLabelColor = $state('#71717a');
 
 	// Patch one field of an existing label (color/icon/name) without a form round-trip.
 	async function patchLabel(id: string, field: 'color' | 'icon' | 'name', value: string) {
@@ -92,13 +94,24 @@
 					<LabelChip label={l} />
 					<span class="u-tiny u-muted tnum">{$t('{n} use(s)', { n: l.inUse })}</span>
 					<span style="flex: 1;"></span>
-					<input
-						type="color"
-						class="color-in"
-						value={l.color ?? '#71717a'}
-						aria-label={$t('Label color')}
-						onchange={(e) => patchLabel(l.id, 'color', e.currentTarget.value)}
-					/>
+					<Popover ariaLabel={$t('Label color')}>
+						{#snippet trigger()}
+							<span class="cp-swatch" style="--c: {l.color ?? 'var(--color-border-subtle)'}" aria-hidden="true"></span>
+						{/snippet}
+						{#snippet panel(close)}
+							<ColorPicker
+								value={l.color ?? ''}
+								onSelect={(v) => {
+									patchLabel(l.id, 'color', v);
+									close();
+								}}
+								onRemove={() => {
+									patchLabel(l.id, 'color', '');
+									close();
+								}}
+							/>
+						{/snippet}
+					</Popover>
 					<Popover ariaLabel={$t('Label icon')}>
 						{#snippet trigger()}
 							{#if l.icon}<EntityIcon value={l.icon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
@@ -133,13 +146,28 @@
 		action="?/createLabel"
 		use:enhance={() => async ({ update }) => {
 			newLabelIcon = '';
+			newLabelColor = '#71717a';
 			await update();
 		}}
 		class="u-flex"
 		style="flex-wrap: wrap; margin-bottom: var(--sp-2);"
 	>
 		<input name="name" class="input" style="width: 200px; max-width: 100%;" placeholder={$t('New label…')} required maxlength="40" />
-		<input type="color" name="color" class="color-in" value="#71717a" aria-label={$t('Label color')} />
+		<Popover ariaLabel={$t('Label color')}>
+			{#snippet trigger()}
+				<span class="cp-swatch" style="--c: {newLabelColor}" aria-hidden="true"></span>
+			{/snippet}
+			{#snippet panel(close)}
+				<ColorPicker
+					value={newLabelColor}
+					onSelect={(v) => {
+						newLabelColor = v;
+						close();
+					}}
+				/>
+			{/snippet}
+		</Popover>
+		<input type="hidden" name="color" value={newLabelColor} />
 		<Popover ariaLabel={$t('Label icon')}>
 			{#snippet trigger()}
 				{#if newLabelIcon}<EntityIcon value={newLabelIcon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
@@ -280,14 +308,13 @@
 		color: var(--color-error);
 	}
 
-	.color-in {
-		width: 28px;
-		height: 24px;
-		padding: 0;
-		border: 1px solid var(--color-border-subtle);
+	.cp-swatch {
+		display: block;
+		width: 18px;
+		height: 18px;
 		border-radius: var(--radius-field, 0.25rem);
-		background: none;
-		cursor: pointer;
+		background: var(--c, var(--color-muted));
+		border: 1px solid color-mix(in oklab, var(--color-fg) 18%, transparent);
 	}
 
 	.tnum {

@@ -86,8 +86,11 @@
 </div>
 
 <style>
+	/* Fit inside the Popover panel's content box (max-width 280 − 8px padding −
+	   2px border ≈ 270) so the panel never grows a horizontal scrollbar. 1fr
+	   columns absorb the icons grid's vertical scrollbar without x-overflow. */
 	.icon-picker {
-		width: 280px;
+		width: 264px;
 		display: flex;
 		flex-direction: column;
 	}
@@ -141,8 +144,16 @@
 		grid-template-columns: repeat(6, 1fr);
 		gap: 2px;
 		padding: 6px;
-		max-height: 240px;
+		/* Keep the whole picker (grid + tabs/search/hint ≈ 101px chrome) under the
+		   Popover panel's 320px max-height so ONLY the grid scrolls — if the panel
+		   itself scrolled, its vertical scrollbar would shrink the panel and force a
+		   horizontal scrollbar. */
+		max-height: 200px;
 		overflow-y: auto;
+		/* overflow-y:auto promotes overflow-x to auto; sub-pixel rounding across the
+		   1fr columns (with the vertical scrollbar present) would otherwise show a
+		   phantom horizontal scrollbar. Clip it — the 1fr tracks already fit. */
+		overflow-x: hidden;
 		overscroll-behavior: contain;
 	}
 

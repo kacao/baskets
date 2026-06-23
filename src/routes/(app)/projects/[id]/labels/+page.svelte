@@ -4,6 +4,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
+	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { t } from '$lib/i18n';
@@ -12,6 +13,7 @@
 	let { data, form }: { data: ProjectSettingsData; form?: { message?: string } | null } = $props();
 
 	let newProjLabelIcon = $state('');
+	let newProjLabelColor = $state('#71717a');
 	async function patchProjectLabel(id: string, field: 'color' | 'icon' | 'name', value: string) {
 		const fd = new FormData();
 		fd.set('id', id);
@@ -54,13 +56,24 @@
 		<div class="lrow">
 			<LabelChip label={l} />
 			<span style="flex: 1;"></span>
-			<input
-				type="color"
-				class="color-in"
-				value={l.color ?? '#71717a'}
-				aria-label={$t('Label color')}
-				onchange={(e) => patchProjectLabel(l.id, 'color', e.currentTarget.value)}
-			/>
+			<Popover ariaLabel={$t('Label color')}>
+				{#snippet trigger()}
+					<span class="cp-swatch" style="--c: {l.color ?? 'var(--color-border-subtle)'}" aria-hidden="true"></span>
+				{/snippet}
+				{#snippet panel(close)}
+					<ColorPicker
+						value={l.color ?? ''}
+						onSelect={(v) => {
+							patchProjectLabel(l.id, 'color', v);
+							close();
+						}}
+						onRemove={() => {
+							patchProjectLabel(l.id, 'color', '');
+							close();
+						}}
+					/>
+				{/snippet}
+			</Popover>
 			<Popover ariaLabel={$t('Label icon')}>
 				{#snippet trigger()}
 					{#if l.icon}<EntityIcon value={l.icon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
@@ -90,13 +103,28 @@
 		action="?/createProjectLabel"
 		use:enhance={() => async ({ update }) => {
 			newProjLabelIcon = '';
+			newProjLabelColor = '#71717a';
 			await update();
 		}}
 		class="u-flex"
 		style="flex-wrap: wrap; margin-top: var(--sp-1);"
 	>
 		<input name="name" class="input" style="width: 200px; max-width: 100%;" placeholder={$t('New project label…')} required maxlength="40" />
-		<input type="color" name="color" class="color-in" value="#71717a" aria-label={$t('Label color')} />
+		<Popover ariaLabel={$t('Label color')}>
+			{#snippet trigger()}
+				<span class="cp-swatch" style="--c: {newProjLabelColor}" aria-hidden="true"></span>
+			{/snippet}
+			{#snippet panel(close)}
+				<ColorPicker
+					value={newProjLabelColor}
+					onSelect={(v) => {
+						newProjLabelColor = v;
+						close();
+					}}
+				/>
+			{/snippet}
+		</Popover>
+		<input type="hidden" name="color" value={newProjLabelColor} />
 		<Popover ariaLabel={$t('Label icon')}>
 			{#snippet trigger()}
 				{#if newProjLabelIcon}<EntityIcon value={newProjLabelIcon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
@@ -142,14 +170,13 @@
 		border-bottom: 1px solid var(--color-border-subtle);
 	}
 
-	.color-in {
-		width: 28px;
-		height: 24px;
-		padding: 0;
-		border: 1px solid var(--color-border-subtle);
+	.cp-swatch {
+		display: block;
+		width: 18px;
+		height: 18px;
 		border-radius: var(--radius-field, 0.25rem);
-		background: none;
-		cursor: pointer;
+		background: var(--c, var(--color-muted));
+		border: 1px solid color-mix(in oklab, var(--color-fg) 18%, transparent);
 	}
 
 	.chip {
