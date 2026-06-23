@@ -44,6 +44,7 @@ import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
 import {
 	listCustomFieldOptions,
 	listProjectCustomFields,
+	listProjectCustomValues,
 	writeTaskCustomValues
 } from '$lib/server/customFields';
 import { decodeValue } from '$lib/customFields';
@@ -209,30 +210,31 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.where(eq(location.projectId, params.id))
 		.orderBy(asc(location.position), asc(location.title));
 
-	// Task-facing custom fields only — entity='project' fields live in project settings.
-	const customFields = (await listProjectCustomFields(params.id)).filter(
-		(f) => (f.entity ?? 'task') !== 'project'
-	);
-	const [customFieldOptions, taskCustomValues, files] = await Promise.all([
-		listCustomFieldOptions(customFields.map((f) => f.id)),
-		taskIds.length > 0
-			? db
-					.select()
-					.from(taskCustomValue)
-					.where(inArray(taskCustomValue.taskId, taskIds))
-			: Promise.resolve([]),
-		db
-			.select({
-				id: file.id,
-				taskId: file.taskId,
-				fieldId: file.fieldId,
-				filename: file.filename,
-				mimeType: file.mimeType,
-				size: file.size
-			})
-			.from(file)
-			.where(eq(file.projectId, params.id))
-	]);
+	// Split custom fields: task-facing (entity!='project') feed the views; project-entity
+	// fields + their values render as key-value pills in the project header chips row.
+	const allCustomFields = await listProjectCustomFields(params.id);
+	const customFields = allCustomFields.filter((f) => (f.entity ?? 'task') !== 'project');
+	const projectFields = allCustomFields.filter((f) => (f.entity ?? 'task') === 'project');
+	const [customFieldOptions, projectFieldOptions, projectCustomValues, taskCustomValues, files] =
+		await Promise.all([
+			listCustomFieldOptions(customFields.map((f) => f.id)),
+			listCustomFieldOptions(projectFields.map((f) => f.id)),
+			listProjectCustomValues(params.id),
+			taskIds.length > 0
+				? db.select().from(taskCustomValue).where(inArray(taskCustomValue.taskId, taskIds))
+				: Promise.resolve([]),
+			db
+				.select({
+					id: file.id,
+					taskId: file.taskId,
+					fieldId: file.fieldId,
+					filename: file.filename,
+					mimeType: file.mimeType,
+					size: file.size
+				})
+				.from(file)
+				.where(eq(file.projectId, params.id))
+		]);
 
 	const templates = await listTemplatesForProject(params.id);
 
@@ -267,6 +269,15 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			if (Array.isArray(ids)) for (const id of ids) visibleUserIds.add(String(id));
 		}
 	}
+	// project-entity person fields (header chips) resolve their user names too
+	for (const f of projectFields) {
+		if (f.type !== 'person') continue;
+		for (const v of projectCustomValues) {
+			if (v.fieldId !== f.id) continue;
+			const ids = decodeValue({ type: 'person' }, v.value);
+			if (Array.isArray(ids)) for (const id of ids) visibleUserIds.add(String(id));
+		}
+	}
 	const visibleUsers = users.filter((u) => visibleUserIds.has(u.id));
 
 	// Per-view edit rights (project grant covers all views); hidden views are never rendered
@@ -295,6 +306,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		customFields,
 		customFieldOptions,
 		taskCustomValues,
+		projectFields,
+		projectFieldOptions,
+		projectCustomValues,
 		files,
 		templates,
 		perm: { admin, project: canEditProj, views: editableViews }

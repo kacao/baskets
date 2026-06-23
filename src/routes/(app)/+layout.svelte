@@ -14,13 +14,24 @@
 	let { data, children } = $props();
 	let menuOpen = $state(false);
 	let wsMenuOpen = $state(false);
+	let apprMenuOpen = $state(false);
 	// svelte-ignore state_referenced_locally
 	let theme = $state<'light' | 'dark'>(data.theme === 'dark' ? 'dark' : 'light');
+	// svelte-ignore state_referenced_locally
+	let highContrast = $state(data.contrast === 'high');
 
 	function toggleTheme() {
 		theme = theme === 'dark' ? 'light' : 'dark';
 		document.documentElement.dataset.theme = theme;
 		document.cookie = `theme=${theme}; path=/; max-age=31536000; samesite=lax`;
+	}
+
+	function toggleContrast() {
+		highContrast = !highContrast;
+		document.documentElement.dataset.contrast = highContrast ? 'high' : '';
+		document.cookie = highContrast
+			? 'contrast=high; path=/; max-age=31536000; samesite=lax'
+			: 'contrast=; path=/; max-age=0; samesite=lax';
 	}
 
 
@@ -71,7 +82,12 @@
 	}
 </script>
 
-<svelte:window onclick={() => (wsMenuOpen = false)} />
+<svelte:window
+	onclick={() => {
+		wsMenuOpen = false;
+		apprMenuOpen = false;
+	}}
+/>
 
 <div class="shell">
 	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
@@ -225,14 +241,33 @@
 				{/if}
 				<span class="u-small u-muted topbar-user">{data.user?.name}</span>
 				<NotificationBell />
-				<button
-					class="btn btn-sm btn-ghost btn-circle"
-					aria-label={$t('Toggle theme')}
-					use:tooltip={theme === 'dark' ? $t('Light mode') : $t('Dark mode')}
-					onclick={toggleTheme}
-				>
-					{#if theme === 'dark'}<Icon name="sun-light" size={16} />{:else}<Icon name="half-moon" size={16} />{/if}
-				</button>
+				<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+				<div class="appr-wrap" onclick={(e) => e.stopPropagation()}>
+					<button
+						class="btn btn-sm btn-ghost btn-circle"
+						aria-label={$t('Appearance')}
+						aria-haspopup="menu"
+						aria-expanded={apprMenuOpen}
+						use:tooltip={$t('Appearance')}
+						onclick={() => (apprMenuOpen = !apprMenuOpen)}
+					>
+						<Icon name="half-moon" size={16} />
+					</button>
+					{#if apprMenuOpen}
+						<div class="appr-menu" role="menu" transition:slide={{ duration: 120 }}>
+							<button class="appr-item" role="menuitemcheckbox" aria-checked={theme === 'dark'} onclick={toggleTheme}>
+								<span class="appr-check">{#if theme === 'dark'}<Icon name="check" size={14} />{/if}</span>
+								<Icon name={theme === 'dark' ? 'sun-light' : 'half-moon'} size={14} />
+								<span class="appr-label">{$t('Dark mode')}</span>
+							</button>
+							<button class="appr-item" role="menuitemcheckbox" aria-checked={highContrast} onclick={toggleContrast}>
+								<span class="appr-check">{#if highContrast}<Icon name="check" size={14} />{/if}</span>
+								<Icon name="color-filter" size={14} />
+								<span class="appr-label">{$t('High contrast')}</span>
+							</button>
+						</div>
+					{/if}
+				</div>
 				<button class="btn btn-sm" onclick={signOut}>{$t('Sign out')}</button>
 			</div>
 		</header>
@@ -365,6 +400,59 @@
 	.ws-item:hover {
 		color: var(--color-fg);
 		background: var(--color-surface-muted);
+	}
+
+	.appr-wrap {
+		position: relative;
+		display: inline-flex;
+	}
+
+	.appr-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		right: 0;
+		z-index: 30;
+		min-width: 184px;
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-bg);
+		box-shadow: var(--shadow);
+		display: flex;
+		flex-direction: column;
+		padding: 4px;
+	}
+
+	.appr-item {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-1);
+		width: 100%;
+		border: none;
+		background: none;
+		font-family: var(--font-body);
+		font-size: 13px;
+		color: var(--color-fg);
+		text-align: left;
+		padding: 6px 8px;
+		cursor: pointer;
+		border-radius: var(--radius-field, 0.25rem);
+		transition: background var(--dur-fast) ease;
+	}
+
+	.appr-item:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.appr-check {
+		flex: 0 0 auto;
+		width: 14px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--color-fg);
+	}
+
+	.appr-label {
+		flex: 1;
 	}
 
 	/* workspace row: switch button (flex) + a settings gear revealed on hover/active */

@@ -9,6 +9,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 	return {
 		user: locals.user,
 		locale: isLocale(cookie) ? cookie : 'en',
-		theme: themeCookie && THEMES.includes(themeCookie) ? themeCookie : 'light'
+		theme: themeCookie && THEMES.includes(themeCookie) ? themeCookie : 'light',
+		contrast: cookies.get('contrast') === 'high' ? 'high' : null
 	};
 };

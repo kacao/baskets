@@ -251,6 +251,9 @@
 	// Group by (config.groupBy): render one table per group with its title above.
 	// null/absent = a single ungrouped table (default).
 	const groupBy = $derived(typeof config.groupBy === 'string' ? (config.groupBy as string) : null);
+	// Hide empty groups (config.hideEmptyGroups, default true). Emptiness reflects the
+	// view's filters/search/sort since groups derive from the already-filtered rows.
+	const hideEmptyGroups = $derived(config.hideEmptyGroups !== false);
 
 	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
 	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
@@ -357,7 +360,7 @@
 		} else {
 			return [{ key: '_all', title: '', tasks: rows }];
 		}
-		return g.filter((x) => x.tasks.length > 0);
+		return hideEmptyGroups ? g.filter((x) => x.tasks.length > 0) : g;
 	});
 </script>
 
@@ -1012,6 +1015,17 @@
 		width: 1%;
 		white-space: nowrap;
 		padding-left: 0;
+	}
+
+	/* Align the status pill's text/icon with the "Status" header text by pulling the
+	   pill left over its own border (1px) + padding. Text/text-icon pad 10px (→ -11px);
+	   the bare icon-only pill pads 2px (→ -3px). */
+	.col-status :global(.status-pill) {
+		margin-left: -11px;
+	}
+
+	.col-status :global(.status-pill.bare) {
+		margin-left: -3px;
 	}
 
 	.col-actions {

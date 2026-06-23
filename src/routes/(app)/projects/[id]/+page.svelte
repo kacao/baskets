@@ -26,7 +26,14 @@
 	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
 	import { filterTasks } from '$lib/taskFilter';
 	import { sortTasks, parseSortBy } from '$lib/taskSort';
-	import { fieldAppliesTo, buildTaskCfSearch } from '$lib/customFields';
+	import {
+		fieldAppliesTo,
+		buildTaskCfSearch,
+		decodeValue,
+		formatNumber,
+		formatDate,
+		sanitizeConfig
+	} from '$lib/customFields';
 	import { selection } from '$lib/selection.svelte';
 	import { toast } from '$lib/toast.svelte';
 	import { t } from '$lib/i18n';
@@ -176,6 +183,12 @@
 	const setGroupByConfig = (val: string) =>
 		JSON.stringify({ ...viewConfig, groupBy: val || undefined });
 
+	// Hide empty groups (config.hideEmptyGroups, default true = current behavior).
+	// Emptiness honors the view's filters/search/sort since groups derive from them.
+	const hideEmptyOn = $derived(viewConfig.hideEmptyGroups !== false);
+	const setHideEmptyConfig = () =>
+		JSON.stringify({ ...viewConfig, hideEmptyGroups: hideEmptyOn ? false : undefined });
+
 	// Sort-by: a field (config.sortBy key) + a direction toggle (':desc' suffix).
 	const SORT_FIELD_OPTIONS = [
 		['', 'None'],
@@ -285,9 +298,23 @@
 		return Boolean(data.user);
 	}
 
+	// Status display is per-view (config.statusDisplay), falling back to the project's
+	// saved default (legacy) then 'text'. Only the active view renders, so this drives
+	// every view's StatusSelect rendering.
 	const statusDisplay = $derived(
-		(data.project.statusDisplay ?? 'text') as 'text' | 'icon' | 'text-icon'
+		((typeof viewConfig.statusDisplay === 'string'
+			? viewConfig.statusDisplay
+			: data.project.statusDisplay) ?? 'text') as 'text' | 'icon' | 'text-icon'
 	);
+	const STATUS_DISPLAY_OPTIONS = [
+		['text', 'Text only'],
+		['icon', 'Icon only'],
+		['text-icon', 'Text & icon']
+	] as const;
+	// Always store the chosen value (even 'text') so it overrides the legacy project
+	// default; an absent key means "inherit project default" for untouched views.
+	const setStatusDisplayConfig = (val: string) =>
+		JSON.stringify({ ...viewConfig, statusDisplay: val });
 
 	// New-task pane: opened from the header "+" (no prefill) or a grouped table's
 	// per-group "+" (carries that group's status/milestone/assignee/due).
@@ -343,6 +370,62 @@
 	);
 	const dependsOn = $derived(
 		data.allProjects.filter((p) => data.projectDependsOn.includes(p.id))
+	);
+
+	// Project header chips (ADR-040 design): the project's OWN (entity='project') custom
+	// fields rendered as two-tone key-value pills [ name | value ]. Display-only; values
+	// are edited in project settings. Resolves each type to a human label, skips empties.
+	function projectFieldDisplay(
+		field: { id: string; type: string; config: Record<string, unknown> },
+		raw: string | null | undefined
+	): string {
+		if (raw == null || raw === '') return '';
+		const cfg = sanitizeConfig(field.type, field.config);
+		const decoded = decodeValue({ type: field.type }, raw);
+		const optTitle = (id: string) =>
+			data.projectFieldOptions.find((o) => o.id === id)?.title ?? '';
+		const join = (ids: unknown, resolve: (id: string) => string) =>
+			(Array.isArray(ids) ? ids : [ids])
+				.map((id) => resolve(String(id)))
+				.filter(Boolean)
+				.join(', ');
+		switch (field.type) {
+			case 'number': {
+				const n = Number(raw);
+				return Number.isFinite(n) ? formatNumber(n, cfg) : '';
+			}
+			case 'date':
+				return formatDate(String(raw), cfg);
+			case 'checkbox':
+				return raw === 'true' || raw === '1' ? $t('Yes') : $t('No');
+			case 'select':
+				return join(decoded, optTitle);
+			case 'person':
+				return join(decoded, (id) => data.users.find((u) => u.id === id)?.name ?? '');
+			case 'place':
+				return join(decoded, (id) => data.locations.find((l) => l.id === id)?.title ?? '');
+			case 'task':
+				return join(decoded, (id) => data.tasks.find((t) => t.id === id)?.title ?? '');
+			case 'files': {
+				const n = Array.isArray(decoded) ? decoded.length : 0;
+				return n ? `${n} ${n === 1 ? $t('file') : $t('files')}` : '';
+			}
+			default:
+				return String(raw);
+		}
+	}
+	const projectFieldPills = $derived.by(() =>
+		data.projectFields
+			.filter((f) => f.type !== 'rollup')
+			.map((f) => ({
+				id: f.id,
+				name: f.name,
+				value: projectFieldDisplay(
+					f,
+					data.projectCustomValues.find((v) => v.fieldId === f.id)?.value
+				)
+			}))
+			.filter((p) => p.value !== '')
 	);
 
 	// Filters (config.filters: TaskFilters) — mirrors FilterBar's facets, but set from
@@ -697,10 +780,13 @@
 		{data.project.description}
 	</p>
 {/if}
-{#if projectLabels.length > 0 || dependsOn.length > 0}
+{#if projectFieldPills.length > 0 || dependsOn.length > 0}
 	<div class="chips-row" style="margin-bottom: var(--sp-3);">
-		{#each projectLabels as l (l.id)}
-			<span class="badge">{l.name}</span>
+		{#each projectFieldPills as f (f.id)}
+			<span class="kv-pill">
+				<span class="kv-key">{f.name}</span>
+				<span class="kv-val">{f.value}</span>
+			</span>
 		{/each}
 		{#each dependsOn as p (p.id)}
 			<a class="badge" href="/projects/{p.id}" style="text-decoration: none;">{p.name}</a>
@@ -1000,10 +1086,32 @@
 			</form>
 		</div>
 
+		{#if ['table', 'board', 'list', 'flow', 'timeline', 'calendar'].includes(activeView.type)}
+			<span class="label">{$t('Status display')}</span>
+			<div class="chips-row">
+				{@render selectPill(
+					$t('Status display'),
+					STATUS_DISPLAY_OPTIONS,
+					statusDisplay,
+					setStatusDisplayConfig
+				)}
+			</div>
+		{/if}
+
 		{#if activeView.type === 'table'}
 			<span class="label">{$t('Group by')}</span>
 			<div class="chips-row">
 				{@render selectPill($t('Group by'), GROUP_BY_OPTIONS, groupByValue, setGroupByConfig)}
+				{#if groupByValue}
+					<form method="POST" action="?/updateView" use:enhance>
+						<input type="hidden" name="id" value={activeView.id} />
+						<input type="hidden" name="name" value={activeView.name} />
+						<input type="hidden" name="config" value={setHideEmptyConfig()} />
+						<button class="chip" class:chip--on={hideEmptyOn} type="submit"
+							>{$t('Hide empty groups')}</button
+						>
+					</form>
+				{/if}
 			</div>
 			<span class="label">{$t('Sort by')}</span>
 			<div class="chips-row">
@@ -1092,6 +1200,16 @@
 			<span class="label">{$t('Group by')}</span>
 			<div class="chips-row">
 				{@render selectPill($t('Group by'), GROUP_BY_OPTIONS, groupByValue, setGroupByConfig)}
+				{#if groupByValue}
+					<form method="POST" action="?/updateView" use:enhance>
+						<input type="hidden" name="id" value={activeView.id} />
+						<input type="hidden" name="name" value={activeView.name} />
+						<input type="hidden" name="config" value={setHideEmptyConfig()} />
+						<button class="chip" class:chip--on={hideEmptyOn} type="submit"
+							>{$t('Hide empty groups')}</button
+						>
+					</form>
+				{/if}
 			</div>
 		{/if}
 
@@ -1872,6 +1990,33 @@
 		gap: var(--sp-1);
 		flex-wrap: wrap;
 		margin-bottom: var(--sp-2);
+	}
+
+	/* Two-tone key-value pill for project custom fields: [ name | value ] */
+	.kv-pill {
+		display: inline-flex;
+		align-items: stretch;
+		font-size: 12px;
+		line-height: 1.6;
+		border: 1px solid var(--color-border-subtle);
+		border-radius: 999px;
+		overflow: hidden;
+	}
+
+	.kv-key {
+		padding: 1px 8px;
+		background: var(--color-surface-muted);
+		color: var(--color-muted);
+		font-weight: 500;
+	}
+
+	.kv-val {
+		padding: 1px 8px;
+		color: var(--color-fg);
+		max-width: 32ch;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	/* Customize pills (Group by / Sort / Filters) — Popover-driven facets. */

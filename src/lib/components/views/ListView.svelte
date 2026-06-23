@@ -127,6 +127,8 @@
 
 	// Group by (config.groupBy): one section per group, like the table view.
 	const groupBy = $derived(typeof config.groupBy === 'string' ? (config.groupBy as string) : null);
+	// Hide empty groups (config.hideEmptyGroups, default true) — honors view filters/sort.
+	const hideEmptyGroups = $derived(config.hideEmptyGroups !== false);
 	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
 	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
 	type Group = { key: string; title: string; tasks: Task[] };
@@ -179,7 +181,7 @@
 				{ key: '_none', title: $i18n('No label'), tasks: rows.filter((t) => taskLabelIds(t.id).length === 0) }
 			];
 		else return [{ key: '_all', title: '', tasks: rows }];
-		return g.filter((x) => x.tasks.length > 0);
+		return hideEmptyGroups ? g.filter((x) => x.tasks.length > 0) : g;
 	});
 	let collapsed = $state<Record<string, boolean>>({});
 </script>

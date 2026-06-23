@@ -24,22 +24,6 @@
 		{$t('Pick which default and workspace statuses this project uses, and add statuses that only exist in this project.')}
 	</p>
 
-	<div class="u-flex" style="margin-bottom: var(--sp-3); gap: var(--sp-2);">
-		<span class="label" style="margin: 0;">{$t('Status display')}</span>
-		<form method="POST" action="?/setStatusDisplay" use:enhance>
-			<select
-				name="statusDisplay"
-				class="select"
-				style="width: auto;"
-				onchange={(e) => e.currentTarget.form?.requestSubmit()}
-			>
-				<option value="text" selected={data.project.statusDisplay === 'text'}>{$t('Text only')}</option>
-				<option value="icon" selected={data.project.statusDisplay === 'icon'}>{$t('Icon only')}</option>
-				<option value="text-icon" selected={data.project.statusDisplay === 'text-icon'}>{$t('Text & icon')}</option>
-			</select>
-		</form>
-	</div>
-
 	<form method="POST" action="?/updateProjectStatuses" use:enhance>
 		<span class="label">{$t('Eligible statuses')}</span>
 		<div class="chips-row">
