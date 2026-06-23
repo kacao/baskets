@@ -46,6 +46,7 @@ import {
 	listProjectCustomFields,
 	writeTaskCustomValues
 } from '$lib/server/customFields';
+import { decodeValue } from '$lib/customFields';
 import {
 	accessibleWorkspaceIds,
 	canAccessProject,
@@ -54,7 +55,8 @@ import {
 	canEditView,
 	canEditWorkspace,
 	grantedProjectIds,
-	isAdmin
+	isAdmin,
+	projectAccessUserIds
 } from '$lib/server/permissions';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
 import { ICONOIR_NAMES } from '$lib/iconoirNames';
@@ -252,6 +254,21 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 						projDeps.some((d) => d.dependsOnId === p.id)
 				);
 
+	// ADR-019: assignee pickers/groupings expose only users who can ACCESS this
+	// project — plus any user already referenced (assignee or person custom field)
+	// so existing values still resolve to a name. Don't leak the whole roster.
+	const visibleUserIds = await projectAccessUserIds(params.id, proj.workspaceId);
+	for (const tk of tasks) if (tk.assigneeId) visibleUserIds.add(tk.assigneeId);
+	for (const f of customFields) {
+		if (f.type !== 'person') continue;
+		for (const v of taskCustomValues) {
+			if (v.fieldId !== f.id) continue;
+			const ids = decodeValue({ type: 'person' }, v.value);
+			if (Array.isArray(ids)) for (const id of ids) visibleUserIds.add(String(id));
+		}
+	}
+	const visibleUsers = users.filter((u) => visibleUserIds.has(u.id));
+
 	// Per-view edit rights (project grant covers all views); hidden views are never rendered
 	const editableViews: Record<string, boolean> = {};
 	for (const v of views.filter((v) => !v.hidden)) {
@@ -261,7 +278,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	return {
 		project: proj,
 		tasks,
-		users,
+		users: visibleUsers,
 		views,
 		statuses: eligibleStatuses,
 		projectStatuses: await projectStatusOptions(proj.workspaceId),

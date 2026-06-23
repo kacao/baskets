@@ -1,6 +1,6 @@
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { db } from './db';
-import { permission, project, task, view, workspace } from './db/schema';
+import { permission, project, task, user, view, workspace } from './db/schema';
 
 type SessionUser = { id: string; role?: string | null } | null | undefined;
 
@@ -144,6 +144,43 @@ export async function listProjectGrants(projectId: string) {
 		.select()
 		.from(permission)
 		.where(or(...conds));
+}
+
+/**
+ * User ids that can ACCESS a project — admins, the workspace owner, workspace
+ * grantees, and direct project grantees. This is the roster offerable as
+ * assignees / shown in assignee groupings: ADR-019 says don't leak the full
+ * user list (names + emails) to everyone who can see a single project.
+ */
+export async function projectAccessUserIds(
+	projectId: string,
+	workspaceId: string | null
+): Promise<Set<string>> {
+	const ids = new Set<string>();
+	const admins = await db.select({ id: user.id }).from(user).where(eq(user.role, 'admin'));
+	for (const a of admins) ids.add(a.id);
+
+	const pairs: { type: string; id: string }[] = [{ type: 'project', id: projectId }];
+	if (workspaceId) {
+		const [w] = await db
+			.select({ ownerId: workspace.ownerId })
+			.from(workspace)
+			.where(eq(workspace.id, workspaceId));
+		if (w?.ownerId) ids.add(w.ownerId);
+		pairs.push({ type: 'workspace', id: workspaceId });
+	}
+	const grants = await db
+		.select({ uid: permission.userId })
+		.from(permission)
+		.where(
+			or(
+				...pairs.map((p) =>
+					and(eq(permission.resourceType, p.type), eq(permission.resourceId, p.id))
+				)
+			)
+		);
+	for (const g of grants) ids.add(g.uid);
+	return ids;
 }
 
 /** Grant rows on one workspace. */

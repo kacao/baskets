@@ -12,7 +12,7 @@ import {
 import { createProjectWithDefaults } from '$lib/server/projects';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, cookies }) => {
 	const [projects, workspaces] = await Promise.all([
 		db
 			.select({
@@ -42,17 +42,31 @@ export const load: PageServerLoad = async ({ locals }) => {
 		accessibleWorkspaceIds(locals.user),
 		grantedProjectIds(locals.user)
 	]);
-	const visible =
+	const accessible =
 		wsAccess === 'all'
 			? projects
 			: projects.filter(
 					(p) => (p.workspaceId && wsAccess.has(p.workspaceId)) || projGrants.has(p.id)
 				);
+	// the switcher shows accessible workspaces + any holding a directly-granted project
+	const grantedWsIds = new Set(
+		accessible.map((p) => p.workspaceId).filter((id): id is string => !!id)
+	);
 	const visibleWorkspaces =
-		wsAccess === 'all' ? workspaces : workspaces.filter((w) => wsAccess.has(w.id));
+		wsAccess === 'all'
+			? workspaces
+			: workspaces.filter((w) => wsAccess.has(w.id) || grantedWsIds.has(w.id));
+
+	// Scope the project grid to the CURRENT workspace (same `workspace` cookie the
+	// sidebar/layout use) — a workspace shows only the projects it contains.
+	const requested = cookies.get('workspace');
+	const currentWorkspaceId =
+		visibleWorkspaces.find((w) => w.id === requested)?.id ?? visibleWorkspaces[0]?.id ?? null;
+	const visible = accessible.filter((p) => p.workspaceId === currentWorkspaceId);
 
 	return {
 		projects: visible,
+		currentWorkspaceId,
 		workspaces: await Promise.all(
 			visibleWorkspaces.map(async (w) => ({
 				...w,

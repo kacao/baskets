@@ -87,7 +87,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				(projectUse.find((u) => u.labelId === l.id)?.n ?? 0)
 		})),
 		projects,
-		users,
+		// only grant-managers (admin/owner) need the roster — the picker + grant-name
+		// lookups are the sole consumers; don't expose all users to other editors.
+		users: admin || owner ? users : [],
 		grants: admin || owner ? await listWorkspaceGrants(params.id) : [],
 		perm: { admin, owner }
 	};

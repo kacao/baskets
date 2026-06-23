@@ -23,8 +23,10 @@ import {
 	canEditProject,
 	grantedProjectIds,
 	isAdmin,
-	listProjectGrants
+	listProjectGrants,
+	projectAccessUserIds
 } from '$lib/server/permissions';
+import { decodeValue } from '$lib/customFields';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { parseIconValue } from '$lib/server/icons';
 import {
@@ -223,6 +225,23 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 						projDeps.some((d) => d.dependsOnId === p.id)
 				);
 
+	// ADR-019: admins manage grants and need the full roster; everyone else (workspace
+	// owner / project grantee) only needs users who can access this project + any
+	// already referenced by a person custom field, so the whole roster isn't exposed.
+	let visibleUsers = users;
+	if (!admin) {
+		const ids = await projectAccessUserIds(params.id, proj.workspaceId);
+		for (const f of customFields) {
+			if (f.type !== 'person') continue;
+			for (const v of projectCustomValues) {
+				if (v.fieldId !== f.id) continue;
+				const refs = decodeValue({ type: 'person' }, v.value);
+				if (Array.isArray(refs)) for (const id of refs) ids.add(String(id));
+			}
+		}
+		visibleUsers = users.filter((u) => ids.has(u.id));
+	}
+
 	return {
 		project: proj,
 		globalStatuses,
@@ -249,7 +268,7 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 		rollupTasks,
 		rollupTaskValues,
 		fieldTypes: CUSTOM_FIELD_TYPES,
-		users,
+		users: visibleUsers,
 		views,
 		grants: admin ? await listProjectGrants(params.id) : [],
 		perm: { admin }
