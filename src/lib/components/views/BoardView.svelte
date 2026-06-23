@@ -172,6 +172,20 @@
 		shownStatusIds ? statuses.filter((s) => shownStatusIds.includes(s.id)) : statuses
 	);
 
+	// Hide empty swimlanes (config.hideEmptyGroups, default true) when grouped by
+	// milestone/assignee/label. Emptiness counts only tasks in SHOWN statuses, so it
+	// honors the view's other customizations. Status COLUMNS are always kept (they're
+	// drag-drop targets); a status board has no swimlanes so the toggle is a no-op there.
+	const hideEmptyGroups = $derived(config.hideEmptyGroups !== false);
+	const visibleStatusIdSet = $derived(new Set(visibleStatuses.map((s) => s.id)));
+	const visibleLanes = $derived(
+		groupBy !== 'status' && hideEmptyGroups
+			? lanes.filter((l) =>
+					topTasks.some((t) => visibleStatusIdSet.has(t.statusId) && inLane(t, l.key))
+				)
+			: lanes
+	);
+
 	// Right-click column header → [Create task… | Hide]. Hide removes the status from config.statusIds.
 	let colMenu = $state<{ statusId: string; lane: string; x: number; y: number } | null>(null);
 	function openColMenu(e: MouseEvent, lane: string, statusId: string) {
@@ -301,7 +315,7 @@
 </script>
 
 <div class="board-wrap">
-{#each lanes as lane (lane.key)}
+{#each visibleLanes as lane (lane.key)}
 	{#if groupBy !== 'status'}
 		<div class="lane-head">
 			<button

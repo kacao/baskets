@@ -1182,6 +1182,16 @@
 					boardGroupByValue,
 					setBoardGroupByConfig
 				)}
+				{#if boardGroupByValue !== 'status'}
+					<form method="POST" action="?/updateView" use:enhance>
+						<input type="hidden" name="id" value={activeView.id} />
+						<input type="hidden" name="name" value={activeView.name} />
+						<input type="hidden" name="config" value={setHideEmptyConfig()} />
+						<button class="chip" class:chip--on={hideEmptyOn} type="submit"
+							>{$t('Hide empty groups')}</button
+						>
+					</form>
+				{/if}
 			</div>
 			<span class="label">{$t('Statuses shown')}</span>
 			<div class="chips-row">
