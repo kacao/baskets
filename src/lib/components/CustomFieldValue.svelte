@@ -64,6 +64,19 @@
 		}
 	}
 
+	// Focus (and select existing text in) an input when it mounts — used in the pill
+	// popover so one click opens the editor AND lands the cursor in it. `setTimeout`
+	// defers past Popover's portal-append so focus survives the move to <body>. No-op
+	// when `enabled` is false (the always-visible `input` mode must not grab focus).
+	function autofocus(node: HTMLInputElement, enabled: boolean) {
+		if (!enabled) return;
+		const timer = setTimeout(() => {
+			node.focus();
+			if (['text', 'email', 'url', 'number', 'search'].includes(node.type)) node.select?.();
+		}, 0);
+		return { destroy: () => clearTimeout(timer) };
+	}
+
 	const ids = $derived.by(() => {
 		const d = decodeValue(field, current);
 		return Array.isArray(d) ? (d as string[]) : [];
@@ -174,8 +187,9 @@
 	{/if}
 {/snippet}
 
-<!-- the editing controls (used inside the pill popover and the input-mode block) -->
-{#snippet editor(close: () => void)}
+<!-- the editing controls (used inside the pill popover and the input-mode block).
+     `autoFocus` is true only in the pill popover so opening it lands the cursor. -->
+{#snippet editor(close: () => void, autoFocus: boolean = false)}
 	{#if field.type === 'text' || field.type === 'email' || field.type === 'phone' || field.type === 'url'}
 		<input
 			class="input"
@@ -183,17 +197,19 @@
 			value={current}
 			placeholder={field.name}
 			autocomplete="off"
+			use:autofocus={autoFocus}
 			onblur={(e) => set(e.currentTarget.value.trim())}
 			onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); set(e.currentTarget.value.trim()); close(); } }}
 		/>
 	{:else if field.type === 'number'}
-		<input class="input" type="number" value={current} step="any" onblur={(e) => set(e.currentTarget.value.trim())}
+		<input class="input" type="number" value={current} step="any" use:autofocus={autoFocus} onblur={(e) => set(e.currentTarget.value.trim())}
 			onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); set(e.currentTarget.value.trim()); close(); } }} />
 	{:else if field.type === 'date'}
 		<input
 			class="input"
 			type={field.config?.timeFormat && field.config.timeFormat !== 'hidden' ? 'datetime-local' : 'date'}
 			value={current}
+			use:autofocus={autoFocus}
 			onchange={(e) => set(e.currentTarget.value)}
 		/>
 	{:else if field.type === 'checkbox'}
@@ -211,7 +227,7 @@
 			{/each}
 		</div>
 	{:else if field.type === 'person'}
-		<input class="input search" placeholder={$t('Search people…')} bind:value={query} autocomplete="off" />
+		<input class="input search" placeholder={$t('Search people…')} bind:value={query} autocomplete="off" use:autofocus={autoFocus} />
 		<div class="pick">
 			{#each matchUsers as u (u.id)}
 				<button class="pick-item" type="button" onclick={() => { toggleId(u.id); if (!multi) close(); }}>
@@ -220,7 +236,7 @@
 			{/each}
 		</div>
 	{:else if field.type === 'place'}
-		<input class="input search" placeholder={$t('Search places…')} bind:value={query} autocomplete="off" />
+		<input class="input search" placeholder={$t('Search places…')} bind:value={query} autocomplete="off" use:autofocus={autoFocus} />
 		<div class="pick">
 			{#each matchLocs as l (l.id)}
 				<button class="pick-item" type="button" onclick={() => { toggleId(l.id); if (!multi) close(); }}>
@@ -231,7 +247,7 @@
 			{/each}
 		</div>
 	{:else if field.type === 'task'}
-		<input class="input search" placeholder={$t('Search tasks…')} bind:value={query} autocomplete="off" />
+		<input class="input search" placeholder={$t('Search tasks…')} bind:value={query} autocomplete="off" use:autofocus={autoFocus} />
 		<div class="pick">
 			{#each matchTasks as tk (tk.id)}
 				<button class="pick-item" type="button" onclick={() => { toggleId(tk.id); if (!multi) close(); }}>
@@ -303,7 +319,7 @@
 					{/each}
 					<Popover ariaLabel={field.name}>
 						{#snippet trigger()}<span class="add-chip"><Icon name="plus" size={12} /> {$t('Add')}</span>{/snippet}
-						{#snippet panel(close)}<div class="panel">{@render editor(close)}</div>{/snippet}
+						{#snippet panel(close)}<div class="panel">{@render editor(close, true)}</div>{/snippet}
 					</Popover>
 				</div>
 			{:else}
@@ -312,7 +328,7 @@
 						<span class="pill-val">{@render display()}</span>
 					{/snippet}
 					{#snippet panel(close)}
-						<div class="panel">{@render editor(close)}</div>
+						<div class="panel">{@render editor(close, true)}</div>
 					{/snippet}
 				</Popover>
 			{/if}
