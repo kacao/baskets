@@ -41,6 +41,7 @@ import {
 	buildPayloadFromTask
 } from '$lib/server/templates';
 import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
+import { reorderMilestones } from '$lib/server/milestones';
 import {
 	listCustomFieldOptions,
 	listProjectCustomFields,
@@ -1550,6 +1551,7 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();
+		const description = String(form.get('description') ?? '').trim() || null;
 		const startDateRaw = String(form.get('startDate') ?? '');
 		const targetDateRaw = String(form.get('targetDate') ?? '');
 
@@ -1561,6 +1563,7 @@ export const actions: Actions = {
 			id: msId,
 			projectId: params.id,
 			name,
+			description,
 			startDate: startDateRaw ? new Date(startDateRaw + 'T00:00:00') : null,
 			targetDate: targetDateRaw ? new Date(targetDateRaw + 'T00:00:00') : null,
 			position: now.getTime(),
@@ -1578,6 +1581,21 @@ export const actions: Actions = {
 
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true, milestoneId: msId };
+	},
+
+	/** Reorder milestones from a comma-separated ordered id list (`ids`). */
+	reorderMilestone: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const ids = String((await request.formData()).get('ids') ?? '')
+			.split(',')
+			.map((s) => s.trim())
+			.filter(Boolean);
+		await reorderMilestones(params.id, ids);
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
 	},
 
 	/* ----------------------------- locations ----------------------------- */
@@ -1670,12 +1688,19 @@ export const actions: Actions = {
 		const [ms] = await db.select().from(milestone).where(eq(milestone.id, id));
 		if (!ms || ms.projectId !== params.id) return fail(400, { message: 'Invalid milestone' });
 
-		const patch: { name?: string; startDate?: Date | null; targetDate?: Date | null } = {};
+		const patch: {
+			name?: string;
+			description?: string | null;
+			startDate?: Date | null;
+			targetDate?: Date | null;
+		} = {};
 		if (form.has('name')) {
 			const name = String(form.get('name') ?? '').trim();
 			if (!name) return fail(400, { message: 'Milestone name is required' });
 			patch.name = name;
 		}
+		if (form.has('description'))
+			patch.description = String(form.get('description') ?? '').trim() || null;
 		if (form.has('startDate')) {
 			const raw = String(form.get('startDate') ?? '').trim();
 			patch.startDate = raw ? new Date(raw + 'T00:00:00') : null;
@@ -1684,8 +1709,7 @@ export const actions: Actions = {
 			const raw = String(form.get('targetDate') ?? '').trim();
 			patch.targetDate = raw ? new Date(raw + 'T00:00:00') : null;
 		}
-		if (!('name' in patch) && !('startDate' in patch) && !('targetDate' in patch))
-			return fail(400, { message: 'No fields to update' });
+		if (Object.keys(patch).length === 0) return fail(400, { message: 'No fields to update' });
 
 		await db.update(milestone).set({ ...patch, updatedAt: new Date() }).where(eq(milestone.id, id));
 		broadcastProjectChange(params.id, locals.user.id);

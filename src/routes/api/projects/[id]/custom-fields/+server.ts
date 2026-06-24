@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { customField } from '$lib/server/db/schema';
 import { apiError, readJson } from '$lib/server/api';
@@ -55,10 +55,12 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 				? body.config
 				: JSON.stringify(body.config);
 
+	// uniqueness is per-(project, entity) — task + project fields are separate value
+	// tables, so a task field and a project field may share a name.
 	const existing = await db
 		.select({ name: customField.name, position: customField.position })
 		.from(customField)
-		.where(eq(customField.projectId, params.id))
+		.where(and(eq(customField.projectId, params.id), eq(customField.entity, entity)))
 		.orderBy(asc(customField.position));
 	if (existing.some((f) => f.name.toLowerCase() === name.toLowerCase()))
 		return apiError(400, 'A field with that name already exists');

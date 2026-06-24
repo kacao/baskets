@@ -13,6 +13,7 @@
 	import Popover from '$lib/components/Popover.svelte';
 	import NewTaskPane from '$lib/components/NewTaskPane.svelte';
 	import NewMilestonePane from '$lib/components/NewMilestonePane.svelte';
+	import MilestonesManager from '$lib/components/MilestonesManager.svelte';
 	import TemplatePicker from '$lib/components/TemplatePicker.svelte';
 	import TableView from '$lib/components/views/TableView.svelte';
 	import BoardView from '$lib/components/views/BoardView.svelte';
@@ -272,27 +273,22 @@
 	const setShowCountConfig = () =>
 		JSON.stringify({ ...viewConfig, showCount: showCountOn ? undefined : true });
 
-	// Milestones pane: name → its dependencies (other milestones of this project)
-	const milestoneName = (id: string) => data.milestones.find((m) => m.id === id)?.name ?? id;
-	const milestoneDepsOf = (id: string) =>
-		data.milestoneDeps.filter((d) => d.milestoneId === id).map((d) => d.dependsOnId);
-
-	// Per-milestone task progress (top-level tasks only; done = completed-category status).
+	// Per-milestone task progress map (top-level tasks only; done = completed category),
+	// passed to the shared MilestonesManager rendered in the Milestones pane.
 	const doneStatusIds = $derived(
 		new Set(data.statuses.filter((s) => s.category === 'completed').map((s) => s.id))
 	);
-	function milestoneProgress(id: string) {
-		const rows = data.tasks.filter((t) => !t.parentId && t.milestoneId === id);
-		const done = rows.filter((t) => doneStatusIds.has(t.statusId)).length;
-		return { done, total: rows.length, pct: rows.length ? Math.round((done / rows.length) * 100) : 0 };
-	}
-
-	// Milestone delete needs a confirm (frees its tasks' milestoneId).
-	async function confirmDeleteMilestone(e: MouseEvent) {
-		const formEl = (e.currentTarget as HTMLElement).closest('form');
-		if (await confirmDialog($t('Delete this milestone?'), { danger: true, confirmLabel: $t('Delete') }))
-			formEl?.requestSubmit();
-	}
+	const milestoneProgressMap = $derived.by(() => {
+		const acc: Record<string, { done: number; total: number; pct: number }> = {};
+		for (const t of data.tasks) {
+			if (t.parentId || !t.milestoneId) continue;
+			const a = (acc[t.milestoneId] ??= { done: 0, total: 0, pct: 0 });
+			a.total++;
+			if (doneStatusIds.has(t.statusId)) a.done++;
+		}
+		for (const k in acc) acc[k].pct = acc[k].total ? Math.round((acc[k].done / acc[k].total) * 100) : 0;
+		return acc;
+	});
 
 	// Tasks are editable by every member with project access; grants gate structure
 	function canEditTask(_t: { id: string; parentId: string | null }) {
@@ -1341,110 +1337,12 @@
 <!-- Milestones pane (ADR-025): opened from the project "…" menu -->
 {#if milestonesOpen && data.perm.project}
 	<SidePane title={$t('Milestones')} onClose={() => (milestonesOpen = false)}>
-		{#each data.milestones as m (m.id)}
-			{@const deps = milestoneDepsOf(m.id)}
-			{@const prog = milestoneProgress(m.id)}
-			<div class="ms-card">
-				<div class="ms-head">
-					<form method="POST" action="?/updateMilestone" use:enhance class="ms-name-form">
-						<input type="hidden" name="id" value={m.id} />
-						<input
-							class="ms-name"
-							name="name"
-							value={m.name}
-							required
-							aria-label={$t('Milestone name')}
-							onblur={(e) => e.currentTarget.value.trim() && e.currentTarget.value !== m.name && e.currentTarget.form?.requestSubmit()}
-							onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), e.currentTarget.blur())}
-						/>
-					</form>
-					<form method="POST" action="?/deleteMilestone" use:enhance>
-						<input type="hidden" name="id" value={m.id} />
-						<button class="ms-del" type="button" onclick={confirmDeleteMilestone} aria-label={$t('Delete milestone')}>
-							<Icon name="trash" size={14} />
-						</button>
-					</form>
-				</div>
-
-				<div class="ms-progress" use:tooltip={`${prog.done}/${prog.total} ${$t('done')}`}>
-					<div class="ms-bar"><div class="ms-bar-fill" style={`width:${prog.pct}%`}></div></div>
-					<span class="ms-prog-text">{prog.done}/{prog.total}</span>
-				</div>
-
-				<div class="ms-meta">
-					<form method="POST" action="?/updateMilestone" use:enhance class="ms-date-form">
-						<input type="hidden" name="id" value={m.id} />
-						<Icon name="play" size={13} />
-						<input
-							class="ms-date"
-							type="date"
-							name="startDate"
-							value={m.startDate ? new Date(m.startDate).toISOString().slice(0, 10) : ''}
-							aria-label={$t('Start date')}
-							onchange={(e) => e.currentTarget.form?.requestSubmit()}
-						/>
-					</form>
-					<form method="POST" action="?/updateMilestone" use:enhance class="ms-date-form">
-						<input type="hidden" name="id" value={m.id} />
-						<Icon name="calendar" size={13} />
-						<input
-							class="ms-date"
-							type="date"
-							name="targetDate"
-							value={m.targetDate ? new Date(m.targetDate).toISOString().slice(0, 10) : ''}
-							aria-label={$t('Target date')}
-							onchange={(e) => e.currentTarget.form?.requestSubmit()}
-						/>
-					</form>
-				</div>
-
-				<div class="ms-deps">
-					<span class="u-tiny u-muted">{$t('Depends on')}</span>
-					<Popover ariaLabel={$t('Dependencies')}>
-						{#snippet trigger()}
-							<span class="pill-val" class:pill-ph={deps.length === 0}>
-								{deps.length ? deps.map(milestoneName).join(', ') : $t('No milestone')}
-							</span>
-						{/snippet}
-						{#snippet panel()}
-							<form method="POST" action="?/setMilestoneDeps" use:enhance>
-								<input type="hidden" name="milestoneId" value={m.id} />
-								<button class="opt" class:opt--on={deps.length === 0} type="submit">
-									<span class="opt-check">{#if deps.length === 0}<Icon name="check" size={13} />{/if}</span>
-									{$t('No milestone')}
-								</button>
-							</form>
-							{#each data.milestones.filter((x) => x.id !== m.id) as opt (opt.id)}
-								<form method="POST" action="?/setMilestoneDeps" use:enhance>
-									<input type="hidden" name="milestoneId" value={m.id} />
-									{#each (deps.includes(opt.id) ? deps.filter((d) => d !== opt.id) : [...deps, opt.id]) as id (id)}
-										<input type="hidden" name="dependsOnId" value={id} />
-									{/each}
-									<button class="opt" class:opt--on={deps.includes(opt.id)} type="submit">
-										<span class="opt-check">{#if deps.includes(opt.id)}<Icon name="check" size={13} />{/if}</span>
-										{opt.name}
-									</button>
-								</form>
-							{/each}
-						{/snippet}
-					</Popover>
-				</div>
-			</div>
-		{:else}
-			<p class="u-tiny u-muted ms-empty">{$t('No milestones yet.')}</p>
-		{/each}
-
-		<form method="POST" action="?/createMilestone" use:enhance={() => async ({ formElement, update }) => { await update({ reset: false }); formElement.reset(); }} class="ms-new">
-			<div class="ms-new-row">
-				<input name="name" class="input" style="flex:0 1 180px; min-width:0;" placeholder={$t('New milestone…')} required />
-				<span class="ms-date-pill">
-					<Icon name="calendar" size={13} />
-					<span class="u-tiny u-muted">{$t('Due date')}</span>
-					<input name="targetDate" type="date" class="ms-date" aria-label={$t('Due date')} />
-				</span>
-			</div>
-			<button class="btn btn-sm btn-primary" type="submit">{$t('Add milestone')}</button>
-		</form>
+		<MilestonesManager
+			milestones={data.milestones}
+			progress={milestoneProgressMap}
+			milestoneDeps={data.milestoneDeps}
+			canEdit={data.perm.project}
+		/>
 	</SidePane>
 {/if}
 
@@ -2203,216 +2101,6 @@
 	.chip--on:hover {
 		border-color: color-mix(in oklab, var(--color-fg) 45%, var(--color-bg));
 		color: var(--color-fg);
-	}
-
-	.ms-card {
-		border: 1px solid var(--color-border-subtle);
-		border-radius: var(--radius-box, 0.5rem);
-		padding: var(--sp-2);
-		margin-bottom: var(--sp-2);
-		display: flex;
-		flex-direction: column;
-		gap: var(--sp-1);
-		background: var(--color-bg);
-	}
-
-	.ms-head {
-		display: flex;
-		align-items: center;
-		gap: var(--sp-1);
-	}
-
-	.ms-name-form {
-		flex: 1;
-		min-width: 0;
-	}
-
-	.ms-name {
-		width: 100%;
-		border: 1px solid transparent;
-		background: none;
-		font-size: 14px;
-		font-weight: 600;
-		color: var(--color-fg);
-		padding: 2px 6px;
-		border-radius: var(--radius-field, 0.25rem);
-	}
-
-	.ms-name:hover {
-		border-color: var(--color-border-subtle);
-	}
-
-	.ms-name:focus {
-		border-color: color-mix(in oklab, var(--color-fg) 35%, var(--color-bg));
-		background: var(--color-base-100);
-	}
-
-	.ms-del {
-		position: relative;
-		display: inline-flex;
-		border: none;
-		background: none;
-		cursor: pointer;
-		color: var(--color-muted);
-		padding: 4px;
-		border-radius: var(--radius-field, 0.25rem);
-	}
-
-	/* extend the icon-only delete hit area toward ~40px */
-	.ms-del::before {
-		content: '';
-		position: absolute;
-		inset: -7px;
-	}
-
-	.ms-del:hover {
-		color: var(--color-error);
-		background: var(--color-surface-muted);
-	}
-
-	.ms-progress {
-		display: flex;
-		align-items: center;
-		gap: var(--sp-2);
-	}
-
-	.ms-bar {
-		flex: 1;
-		height: 6px;
-		border-radius: 999px;
-		background: var(--color-surface-muted);
-		overflow: hidden;
-	}
-
-	.ms-bar-fill {
-		height: 100%;
-		border-radius: 999px;
-		background: color-mix(in oklab, var(--color-success, var(--color-fg)) 70%, var(--color-bg));
-		transition: width var(--dur) ease;
-	}
-
-	.ms-prog-text {
-		font-size: 11px;
-		color: var(--color-muted);
-		font-variant-numeric: tabular-nums;
-	}
-
-	.ms-meta {
-		display: flex;
-		align-items: center;
-	}
-
-	.ms-date-form {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		color: var(--color-muted);
-	}
-
-	.ms-date {
-		border: 1px solid transparent;
-		background: none;
-		font-size: 12px;
-		color: var(--color-muted);
-		padding: 2px 4px;
-		border-radius: var(--radius-field, 0.25rem);
-		font-family: var(--font-mono);
-	}
-
-	.ms-date:hover {
-		border-color: var(--color-border-subtle);
-	}
-
-	.ms-deps {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 4px;
-	}
-
-	.ms-empty {
-		margin-bottom: var(--sp-2);
-	}
-
-	.ms-new {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: var(--sp-2);
-		margin-top: var(--sp-3);
-		padding-top: var(--sp-3);
-		border-top: 1px solid var(--color-border-subtle);
-	}
-
-	.ms-new-row {
-		display: flex;
-		gap: var(--sp-2);
-		align-items: center;
-		width: 100%;
-	}
-
-	/* scale-on-press for the primary create CTA */
-	.ms-new :global(.btn-primary) {
-		transition: transform var(--dur-fast) ease;
-	}
-
-	.ms-new :global(.btn-primary:active) {
-		transform: scale(0.96);
-	}
-
-	.opt {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		width: 100%;
-		border: none;
-		background: none;
-		color: var(--color-fg);
-		font-family: var(--font-body);
-		font-size: 13px;
-		text-align: left;
-		padding: 6px 8px;
-		border-radius: var(--radius-field, 0.25rem);
-		cursor: pointer;
-		transition: background var(--dur-fast) ease;
-	}
-
-	.opt:hover {
-		background: var(--color-surface-muted);
-	}
-
-	.opt--on {
-		font-weight: 600;
-	}
-
-	.opt-check {
-		display: inline-flex;
-		width: 13px;
-		flex: 0 0 13px;
-		color: var(--color-fg);
-	}
-
-	.ms-date-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		padding: 2px 8px;
-		border: 1px solid var(--color-border-subtle);
-		border-radius: 999px;
-		color: var(--color-muted);
-	}
-
-	.ms-date-pill:focus-within {
-		border-color: color-mix(in oklab, var(--color-fg) 35%, var(--color-bg));
-	}
-
-	.ms-date-pill .ms-date {
-		border: none;
-		padding: 0;
-	}
-
-	.ms-date-pill .ms-date:hover {
-		border: none;
 	}
 
 </style>

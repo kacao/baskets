@@ -171,6 +171,10 @@ Create a milestone (project edit).
 - Body: `name` (required, trimmed, max 120), `description` (string|null), `startDate` (string|null — `YYYY-MM-DD`/ISO), `targetDate` (string|null). Bad dates → `400`.
 - 201: `{ "milestone": <milestone> }`. `404`/`403` as for project edits.
 
+### PATCH /api/projects/{id}/milestones
+Reorder this project's milestones (project edit). Body: `order` (array of milestone ids). Foreign ids are ignored; any of the project's milestones omitted from the list keep their relative order after the listed ones. Rewrites `milestone.position`.
+- 200: `{ "success": true }`. `404`/`403` as for project edits.
+
 ### PATCH /api/milestones/{id}
 Update a milestone (project edit). Body: `name` (trimmed non-empty, max 120), `description` (string|null), `startDate` (string|null), `targetDate` (string|null). At least one (else `400 "No fields to update"`).
 - 200: `{ "milestone": <milestone> }`. `404` if missing/inaccessible; `403` if not editable.

@@ -7,6 +7,7 @@ import {
 	label,
 	location,
 	milestone,
+	milestoneDependency,
 	permission,
 	project,
 	projectDependency,
@@ -48,6 +49,7 @@ import {
 } from '$lib/server/customFields';
 import { deleteFilesForField } from '$lib/server/uploads';
 import { importProjectFromExport } from '$lib/server/projectIO';
+import { milestoneProgressByProject, reorderMilestones } from '$lib/server/milestones';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Defaults + the project's workspace statuses + its own statuses are assignable here. */
@@ -242,6 +244,19 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 		visibleUsers = users.filter((u) => ids.has(u.id));
 	}
 
+	// Milestone deps + per-milestone task progress for the rich milestones manager.
+	const [milestoneDeps, milestoneProgress] = await Promise.all([
+		db
+			.select({
+				milestoneId: milestoneDependency.milestoneId,
+				dependsOnId: milestoneDependency.dependsOnId
+			})
+			.from(milestoneDependency)
+			.innerJoin(milestone, eq(milestoneDependency.milestoneId, milestone.id))
+			.where(eq(milestone.projectId, params.id)),
+		milestoneProgressByProject(params.id)
+	]);
+
 	return {
 		project: proj,
 		globalStatuses,
@@ -258,6 +273,8 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 		projectDependsOn: projDeps.map((d) => d.dependsOnId),
 		allProjects: visibleProjects,
 		milestones,
+		milestoneDeps,
+		milestoneProgress,
 		locations,
 		customFields: customFields.map((f) => ({
 			...f,
@@ -575,10 +592,12 @@ export const actions: Actions = {
 			return fail(400, { message: 'Invalid “applies to”' });
 		const entity = String(form.get('entity') ?? 'task') === 'project' ? 'project' : 'task';
 
+		// uniqueness is per-(project, entity): task + project fields are separate value
+		// tables, so a task field and a project field MAY share a name.
 		const existing = await db
 			.select({ name: customField.name, position: customField.position })
 			.from(customField)
-			.where(eq(customField.projectId, params.id))
+			.where(and(eq(customField.projectId, params.id), eq(customField.entity, entity)))
 			.orderBy(asc(customField.position));
 		if (existing.some((f) => f.name.toLowerCase() === name.toLowerCase()))
 			return fail(400, { message: 'A field with that name already exists' });
@@ -636,10 +655,11 @@ export const actions: Actions = {
 		if (!name) return fail(400, { message: 'Field name is required' });
 		if (name.length > 60) return fail(400, { message: 'Name too long (max 60)' });
 
+		// uniqueness is per-(project, entity) — only collide with same-entity fields
 		const others = await db
 			.select({ id: customField.id, name: customField.name })
 			.from(customField)
-			.where(eq(customField.projectId, params.id));
+			.where(and(eq(customField.projectId, params.id), eq(customField.entity, f.entity)));
 		if (others.some((o) => o.id !== id && o.name.toLowerCase() === name.toLowerCase()))
 			return fail(400, { message: 'A field with that name already exists' });
 
@@ -983,6 +1003,7 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();
+		const description = String(form.get('description') ?? '').trim() || null;
 		const startDateRaw = String(form.get('startDate') ?? '');
 		const targetDateRaw = String(form.get('targetDate') ?? '');
 
@@ -993,12 +1014,51 @@ export const actions: Actions = {
 			id: crypto.randomUUID(),
 			projectId: params.id,
 			name,
+			description,
 			startDate: startDateRaw ? new Date(startDateRaw + 'T00:00:00') : null,
 			targetDate: targetDateRaw ? new Date(targetDateRaw + 'T00:00:00') : null,
 			position: now.getTime(),
 			createdAt: now,
 			updatedAt: now
 		});
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	updateMilestone: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const id = String(form.get('id') ?? '');
+		const [ms] = await db.select().from(milestone).where(eq(milestone.id, id));
+		if (!ms || ms.projectId !== params.id) return fail(400, { message: 'Invalid milestone' });
+
+		const patch: {
+			name?: string;
+			description?: string | null;
+			startDate?: Date | null;
+			targetDate?: Date | null;
+		} = {};
+		if (form.has('name')) {
+			const name = String(form.get('name') ?? '').trim();
+			if (!name) return fail(400, { message: 'Milestone name is required' });
+			patch.name = name;
+		}
+		if (form.has('description')) patch.description = String(form.get('description') ?? '').trim() || null;
+		if (form.has('startDate')) {
+			const raw = String(form.get('startDate') ?? '').trim();
+			patch.startDate = raw ? new Date(raw + 'T00:00:00') : null;
+		}
+		if (form.has('targetDate')) {
+			const raw = String(form.get('targetDate') ?? '').trim();
+			patch.targetDate = raw ? new Date(raw + 'T00:00:00') : null;
+		}
+		if (Object.keys(patch).length === 0) return fail(400, { message: 'No fields to update' });
+
+		await db.update(milestone).set({ ...patch, updatedAt: new Date() }).where(eq(milestone.id, id));
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 
@@ -1010,6 +1070,72 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = String(form.get('id') ?? '');
 		await db.delete(milestone).where(and(eq(milestone.id, id), eq(milestone.projectId, params.id)));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/** Replaces a milestone's full dependency set (DFS cycle-checked). */
+	setMilestoneDeps: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const form = await request.formData();
+		const milestoneId = String(form.get('milestoneId') ?? '');
+		const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
+		if (!m || m.projectId !== params.id) return fail(400, { message: 'Invalid milestone' });
+
+		const projectMs = await db
+			.select({ id: milestone.id })
+			.from(milestone)
+			.where(eq(milestone.projectId, params.id));
+		const validIds = new Set(projectMs.map((r) => r.id));
+		const desired = [...new Set(form.getAll('dependsOnId').map(String))].filter(
+			(id) => id && id !== milestoneId && validIds.has(id)
+		);
+
+		const all = await db
+			.select({
+				milestoneId: milestoneDependency.milestoneId,
+				dependsOnId: milestoneDependency.dependsOnId
+			})
+			.from(milestoneDependency)
+			.innerJoin(milestone, eq(milestoneDependency.milestoneId, milestone.id))
+			.where(eq(milestone.projectId, params.id));
+		const edges = new Map<string, string[]>();
+		for (const e of all)
+			if (e.milestoneId !== milestoneId)
+				edges.set(e.milestoneId, [...(edges.get(e.milestoneId) ?? []), e.dependsOnId]);
+
+		const accepted: string[] = [];
+		for (const dep of desired) {
+			if (createsCycle(edges, milestoneId, dep)) continue;
+			accepted.push(dep);
+			edges.set(milestoneId, [...(edges.get(milestoneId) ?? []), dep]);
+		}
+
+		await db.delete(milestoneDependency).where(eq(milestoneDependency.milestoneId, milestoneId));
+		if (accepted.length)
+			await db
+				.insert(milestoneDependency)
+				.values(accepted.map((dependsOnId) => ({ milestoneId, dependsOnId })))
+				.onConflictDoNothing();
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
+	/** Reorder milestones from a comma-separated ordered id list (`ids`). */
+	reorderMilestone: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const ids = String((await request.formData()).get('ids') ?? '')
+			.split(',')
+			.map((s) => s.trim())
+			.filter(Boolean);
+		await reorderMilestones(params.id, ids);
+		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
 

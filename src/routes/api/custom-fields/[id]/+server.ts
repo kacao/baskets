@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { customField } from '$lib/server/db/schema';
 import { apiError, readJson } from '$lib/server/api';
@@ -35,10 +35,11 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		const name = typeof body.name === 'string' ? body.name.trim() : '';
 		if (!name) return apiError(400, 'name is required');
 		if (name.length > 60) return apiError(400, 'name too long (max 60)');
+		// uniqueness is per-(project, entity) — only collide with same-entity fields
 		const others = await db
 			.select({ id: customField.id, name: customField.name })
 			.from(customField)
-			.where(eq(customField.projectId, f.projectId));
+			.where(and(eq(customField.projectId, f.projectId), eq(customField.entity, f.entity)));
 		if (others.some((o) => o.id !== f.id && o.name.toLowerCase() === name.toLowerCase()))
 			return apiError(400, 'A field with that name already exists');
 		set.name = name;

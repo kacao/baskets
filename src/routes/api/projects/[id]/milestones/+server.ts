@@ -5,6 +5,7 @@ import { milestone, project } from '$lib/server/db/schema';
 import { apiError, readJson, optionalString, ApiValidationError } from '$lib/server/api';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject, canEditProject } from '$lib/server/permissions';
+import { reorderMilestones } from '$lib/server/milestones';
 import type { RequestHandler } from './$types';
 
 /** Parses an optional YYYY-MM-DD (or ISO) date field. Returns Date | null, or throws on bad input. */
@@ -82,4 +83,25 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 
 	broadcastProjectChange(params.id, locals.user.id);
 	return json({ milestone: created }, { status: 201 });
+};
+
+// Reorder this project's milestones: { order: [ids] } (foreign ids ignored, omitted ones
+// keep their relative order after the listed ones). Mirrors the reorderMilestone action.
+export const PATCH: RequestHandler = async ({ request, params, locals }) => {
+	if (!locals.user) return apiError(401, 'Unauthorized');
+
+	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
+	if (!proj) return apiError(404, 'Project not found');
+	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Project not found');
+	if (!(await canEditProject(locals.user, params.id)))
+		return apiError(403, 'No edit permission on this project');
+
+	const body = await readJson(request);
+	if (!body) return apiError(400, 'Invalid JSON body');
+	if (!Array.isArray(body.order) || !body.order.every((x) => typeof x === 'string'))
+		return apiError(400, 'order must be an array of milestone ids');
+
+	await reorderMilestones(params.id, body.order as string[]);
+	broadcastProjectChange(params.id, locals.user.id);
+	return json({ success: true });
 };
