@@ -8,6 +8,7 @@
 	import { categoryLabel } from '$lib/statuses';
 	import { t } from '$lib/i18n';
 	import { tooltip } from '$lib/tooltip';
+	import { sortable } from '$lib/sortable';
 
 	type Editable = {
 		id: string;
@@ -53,7 +54,6 @@
 		items = [...statuses];
 	});
 
-	let dragId = $state<string | null>(null);
 	let reorderForm = $state<HTMLFormElement | null>(null);
 	let reorderIds = $state('');
 
@@ -74,18 +74,17 @@
 		editColor = s.color ?? '#71717a';
 	}
 
-	function onDragOver(e: DragEvent, overId: string, cat: string) {
-		if (!dragId || dragId === overId) return;
-		const drag = items.find((i) => i.id === dragId);
-		if (!drag || drag.category !== cat) return; // reorder within a category only
-		e.preventDefault();
-		const without = items.filter((i) => i.id !== dragId);
-		const idx = without.findIndex((i) => i.id === overId);
-		without.splice(idx, 0, drag);
-		items = without;
-	}
-	function commitOrder() {
-		dragId = null;
+	// Pointer-based reorder (mouse + touch; src/lib/sortable.ts), one sortable per
+	// category → reordering is automatically constrained within a category. The new
+	// order of that category's custom ids is spliced back into the full `items` list.
+	function onReorderCat(orderedIds: string[]) {
+		const byId = new Map(items.map((i) => [i.id, i]));
+		const ordered = orderedIds
+			.map((id) => byId.get(id))
+			.filter((s): s is Editable => Boolean(s));
+		const set = new Set(orderedIds);
+		let qi = 0;
+		items = items.map((it) => (set.has(it.id) ? (ordered[qi++] ?? it) : it));
 		reorderIds = items.map((i) => i.id).join(',');
 		reorderForm?.requestSubmit();
 	}
@@ -135,7 +134,7 @@
 	{#each categories as c (c)}
 		{@const inh = inheritedIn(c)}
 		{@const cust = editableIn(c)}
-		<div class="cat">
+		<div class="cat" use:sortable={{ onReorder: onReorderCat, handle: '[data-sortable-handle]' }}>
 			<div class="cat-head">
 				<span class="cat-name">{categoryLabel(c)}</span>
 				<button
@@ -220,17 +219,8 @@
 						<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
 					</form>
 				{:else}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div
-						class="srow"
-						class:dragging={dragId === s.id}
-						draggable="true"
-						ondragstart={() => (dragId = s.id)}
-						ondragover={(e) => onDragOver(e, s.id, c)}
-						ondragend={() => (dragId = null)}
-						ondrop={commitOrder}
-					>
-						<span class="drag" use:tooltip={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
+					<div class="srow" data-sortable-id={s.id}>
+						<span class="drag" data-sortable-handle use:tooltip={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
 						<span class="ic">
 							{#if s.icon}<EntityIcon value={s.icon} size={16} />{:else}<span class="status-dot" style="--c: {s.color || 'var(--color-muted)'}" aria-hidden="true"></span>{/if}
 						</span>
@@ -342,9 +332,6 @@
 		flex-wrap: wrap;
 	}
 
-	.srow.dragging {
-		opacity: 0.4;
-	}
 
 	.drag {
 		display: inline-flex;

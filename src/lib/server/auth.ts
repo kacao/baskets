@@ -8,7 +8,11 @@ import * as schema from './db/schema';
 export const auth = betterAuth({
 	appName: 'Baskets',
 	secret: env.BETTER_AUTH_SECRET,
-	baseURL: env.BETTER_AUTH_URL ?? 'http://localhost:5173',
+	baseURL: env.BETTER_AUTH_URL || undefined,
+	trustedOrigins: (env.TRUSTED_ORIGINS ?? '')
+		.split(',')
+		.map((o) => o.trim())
+		.filter(Boolean),
 	advanced: {
 		useSecureCookies: process.env.NODE_ENV === 'production'
 	},

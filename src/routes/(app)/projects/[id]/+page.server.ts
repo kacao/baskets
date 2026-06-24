@@ -47,7 +47,7 @@ import {
 	listProjectCustomValues,
 	writeTaskCustomValues
 } from '$lib/server/customFields';
-import { decodeValue } from '$lib/customFields';
+import { decodeValue, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
 import {
 	accessibleWorkspaceIds,
 	canAccessProject,
@@ -286,6 +286,36 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		editableViews[v.id] = canEditProj || (await canEditView(locals.user, v.id));
 	}
 
+	// Project-entity rollup chip values (computed, never stored — aggregate a target
+	// number field over all the project's tasks). Mirrors the custom-fields page's
+	// projectRollupText so rollup fields can render as header chips.
+	const projectRollupText: Record<string, string> = {};
+	const projRollups = projectFields.filter((f) => f.type === 'rollup');
+	if (projRollups.length > 0) {
+		const [rollupTasks, rollupValues] = await Promise.all([
+			db.select({ id: task.id, parentId: task.parentId }).from(task).where(eq(task.projectId, params.id)),
+			db
+				.select({ taskId: taskCustomValue.taskId, fieldId: taskCustomValue.fieldId, value: taskCustomValue.value })
+				.from(taskCustomValue)
+				.innerJoin(task, eq(taskCustomValue.taskId, task.id))
+				.where(eq(task.projectId, params.id))
+		]);
+		const valueOf = (tid: string, fid: string) => {
+			const raw = rollupValues.find((v) => v.taskId === tid && v.fieldId === fid)?.value;
+			const n = raw == null ? null : Number(raw);
+			return n != null && Number.isFinite(n) ? n : null;
+		};
+		for (const f of projRollups) {
+			const cfg = { ...(f.config as unknown as RollupConfig), relation: 'task' as const };
+			const n = computeTaskRollup(cfg, '', { tasks: rollupTasks, taskDeps: [], valueOf });
+			const target =
+				customFields.find((t) => t.id === cfg.targetFieldId) ??
+				projectFields.find((t) => t.id === cfg.targetFieldId);
+			projectRollupText[f.id] =
+				target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
+		}
+	}
+
 	return {
 		project: proj,
 		tasks,
@@ -309,6 +339,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		projectFields,
 		projectFieldOptions,
 		projectCustomValues,
+		projectRollupText,
 		files,
 		templates,
 		perm: { admin, project: canEditProj, views: editableViews }
@@ -945,6 +976,52 @@ export const actions: Actions = {
 
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true, deleted: allowed.length };
+	},
+
+	/** Bulk add/remove one label across the selected tasks (labels are multi-value, so
+	 * this is a per-label toggle applied to the whole selection: `add=1` inserts it on
+	 * all, otherwise removes it from all). Mirrors `toggleTaskLabel`'s validation. */
+	bulkSetLabel: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+
+		const form = await request.formData();
+		const ids = [...new Set(form.getAll('ids').map(String).filter(Boolean))];
+		if (ids.length === 0) return fail(400, { message: 'No tasks selected' });
+		const labelId = String(form.get('labelId') ?? '');
+		if (!labelId) return fail(400, { message: 'Invalid label' });
+		const add = String(form.get('add') ?? '') === '1';
+
+		// label must be a workspace label of this project's workspace OR scoped to it
+		const [l] = await db.select().from(label).where(eq(label.id, labelId));
+		const [proj] = await db.select().from(project).where(eq(project.id, params.id));
+		const ok =
+			l &&
+			proj &&
+			((l.workspaceId !== null && l.workspaceId === proj.workspaceId) ||
+				(l.projectId !== null && l.projectId === params.id));
+		if (!ok) return fail(400, { message: 'Unknown label' });
+
+		const rows = await db.select().from(task).where(inArray(task.id, ids));
+		const allowed: string[] = [];
+		for (const t of rows) {
+			if (t.projectId !== params.id) continue;
+			if (await canEditTask(locals.user, t)) allowed.push(t.id);
+		}
+		if (allowed.length === 0) return fail(403, { message: 'No editable tasks selected' });
+
+		if (add) {
+			await db
+				.insert(taskLabel)
+				.values(allowed.map((taskId) => ({ taskId, labelId })))
+				.onConflictDoNothing();
+		} else {
+			await db
+				.delete(taskLabel)
+				.where(and(inArray(taskLabel.taskId, allowed), eq(taskLabel.labelId, labelId)));
+		}
+
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true, updated: allowed.length };
 	},
 
 

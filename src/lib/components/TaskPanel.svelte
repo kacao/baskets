@@ -288,6 +288,22 @@
 		subBusy = false;
 		subSel = [];
 	}
+	// Labels are multi-value: a per-label toggle over the whole selection. "All have it"
+	// → remove from all; otherwise → add to all. Keeps the selection so several labels
+	// can be toggled in a row (no close()).
+	const subAllHaveLabel = (labelId: string) =>
+		subSel.length > 0 && subSel.every((id) => labelsOf(id).some((x) => x!.id === labelId));
+	async function bulkSubLabel(labelId: string, add: boolean) {
+		if (!subSel.length) return;
+		subBusy = true;
+		const fd = new FormData();
+		for (const id of subSel) fd.append('ids', id);
+		fd.set('labelId', labelId);
+		fd.set('add', add ? '1' : '0');
+		await fetch(`${page.url.pathname}?/bulkSetLabel`, { method: 'POST', body: fd });
+		await invalidateAll();
+		subBusy = false;
+	}
 
 	// order stepper: − / + mutate the live input (clamped ≥ 0)
 	let orderInput = $state<HTMLInputElement | null>(null);
@@ -818,6 +834,20 @@
 							{/each}
 						{/snippet}
 					</Popover>
+					<!-- Labels (multi-value: each row toggles that label across the whole selection) -->
+					{#if labels.length > 0}
+						<Popover ariaLabel={$t('Set labels')}>
+							{#snippet trigger()}<span class="pill-val"><Icon name="label" size={12} /> {$t('Labels')}</span>{/snippet}
+							{#snippet panel()}
+								{#each labels as l (l.id)}
+									{@const allHave = subAllHaveLabel(l.id)}
+									<button class="opt" class:opt--on={allHave} aria-pressed={allHave} type="button" disabled={subBusy} onclick={() => bulkSubLabel(l.id, !allHave)}>
+										<LabelChip label={l} />
+									</button>
+								{/each}
+							{/snippet}
+						</Popover>
+					{/if}
 					<button class="sub-bulk-del" type="button" disabled={subBusy} onclick={bulkSubDelete}><Icon name="trash" size={12} /> {$t('Delete')}</button>
 					<button class="sub-bulk-clear" type="button" aria-label={$t('Clear selection')} onclick={() => (subSel = [])}><Icon name="xmark" size={12} /></button>
 				</div>

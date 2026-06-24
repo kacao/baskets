@@ -39,6 +39,7 @@
 	import { t } from '$lib/i18n';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { tooltip } from '$lib/tooltip';
+	import { longpress } from '$lib/longpress';
 
 	let { data, form } = $props();
 
@@ -414,19 +415,37 @@
 				return String(raw);
 		}
 	}
-	const projectFieldPills = $derived.by(() =>
-		data.projectFields
-			.filter((f) => f.type !== 'rollup')
+	// Header chips honor `project.chipFields` (an ordered id list set on the custom-fields
+	// page's "Show" bar): null/unset = all project fields in their natural order; a list =
+	// only those ids in that order. Rollup values are computed server-side (projectRollupText);
+	// empty-valued fields never render.
+	const chipFieldOrder = $derived.by(() => {
+		const raw = data.project.chipFields;
+		if (raw == null) return null;
+		try {
+			const arr = JSON.parse(raw);
+			return Array.isArray(arr) ? arr.map(String) : null;
+		} catch {
+			return null;
+		}
+	});
+	const projectFieldPills = $derived.by(() => {
+		const byId = new Map(data.projectFields.map((f) => [f.id, f]));
+		const ordered = chipFieldOrder
+			? chipFieldOrder.map((id) => byId.get(id)).filter((f): f is (typeof data.projectFields)[number] => Boolean(f))
+			: data.projectFields;
+		return ordered
 			.map((f) => ({
 				id: f.id,
 				name: f.name,
-				value: projectFieldDisplay(
-					f,
-					data.projectCustomValues.find((v) => v.fieldId === f.id)?.value
-				)
+				// rollup is computed server-side (never stored); others resolve their value
+				value:
+					f.type === 'rollup'
+						? (data.projectRollupText[f.id] ?? '')
+						: projectFieldDisplay(f, data.projectCustomValues.find((v) => v.fieldId === f.id)?.value)
 			}))
-			.filter((p) => p.value !== '')
-	);
+			.filter((p) => p.value !== '');
+	});
 
 	// Filters (config.filters: TaskFilters) — mirrors FilterBar's facets, but set from
 	// the Customize pane and persisted per view. Same keys/'_none' sentinels so the two
@@ -515,12 +534,15 @@
 		].filter((s) => s.labels.length > 0);
 	});
 
+	function openCtxAt(x: number, y: number, viewId: string) {
+		ctx = { id: viewId, x, y };
+		ctxSub = null;
+		ctxRenaming = false;
+	}
 	function openCtx(e: MouseEvent, viewId: string) {
 		e.preventDefault();
 		e.stopPropagation();
-		ctx = { id: viewId, x: e.clientX, y: e.clientY };
-		ctxSub = null;
-		ctxRenaming = false;
+		openCtxAt(e.clientX, e.clientY, viewId);
 	}
 
 	function closeMenus() {
@@ -832,6 +854,9 @@
 			}}
 			oncontextmenu={(e) => {
 				if (data.perm.views[v.id]) openCtx(e, v.id);
+			}}
+			use:longpress={(p) => {
+				if (data.perm.views[v.id]) openCtxAt(p.clientX, p.clientY, v.id);
 			}}
 			ondblclick={(e) => {
 				if (!data.perm.views[v.id]) return;
@@ -1922,6 +1947,8 @@
 		border-bottom: 2px solid transparent;
 		margin-bottom: -1px;
 		transition: color var(--dur) ease;
+		/* long-press opens the tab menu on touch — suppress the iOS link callout */
+		-webkit-touch-callout: none;
 	}
 
 	.view-tab:hover {

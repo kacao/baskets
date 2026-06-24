@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { milestone, task, user } from '$lib/server/db/schema';
+import { label, milestone, project, task, taskLabel, user } from '$lib/server/db/schema';
 import { apiError, readJson, PRIORITIES } from '$lib/server/api';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject, canEditTask } from '$lib/server/permissions';
@@ -135,7 +135,32 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 		}
 	}
 
-	if (Object.keys(updates).length === 0) return apiError(400, 'No fields to update');
+	// Labels are multi-value: `addLabelIds`/`removeLabelIds` add/remove those labels
+	// across the whole selection. Every referenced label must be available to the project
+	// (a workspace label of its workspace OR scoped to it) — mirrors `toggleTaskLabel`.
+	const addLabelIds = readIds(set.addLabelIds);
+	const removeLabelIds = readIds(set.removeLabelIds);
+	const labelChanges = addLabelIds.length > 0 || removeLabelIds.length > 0;
+	if (labelChanges) {
+		const refIds = [...new Set([...addLabelIds, ...removeLabelIds])];
+		const labelRows = await db.select().from(label).where(inArray(label.id, refIds));
+		const [proj] = await db.select().from(project).where(eq(project.id, projectId));
+		const valid = new Set(
+			labelRows
+				.filter(
+					(l) =>
+						proj &&
+						((l.workspaceId !== null && l.workspaceId === proj.workspaceId) ||
+							(l.projectId !== null && l.projectId === projectId))
+				)
+				.map((l) => l.id)
+		);
+		for (const id of refIds)
+			if (!valid.has(id)) return apiError(400, `label ${id} is not available to this project`);
+	}
+
+	if (Object.keys(updates).length === 0 && !labelChanges)
+		return apiError(400, 'No fields to update');
 
 	// re-parenting only applies to childless tasks (one nesting level)
 	if (updates.parentId !== undefined && updates.parentId !== null) {
@@ -146,10 +171,11 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 		if (kids.length) return apiError(400, 'cannot move a task that has sub-tasks');
 	}
 
-	await db
-		.update(task)
-		.set({ ...updates, updatedAt: new Date() })
-		.where(inArray(task.id, allowed));
+	if (Object.keys(updates).length > 0)
+		await db
+			.update(task)
+			.set({ ...updates, updatedAt: new Date() })
+			.where(inArray(task.id, allowed));
 
 	// Completing a task completes its sub-tasks (mirrors single setStatus cascade).
 	if (completedStatusId)
@@ -157,6 +183,16 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 			.update(task)
 			.set({ statusId: completedStatusId, updatedAt: new Date() })
 			.where(inArray(task.parentId, allowed));
+
+	if (addLabelIds.length)
+		await db
+			.insert(taskLabel)
+			.values(allowed.flatMap((taskId) => addLabelIds.map((labelId) => ({ taskId, labelId }))))
+			.onConflictDoNothing();
+	if (removeLabelIds.length)
+		await db
+			.delete(taskLabel)
+			.where(and(inArray(taskLabel.taskId, allowed), inArray(taskLabel.labelId, removeLabelIds)));
 
 	broadcastProjectChange(projectId, locals.user.id);
 	return json({ success: true, updated: allowed.length });

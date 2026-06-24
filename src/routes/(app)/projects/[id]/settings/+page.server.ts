@@ -326,6 +326,32 @@ export const actions: Actions = {
 		return { success: true };
 	},
 
+	// Which project-entity custom fields show as header chips, and in what order.
+	// Body: `fieldIds` = comma-separated ordered ids (empty string = show none). Stored
+	// as a JSON array on `project.chipFields`; null (never set) = show all with a value.
+	setProjectChipFields: async ({ request, params, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Not signed in' });
+		if (!(await canEditProject(locals.user, params.id)))
+			return fail(403, { message: 'No edit permission on this project' });
+
+		const raw = String((await request.formData()).get('fieldIds') ?? '');
+		const ids = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+		// keep only this project's own (entity='project') fields, deduped, in given order
+		const valid = new Set(
+			(await listProjectCustomFields(params.id))
+				.filter((f) => (f.entity ?? 'task') === 'project')
+				.map((f) => f.id)
+		);
+		const clean = [...new Set(ids)].filter((id) => valid.has(id));
+
+		await db
+			.update(project)
+			.set({ chipFields: JSON.stringify(clean), updatedAt: new Date() })
+			.where(eq(project.id, params.id));
+		broadcastProjectChange(params.id, locals.user.id);
+		return { success: true };
+	},
+
 	deleteProject: async ({ params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		if (!(await canEditProject(locals.user, params.id)))

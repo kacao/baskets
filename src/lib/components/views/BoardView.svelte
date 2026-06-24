@@ -9,6 +9,7 @@
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import { t } from '$lib/i18n';
 	import { tooltip } from '$lib/tooltip';
+	import { longpress } from '$lib/longpress';
 	import { fieldAggregations } from '$lib/customFields';
 
 	type Task = {
@@ -188,10 +189,14 @@
 
 	// Right-click column header → [Create task… | Hide]. Hide removes the status from config.statusIds.
 	let colMenu = $state<{ statusId: string; lane: string; x: number; y: number } | null>(null);
+	function openColMenuAt(x: number, y: number, lane: string, statusId: string) {
+		if (!canEditView) return;
+		colMenu = { statusId, lane, x, y };
+	}
 	function openColMenu(e: MouseEvent, lane: string, statusId: string) {
 		if (!canEditView) return;
 		e.preventDefault();
-		colMenu = { statusId, lane, x: e.clientX, y: e.clientY };
+		openColMenuAt(e.clientX, e.clientY, lane, statusId);
 	}
 	function lanePrefill(lane: string): Record<string, string> {
 		if (groupBy === 'status' || lane === '_none') return {};
@@ -236,23 +241,121 @@
 
 	const dragged = $derived(topTasks.find((t) => t.id === dragId) ?? null);
 
-	function onCardDragOver(e: DragEvent, lane: string, statusId: string, index: number) {
-		if (!dragId) return;
-		e.preventDefault();
-		e.stopPropagation();
-		const el = e.currentTarget as HTMLElement;
-		const before = e.offsetY < el.offsetHeight / 2;
-		over = { lane, statusId, index: before ? index : index + 1 };
+	// Pointer-based card drag (mouse + touch — native HTML5 DnD never fires on touch).
+	// Touch engages only after a short still HOLD so a quick swipe still scrolls the
+	// column; mouse engages on a small move. While dragging, the card follows the pointer
+	// and `document.elementFromPoint` hit-tests the column/slot under it to drive `over`
+	// (columns carry data-lane/data-status, slots carry data-index). Drop reuses onDrop().
+	let dragPointerId = -1;
+	let dragStartX = 0;
+	let dragStartY = 0;
+	let dragEngaged = false;
+	let dragCardEl: HTMLElement | null = null;
+	let pendingId = '';
+	let holdTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function cardPointerDown(e: PointerEvent, t: Task) {
+		if (!canEditTask(t)) return;
+		if (e.pointerType === 'mouse' && e.button !== 0) return;
+		if (dragPointerId !== -1) return; // a drag is already in progress (2nd finger)
+		dragCardEl = e.currentTarget as HTMLElement;
+		dragPointerId = e.pointerId;
+		dragStartX = e.clientX;
+		dragStartY = e.clientY;
+		dragEngaged = false;
+		pendingId = t.id;
+		window.addEventListener('pointermove', cardPointerMove, { passive: false });
+		window.addEventListener('pointerup', cardPointerUp);
+		window.addEventListener('pointercancel', cardPointerCancel);
+		if (e.pointerType === 'touch') holdTimer = setTimeout(() => engageDrag(), 220);
 	}
 
-	function onColumnDragOver(e: DragEvent, lane: string, statusId: string) {
-		if (!dragId) return;
+	function engageDrag() {
+		if (holdTimer) clearTimeout(holdTimer);
+		holdTimer = null;
+		dragEngaged = true;
+		dragId = pendingId;
+		try {
+			dragCardEl?.setPointerCapture(dragPointerId);
+		} catch {
+			/* best-effort */
+		}
+		document.body.style.userSelect = 'none';
+		navigator.vibrate?.(8);
+	}
+
+	function cardPointerMove(e: PointerEvent) {
+		if (e.pointerId !== dragPointerId) return;
+		const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
+		if (!dragEngaged) {
+			if (e.pointerType === 'touch') {
+				if (dist > 6) cleanupDrag(); // moved before the hold → a scroll; let it be
+				return;
+			}
+			if (dist > 6) engageDrag();
+			else return;
+		}
+		if (!dragEngaged) return;
 		e.preventDefault();
-		over = { lane, statusId, index: cellTasks(lane, statusId).length };
+		dragCardEl!.style.transform = `translate(${e.clientX - dragStartX}px, ${e.clientY - dragStartY}px)`;
+		const under = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+		const colEl = under?.closest<HTMLElement>('.column');
+		if (!colEl || colEl.dataset.lane == null) return;
+		const lane = colEl.dataset.lane;
+		const statusId = colEl.dataset.status!;
+		const slot = under?.closest<HTMLElement>('.bcard-slot');
+		if (slot && slot.dataset.index != null) {
+			const idx = Number(slot.dataset.index);
+			const r = slot.getBoundingClientRect();
+			over = { lane, statusId, index: e.clientY < r.top + r.height / 2 ? idx : idx + 1 };
+		} else {
+			over = { lane, statusId, index: cellTasks(lane, statusId).length };
+		}
+	}
+
+	function cardPointerUp(e: PointerEvent) {
+		if (e.pointerId !== dragPointerId) return;
+		const wasDragging = dragEngaged;
+		cleanupDrag();
+		if (wasDragging) void onDrop();
+	}
+
+	// UA-canceled gesture → abort without committing a move (and clear any drag state)
+	function cardPointerCancel(e: PointerEvent) {
+		if (e.pointerId !== dragPointerId) return;
+		cleanupDrag();
+		dragId = null;
+		over = null;
+	}
+
+	function cleanupDrag() {
+		if (holdTimer) clearTimeout(holdTimer);
+		holdTimer = null;
+		window.removeEventListener('pointermove', cardPointerMove);
+		window.removeEventListener('pointerup', cardPointerUp);
+		window.removeEventListener('pointercancel', cardPointerCancel);
+		if (dragCardEl) {
+			dragCardEl.style.transform = '';
+			try {
+				dragCardEl.releasePointerCapture(dragPointerId);
+			} catch {
+				/* ignore */
+			}
+		}
+		document.body.style.userSelect = '';
+		// a touch scroll (move before hold) abandons the drag without a dragId having been set
+		if (!dragEngaged) {
+			dragId = null;
+			over = null;
+		}
+		dragEngaged = false;
+		dragCardEl = null;
+		dragPointerId = -1;
 	}
 
 	async function onDrop() {
-		if (!dragId || !over || !dragged) return;
+		// a hold-and-release with no hit-test (over === null) still must clear drag state
+		if (!dragId || !over || !dragged) return reset();
 		const id = dragId;
 		const laneChanged = groupBy !== 'status' && !inLane(dragged, over.lane);
 		const statusChanged = dragged.statusId !== over.statusId;
@@ -343,11 +446,15 @@
 				class:drop-target={over?.lane === lane.key && over?.statusId === s.id}
 				role="list"
 				aria-label={$t('{name} column', { name: s.name })}
-				ondragover={(e) => onColumnDragOver(e, lane.key, s.id)}
-				ondrop={onDrop}
+				data-lane={lane.key}
+				data-status={s.id}
 			>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="col-head" oncontextmenu={(e) => openColMenu(e, lane.key, s.id)}>
+				<div
+					class="col-head"
+					oncontextmenu={(e) => openColMenu(e, lane.key, s.id)}
+					use:longpress={(p) => openColMenuAt(p.clientX, p.clientY, lane.key, s.id)}
+				>
 					<span class="col-glyph" class:done={s.category === 'completed'}>{glyph[s.category]}</span>
 					<span class="col-name">{s.name}</span>
 					<span class="col-count">{col.length}</span>
@@ -363,29 +470,22 @@
 				<div class="col-body">
 					{#each col as t, i (t.id)}
 						{@const editable = canEditTask(t)}
-						<div class="bcard-slot" animate:flip={{ duration: 220 }}>
+						<div class="bcard-slot" data-index={i} animate:flip={{ duration: 220 }}>
 						{#if over?.lane === lane.key && over?.statusId === s.id && over.index === i && dragId !== t.id}
 							<div class="drop-line"></div>
 						{/if}
-						<!-- Whole card is draggable AND clickable; an inner button would block
-						     Chrome from initiating drag, so the card itself is the control. -->
+						<!-- Whole card is the drag control AND clickable (pointer-based drag:
+						     touch + mouse). An inner button would swallow the pointerdown. -->
 						<div
 							class="bcard"
 							class:dragging={dragId === t.id}
+							class:grabbable={editable}
 							class:clickable={true}
 							class:selected={selectedId === t.id}
 							role="button"
 							tabindex="0"
 							aria-label={t.title}
-							draggable={editable}
-							ondragstart={(e) => {
-								dragId = t.id;
-								e.dataTransfer?.setData('text/plain', t.id);
-								if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-							}}
-							ondragend={reset}
-							ondragover={(e) => onCardDragOver(e, lane.key, s.id, i)}
-							ondrop={onDrop}
+							onpointerdown={(e) => cardPointerDown(e, t)}
 							onclick={() => !justDragged && openDetail(t)}
 							onkeydown={(e) => e.key === 'Enter' && openDetail(t)}
 						>
@@ -619,6 +719,8 @@
 		align-items: center;
 		gap: 6px;
 		padding: var(--sp-1) var(--sp-1) var(--sp-2);
+		/* long-press opens the column menu on touch — suppress the iOS callout */
+		-webkit-touch-callout: none;
 	}
 
 	.col-glyph {
@@ -685,11 +787,13 @@
 			transform var(--dur) ease;
 	}
 
-	.bcard[draggable='true'] {
+	.bcard.grabbable {
 		cursor: grab;
+		/* long-press drags on touch — suppress the iOS selection callout */
+		-webkit-touch-callout: none;
 	}
 
-	.bcard[draggable='true']:active {
+	.bcard.grabbable:active {
 		cursor: grabbing;
 	}
 
@@ -701,11 +805,16 @@
 		border-color: var(--color-fg);
 	}
 
+	/* dragging card follows the pointer (transform set inline by JS); raise it above the
+	   board and make it transparent to hit-testing so elementFromPoint finds the target. */
 	.bcard.dragging {
-		opacity: 0.4;
-		transform: scale(0.97) rotate(-1deg);
-		box-shadow: 0 6px 16px rgb(0 0 0 / 0.12);
+		opacity: 0.9;
+		position: relative;
+		z-index: 30;
+		pointer-events: none;
+		box-shadow: 0 8px 24px rgb(0 0 0 / 0.22);
 		cursor: grabbing;
+		transition: none;
 	}
 
 	.bcard-cover {

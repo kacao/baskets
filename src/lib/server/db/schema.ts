@@ -101,6 +101,9 @@ export const project = sqliteTable('project', {
 	icon: text('icon'), // emoji or `iconoir:<name>` shown beside the project name
 	// how statuses render across this project's views: text | icon | text-icon
 	statusDisplay: text('status_display').notNull().default('text'),
+	// ordered JSON array of project-entity custom-field ids to show as header chips;
+	// null = unset (show all project fields with a value); '[]' = show none
+	chipFields: text('chip_fields'),
 	pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
 	startDate: integer('start_date', { mode: 'timestamp' }),
 	dueDate: integer('due_date', { mode: 'timestamp' }),

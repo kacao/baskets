@@ -250,6 +250,38 @@ code,
 	transform: translateY(0);
 }
 
+/* Pointer-based reorder (src/lib/sortable.ts): mouse + touch drag-to-reorder. */
+.sortable-dragging {
+	opacity: 0.9;
+	box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+	cursor: grabbing;
+}
+
+.sortable-active {
+	cursor: grabbing;
+}
+
+.sortable-indicator {
+	flex: 0 0 auto;
+	align-self: stretch;
+	min-height: 3px;
+	border-radius: 2px;
+	margin: 1px 0;
+	background: var(--color-primary, var(--color-base-content));
+	pointer-events: none;
+}
+
+.sortable-indicator--x {
+	min-height: 0;
+	width: 3px;
+	margin: 0 1px;
+}
+
+/* drag handles: don't let a touch on the handle start a scroll (sortable drives it). */
+[data-sortable-handle] {
+	touch-action: none;
+}
+
 /* Reduced motion: kill transitions */
 @media (prefers-reduced-motion: reduce) {
 	*,

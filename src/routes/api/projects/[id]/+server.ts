@@ -141,6 +141,27 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		updates.statusDisplay = body.statusDisplay;
 	}
 
+	// Ordered list of project-entity custom-field ids shown as header chips. null clears
+	// (back to "show all with a value"); foreign/unknown ids are dropped.
+	if (body.chipFields !== undefined) {
+		if (body.chipFields === null) {
+			updates.chipFields = null;
+		} else if (
+			!Array.isArray(body.chipFields) ||
+			body.chipFields.some((x) => typeof x !== 'string')
+		) {
+			return apiError(400, 'chipFields must be an array of field ids or null');
+		} else {
+			const projFieldIds = new Set(
+				(await listProjectCustomFields(params.id))
+					.filter((f) => (f.entity ?? 'task') === 'project')
+					.map((f) => f.id)
+			);
+			const clean = [...new Set(body.chipFields as string[])].filter((id) => projFieldIds.has(id));
+			updates.chipFields = JSON.stringify(clean);
+		}
+	}
+
 	if (body.startDate !== undefined) {
 		if (body.startDate === null || body.startDate === '') {
 			updates.startDate = null;

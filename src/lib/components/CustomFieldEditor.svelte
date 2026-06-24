@@ -6,6 +6,7 @@
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import { tooltip } from '$lib/tooltip';
+	import { sortable } from '$lib/sortable';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
 	import {
@@ -103,27 +104,21 @@
 		return '';
 	}
 
-	// fields drag-reorder (mirror StatusEditor)
+	// fields drag-reorder (pointer-based — mouse + touch; src/lib/sortable.ts)
 	let items = $state<Field[]>([]);
 	$effect(() => {
 		items = [...fields];
 	});
 	const shownItems = $derived(items.filter((f) => (f.entity ?? 'task') === entityTab));
-	let dragId = $state<string | null>(null);
 	let reorderForm = $state<HTMLFormElement | null>(null);
 	let reorderIds = $state('');
-	function onDragOver(e: DragEvent, overId: string) {
-		if (!dragId || dragId === overId) return;
-		e.preventDefault();
-		const without = items.filter((i) => i.id !== dragId);
-		const idx = without.findIndex((i) => i.id === overId);
-		const drag = items.find((i) => i.id === dragId);
-		if (!drag) return;
-		without.splice(idx, 0, drag);
-		items = without;
-	}
-	function commitOrder() {
-		dragId = null;
+	// sortable reorders only the visible (current-tab) subset; splice that new order back
+	// into the shown slots of the full `items` list, leave the other tab's rows in place.
+	function onReorder(orderedShownIds: string[]) {
+		const byId = new Map(items.map((i) => [i.id, i]));
+		const ordered = orderedShownIds.map((id) => byId.get(id)).filter((f): f is Field => Boolean(f));
+		let qi = 0;
+		items = items.map((it) => ((it.entity ?? 'task') === entityTab ? (ordered[qi++] ?? it) : it));
 		reorderIds = items.map((i) => i.id).join(',');
 		reorderForm?.requestSubmit();
 	}
@@ -221,7 +216,7 @@
 	<button class="cf-tab" class:cf-tab--on={entityTab === 'project'} type="button" onclick={() => { entityTab = 'project'; creating = false; }}>{$t('Project')}</button>
 </div>
 
-<div class="cf-editor">
+<div class="cf-editor" use:sortable={{ onReorder, handle: '[data-sortable-handle]' }}>
 	{#each shownItems as f (f.id)}
 		<div class="cf">
 			{#if editingId === f.id}
@@ -248,17 +243,8 @@
 					<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
 				</form>
 			{:else}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="cf-row"
-					class:dragging={dragId === f.id}
-					draggable="true"
-					ondragstart={() => (dragId = f.id)}
-					ondragover={(e) => onDragOver(e, f.id)}
-					ondragend={() => (dragId = null)}
-					ondrop={commitOrder}
-				>
-					<span class="drag" use:tooltip={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
+				<div class="cf-row" data-sortable-id={f.id}>
+					<span class="drag" data-sortable-handle use:tooltip={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
 					<button class="name name-btn" type="button" onclick={() => openEdit(f)}>{f.name}</button>
 					<span class="badge">{$t(fieldTypeLabel(f.type))}</span>
 					{#if typeHint(f)}<span class="u-tiny u-muted">{typeHint(f)}</span>{/if}
@@ -454,9 +440,6 @@
 		flex-wrap: wrap;
 	}
 
-	.cf-row.dragging {
-		opacity: 0.4;
-	}
 
 	.drag {
 		display: inline-flex;
