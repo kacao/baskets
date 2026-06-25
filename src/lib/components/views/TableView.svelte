@@ -8,7 +8,7 @@
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
-	import { fieldAppliesTo, fieldAggregations, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
+	import { fieldAppliesTo, fieldAggregations, rollsUpToParent, rollupDisplayText } from '$lib/customFields';
 	import { sortTasks } from '$lib/taskSort';
 	import { selection } from '$lib/selection.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -125,25 +125,29 @@
 	};
 	// custom-field columns, keyed `cf:<fieldId>` — toggled the same way as COLS.
 	// rows here are top-level tasks, so only show fields that apply to them.
+	// Top-level columns: fields applying to top-level tasks, plus number rollup-to-parent
+	// fields (incl. `subtasks`-only ones) so a parent's computed rollup shows in the table.
 	const cfCols = $derived(
 		customFields
-			.filter((f) => fieldAppliesTo(f, false))
+			.filter((f) => fieldAppliesTo(f, false) || rollsUpToParent(f))
 			.map((f) => ({ key: `cf:${f.id}`, label: f.name, field: f }))
 	);
 	const cfOptions = (fieldId: string) => customFieldOptions.filter((o) => o.fieldId === fieldId);
 	const cfValue = (taskId: string, fieldId: string) =>
 		taskCustomValues.find((v) => v.taskId === taskId && v.fieldId === fieldId)?.value ?? null;
-	function rollupText(taskId: string, field: { type: string; config: Record<string, unknown> }): string | null {
-		if (field.type !== 'rollup') return null;
-		const cfg = field.config as unknown as RollupConfig;
+	function rollupText(taskId: string, field: { id: string; type: string; config: Record<string, unknown>; appliesTo?: string }): string | null {
 		const valueOf = (tid: string, fid: string) => {
 			const raw = cfValue(tid, fid);
 			const n = raw == null ? null : Number(raw);
 			return n != null && Number.isFinite(n) ? n : null;
 		};
-		const n = computeTaskRollup(cfg, taskId, { tasks: allTasks, taskDeps, valueOf });
-		const target = customFields.find((f) => f.id === cfg.targetFieldId);
-		return target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
+		return rollupDisplayText(field, taskId, {
+			tasks: allTasks,
+			taskDeps,
+			fields: customFields,
+			valueOf,
+			hasSubtasks: allTasks.some((t) => t.parentId === taskId)
+		});
 	}
 	const colCount = $derived(
 		4 + COLS.filter((k) => show(k)).length + cfCols.filter((c) => show(c.key)).length

@@ -165,11 +165,6 @@
 		font-size: 24px;
 	}
 
-	/* Topbar: hide the wordmark brand to leave room for actions. */
-	.topbar-brand {
-		display: none;
-	}
-
 	/* Tighter viewbar tab padding so more tabs are reachable per swipe. */
 	.viewbar .view-tab {
 		padding-left: var(--sp-1);
@@ -180,5 +175,116 @@
 	.side-pane .pane-body {
 		padding-left: var(--sp-2);
 		padding-right: var(--sp-2);
+	}
+}
+
+/* --------- Editor & settings forms: touch reachability + no overflow ----------
+   The custom-fields editor and project-settings pages pack dense inline rows and
+   HOVER-revealed action buttons. On a phone there is no hover (so those actions
+   were invisible/unreachable) and far less width (so inline rows overflowed).
+   These rules reveal the actions, give them a real tap area, and stack the dense
+   form controls. Everything is inside a mobile media query — desktop untouched. */
+@media (max-width: 720px) {
+	/* Hover-revealed row actions (edit / delete / save-template …) are unreachable
+	   on touch — force them visible and give a ~40px hit area. */
+	.icon-btn {
+		opacity: 1 !important;
+		min-width: 40px;
+		min-height: 40px;
+		justify-content: center;
+	}
+
+	/* Custom-field list row: wrap so a long name + the in-use count + the (now
+	   always-visible) action buttons drop to a second line instead of overflowing. */
+	.cf-row {
+		flex-wrap: wrap;
+	}
+
+	.cf-row .name-btn {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.cf-row .spacer {
+		flex-basis: 100%;
+		height: 0;
+	}
+
+	.cf-row .drag {
+		min-width: 36px;
+		min-height: 36px;
+		justify-content: center;
+	}
+
+	/* Inline create / edit / option forms: each input + select stacks full-width so
+	   2–3 native selects can't squeeze side by side off the edge. */
+	.cf-row--edit .name-in,
+	.cf-row--edit .cfg-in,
+	.cf-create .name-in,
+	.cf-create .cfg-in,
+	.opt--edit .input {
+		flex: 1 1 100%;
+		width: 100%;
+		min-width: 0;
+		max-width: 100%;
+	}
+
+	/* Admin grant form: stack the three pickers + Grant button. */
+	.grant-form {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.grant-form .select,
+	.grant-form .btn {
+		width: 100%;
+		min-width: 0;
+		flex: 0 0 auto;
+	}
+
+	/* Settings rows that are bare .u-flex (the Start/Due date pair, existing-grant
+	   rows) — let them wrap and let long grant badges break instead of overflowing. */
+	.date-row {
+		flex-wrap: wrap;
+	}
+
+	.date-row > .field {
+		flex: 1 1 100%;
+	}
+
+	.date-row input[type='date'] {
+		width: 100% !important;
+	}
+
+	.grant-row {
+		flex-wrap: wrap;
+	}
+
+	.grant-row .badge {
+		white-space: normal;
+		overflow-wrap: anywhere;
+		max-width: 100%;
+	}
+
+	/* Tap targets / overflow for the remaining small inline affordances. */
+	.cp-swatch {
+		min-width: 24px;
+		min-height: 24px;
+	}
+
+	.select--mini {
+		min-height: 36px;
+		min-width: 5.5rem;
+	}
+
+	.x-btn::before {
+		width: 40px;
+		height: 40px;
+	}
+
+	/* Native file picker: keep a long selected filename inside the card. */
+	input[type='file'].input {
+		width: 100% !important;
+		max-width: 100%;
 	}
 }

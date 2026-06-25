@@ -233,8 +233,10 @@
 				>
 					{#if menuOpen}<Icon name="xmark" size={20} />{:else}<Icon name="menu" size={20} />{/if}
 				</button>
-				<a href="/projects" class="wordmark topbar-brand">Baskets</a>
 			</div>
+			<!-- per-page header host: pages portal their header here (e.g. the project
+			     page lifts its title / "…" menu / pills / presence into this slot) -->
+			<div class="topbar-page" data-page-header></div>
 			<div class="u-flex">
 				{#if data.user?.role === 'admin'}
 					<span class="badge badge-neutral">{$t('admin')}</span>
@@ -306,20 +308,6 @@
 		height: 100vh;
 		overflow-y: auto;
 		background: var(--color-bg);
-	}
-
-	.wordmark {
-		font-family: var(--font-headline);
-		font-size: 18px;
-		font-weight: 700;
-		letter-spacing: var(--heading-tracking);
-		color: var(--color-fg);
-		text-decoration: none;
-		padding: 2px 0;
-	}
-
-	.topbar-brand {
-		display: none;
 	}
 
 	.ws-switch {
@@ -541,6 +529,20 @@
 		position: sticky;
 		top: 0;
 		z-index: 10;
+	}
+
+	/* center slot that pages portal their header into; empty (just flex space) on
+	   pages that don't set one, so brand stays left + user controls stay right */
+	.topbar-page {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
+	}
+
+	.topbar-page:empty {
+		display: none;
 	}
 
 	.hamburger {
@@ -773,10 +775,6 @@
 
 	@media (max-width: 720px) {
 		.hamburger {
-			display: block;
-		}
-
-		.topbar-brand {
 			display: block;
 		}
 

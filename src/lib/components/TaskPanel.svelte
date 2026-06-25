@@ -14,7 +14,8 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { tooltip } from '$lib/tooltip';
-	import { fieldAppliesTo, computeTaskRollup, formatNumber, buildTaskCfSearch, decodeValue, encodeIds, type RollupConfig } from '$lib/customFields';
+	import { fieldAppliesTo, buildTaskCfSearch, decodeValue, encodeIds, isMulti, rollsUpToParent, rollupDisplayText } from '$lib/customFields';
+	import { loadCollapsed, storeCollapsed } from '$lib/cfCollapse';
 	import { describeRecurrence } from '$lib/recurrence';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
@@ -132,7 +133,15 @@
 	const locationTitle = (id: string | null) => locations.find((l) => l.id === id)?.title ?? null;
 
 	// only fields that apply to this task's level (top-level vs sub-task)
-	const visibleCustomFields = $derived(customFields.filter((f) => fieldAppliesTo(f, !!task.parentId)));
+	// Show a field if it applies to this task's level, OR — for a parent task with
+	// sub-tasks — if it's a number field that rolls its sub-tasks up (computed).
+	const visibleCustomFields = $derived(
+		customFields.filter(
+			(f) =>
+				fieldAppliesTo(f, !!task.parentId) ||
+				(!task.parentId && subs.length > 0 && rollsUpToParent(f))
+		)
+	);
 	const cfValue = (fieldId: string) =>
 		taskCustomValues.find((v) => v.taskId === task.id && v.fieldId === fieldId)?.value ?? null;
 	const cfOptions = (fieldId: string) => customFieldOptions.filter((o) => o.fieldId === fieldId);
@@ -152,7 +161,24 @@
 	// A `task`-type custom field renders as a collapsible sub-task-style list of its
 	// linked tasks (same block UI + editable pills). Membership edits post the cf
 	// value (cf_<id>) to patchTask, like CustomFieldValue does.
+	// Collapse state for multi-value fields, keyed by field id, scoped to this task
+	// (persisted). Multi fields DEFAULT collapsed; non-multi fields are never seeded
+	// here (always expanded). Re-seeded from storage whenever the open task changes.
+	const SUBTASKS_KEY = '__subtasks'; // reserved cfCollapsed key for the Sub-tasks section
 	let cfCollapsed = $state<Record<string, boolean>>({});
+	$effect(() => {
+		const scope = task.id;
+		const next: Record<string, boolean> = {};
+		for (const f of customFields) if (isMulti(f)) next[f.id] = loadCollapsed(scope, f.id, true);
+		// Sub-tasks section: same persistence mechanism, but DEFAULT EXPANDED.
+		next[SUBTASKS_KEY] = loadCollapsed(scope, SUBTASKS_KEY, false);
+		cfCollapsed = next;
+	});
+	function toggleCfCollapsed(fieldId: string) {
+		const v = !cfCollapsed[fieldId];
+		cfCollapsed[fieldId] = v;
+		storeCollapsed(task.id, fieldId, v);
+	}
 	let cfAddQuery = $state('');
 	const cfIds = (field: { id: string; type: string }): string[] => {
 		const d = decodeValue(field, cfValue(field.id));
@@ -175,18 +201,16 @@
 		);
 	};
 
-	// Rollup fields are computed (aggregate a target field over related tasks).
-	function rollupText(field: { type: string; config: Record<string, unknown> }): string | null {
-		if (field.type !== 'rollup') return null;
-		const cfg = field.config as unknown as RollupConfig;
+	// Computed rollup text: the rollup *type* (aggregate a target field over related
+	// tasks), or a number rollup-to-parent field on a parent task (aggregate the
+	// field over this task's direct sub-tasks). Null = render the field normally.
+	function rollupText(field: { id: string; type: string; config: Record<string, unknown>; appliesTo?: string }): string | null {
 		const valueOf = (tid: string, fid: string) => {
 			const raw = taskCustomValues.find((x) => x.taskId === tid && x.fieldId === fid)?.value;
 			const n = raw == null ? null : Number(raw);
 			return n != null && Number.isFinite(n) ? n : null;
 		};
-		const n = computeTaskRollup(cfg, task.id, { tasks, taskDeps, valueOf });
-		const target = customFields.find((f) => f.id === cfg.targetFieldId);
-		return target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
+		return rollupDisplayText(field, task.id, { tasks, taskDeps, fields: customFields, valueOf, hasSubtasks: subs.length > 0 });
 	}
 	const taskFiles = $derived(files.filter((f) => f.taskId === task.id));
 
@@ -326,8 +350,10 @@
 		</button>
 	{/if}
 	{#if editable}
-		<!-- Title — full width, auto-save on blur -->
-		<form method="POST" action="?/patchTask" use:enhance class="field">
+		<!-- Title — full width, auto-save on blur. reset:false: the input's value is
+		     set as a property (value={task.title}), so a default form.reset() would
+		     wipe it to its empty defaultValue on a client-rendered pane. -->
+		<form method="POST" action="?/patchTask" use:enhance={() => async ({ update }) => update({ reset: false })} class="field">
 			<input type="hidden" name="id" value={task.id} />
 			<input
 				name="title"
@@ -715,63 +741,15 @@
 		{/if}
 	{/if}
 
-	{#if visibleCustomFields.length > 0}
-		<div class="section" style="display: flex; flex-direction: column; gap: 8px;">
-			{#each visibleCustomFields as f (f.id)}
-				{#if f.type === 'task'}
-					{@render taskCfList(f)}
-				{:else}
-					<CustomFieldValue
-						field={f}
-						options={cfOptions(f.id)}
-						value={cfValue(f.id)}
-						rollupText={rollupText(f)}
-						mode="pill"
-						taskId={task.id}
-						{users}
-						{locations}
-						{tasks}
-						taskSearch={taskCfSearch}
-						files={taskFiles}
-						canEdit={editable}
-					/>
-				{/if}
-			{/each}
-		</div>
-	{/if}
-
-	<div class="section">
-		<TaskAttachments taskId={task.id} {files} coverFileId={task.coverFileId ?? null} canEdit={editable} />
-	</div>
-
-	{#if editable && labels.length > 0}
-		<div class="section">
-			<span class="label">{$t('Labels')}</span>
-			<div class="chips-row">
-				{#each labels as l (l.id)}
-					{@const active = labelsOf(task.id).some((x) => x!.id === l.id)}
-					<form method="POST" action="?/toggleTaskLabel" use:enhance>
-						<input type="hidden" name="taskId" value={task.id} />
-						<input type="hidden" name="labelId" value={l.id} />
-						<button class="chip" class:chip--on={active} type="submit">{l.name}</button>
-					</form>
-				{/each}
-			</div>
-		</div>
-	{:else if labelsOf(task.id).length > 0}
-		<div class="section">
-			<span class="label">{$t('Labels')}</span>
-			<div class="chips-row">
-				{#each labelsOf(task.id) as l (l!.id)}
-					<LabelChip label={l!} />
-				{/each}
-			</div>
-		</div>
-	{/if}
-
 	{#if !task.parentId}
+		{@const subsOpen = !cfCollapsed[SUBTASKS_KEY]}
 		<div class="section">
-			<span class="label">{$t('Sub-tasks')}</span>
+			<button class="sub-toggle" type="button" aria-expanded={subsOpen} onclick={() => toggleCfCollapsed(SUBTASKS_KEY)}>
+				<Icon name={subsOpen ? 'nav-arrow-down' : 'nav-arrow-right'} size={14} />
+				<span class="label">{$t('Sub-tasks')}</span>
+				<span class="cf-task-count">{subs.length}</span>
+			</button>
+			{#if subsOpen}
 			{#if subSel.length > 0 && editable}
 				<div class="sub-bulk">
 					<span class="sub-bulk-count">{$t('{n} selected', { n: subSel.length })}</span>
@@ -954,6 +932,64 @@
 					</Popover>
 				</div>
 			{/if}
+			{/if}
+		</div>
+	{/if}
+
+	{#if visibleCustomFields.length > 0}
+		<div class="section" style="display: flex; flex-direction: column; gap: 8px;">
+			{#each visibleCustomFields as f (f.id)}
+				{#if f.type === 'task'}
+					{@render taskCfList(f)}
+				{:else}
+					<CustomFieldValue
+						field={f}
+						options={cfOptions(f.id)}
+						value={cfValue(f.id)}
+						rollupText={rollupText(f)}
+						mode="pill"
+						taskId={task.id}
+						{users}
+						{locations}
+						{tasks}
+						taskSearch={taskCfSearch}
+						files={taskFiles}
+						canEdit={editable}
+						collapsible={isMulti(f)}
+						collapsed={cfCollapsed[f.id] ?? false}
+						onToggleCollapse={() => toggleCfCollapsed(f.id)}
+					/>
+				{/if}
+			{/each}
+		</div>
+	{/if}
+
+	<div class="section">
+		<TaskAttachments taskId={task.id} {files} coverFileId={task.coverFileId ?? null} canEdit={editable} />
+	</div>
+
+	{#if editable && labels.length > 0}
+		<div class="section">
+			<span class="label">{$t('Labels')}</span>
+			<div class="chips-row">
+				{#each labels as l (l.id)}
+					{@const active = labelsOf(task.id).some((x) => x!.id === l.id)}
+					<form method="POST" action="?/toggleTaskLabel" use:enhance>
+						<input type="hidden" name="taskId" value={task.id} />
+						<input type="hidden" name="labelId" value={l.id} />
+						<button class="chip" class:chip--on={active} type="submit">{l.name}</button>
+					</form>
+				{/each}
+			</div>
+		</div>
+	{:else if labelsOf(task.id).length > 0}
+		<div class="section">
+			<span class="label">{$t('Labels')}</span>
+			<div class="chips-row">
+				{#each labelsOf(task.id) as l (l!.id)}
+					<LabelChip label={l!} />
+				{/each}
+			</div>
 		</div>
 	{/if}
 
@@ -1066,7 +1102,7 @@
 	{@const fmulti = field.config?.multi === true}
 	{@const open = !cfCollapsed[field.id]}
 	<div class="cf-task">
-		<button class="cf-task-head" type="button" onclick={() => (cfCollapsed[field.id] = open)}>
+		<button class="cf-task-head" type="button" onclick={() => toggleCfCollapsed(field.id)}>
 			<span class="label cf-task-name">{field.name}</span>
 			<span class="cf-task-count">{linked.length}</span>
 			<Icon name={open ? 'nav-arrow-down' : 'nav-arrow-right'} size={14} class="cf-task-chev" />
@@ -1501,6 +1537,30 @@
 		font-size: 12px;
 		color: var(--color-muted);
 		font-variant-numeric: tabular-nums;
+	}
+
+	/* Sub-tasks section collapse header (chevron + label + count) */
+	.sub-toggle {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		padding: 0;
+		text-align: left;
+		margin-bottom: var(--sp-1);
+		transition: color var(--dur-fast) ease;
+	}
+
+	.sub-toggle:hover {
+		color: var(--color-fg);
+	}
+
+	.sub-toggle .label {
+		margin: 0;
 	}
 
 	.sub-list {

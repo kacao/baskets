@@ -5,7 +5,7 @@
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import { t } from '$lib/i18n';
-	import { decodeValue, formatNumber, formatDate, type FieldConfig } from '$lib/customFields';
+	import { decodeValue, formatNumber, formatDate, rollsUpToParent, type FieldConfig } from '$lib/customFields';
 
 	type Option = { id: string; title: string; color: string | null; icon: string | null };
 	type FileRef = { id: string; filename: string; mimeType: string; size: number };
@@ -24,7 +24,10 @@
 		files = [],
 		canEdit = true,
 		taskSearch = () => '',
-		onUpload
+		onUpload,
+		collapsible = false,
+		collapsed = false,
+		onToggleCollapse
 	}: {
 		field: { id: string; name: string; type: string; config: FieldConfig };
 		options?: Option[];
@@ -40,8 +43,18 @@
 		canEdit?: boolean;
 		taskSearch?: (taskId: string) => string;
 		onUpload?: (fileId: string) => void;
+		// Collapsible header for multi-value fields (pill mode). State + persistence
+		// are owned by the container (TaskPanel / project custom-fields page).
+		collapsible?: boolean;
+		collapsed?: boolean;
+		onToggleCollapse?: () => void;
 	} = $props();
 
+	// Read-only computed value: the rollup *type*, OR a number field that rolls its
+	// sub-tasks up onto the parent (rollupText is non-null only on parent tasks).
+	const rollupReadonly = $derived(
+		field.type === 'rollup' || (rollsUpToParent(field) && rollupText != null)
+	);
 	const multi = $derived(field.config?.multi === true);
 	const isArrayType = $derived(['select', 'person', 'place', 'files', 'task'].includes(field.type));
 	// reference fields that benefit from an inline removable-chip layout (files keep
@@ -143,7 +156,7 @@
 
 <!-- read-only value display (cell + pill trigger) -->
 {#snippet display()}
-	{#if field.type === 'rollup'}
+	{#if rollupReadonly}
 		<span class="v num">{rollupText ?? '—'}</span>
 	{:else if !hasValue}
 		<span class="ph">—</span>
@@ -285,7 +298,7 @@
 {:else if mode === 'input'}
 	<div class="cf-input">
 		<span class="cf-label">{field.name}</span>
-		{#if field.type === 'rollup'}
+		{#if rollupReadonly}
 			<span class="pill-val pill-val--ro">{@render display()}</span>
 		{:else}
 			{@render editor(() => {})}
@@ -294,9 +307,18 @@
 	</div>
 {:else}
 	<!-- pill -->
-	<div class="cf-pill" class:cf-pill--multi={multiChips && canEdit}>
-		<span class="cf-label">{field.name}</span>
-		{#if canEdit && field.type !== 'rollup'}
+	<div class="cf-pill" class:cf-pill--collapsible={collapsible}>
+		{#if collapsible}
+			<button class="cf-label cf-head" type="button" aria-expanded={!collapsed} onclick={() => onToggleCollapse?.()}>
+				<Icon name={collapsed ? 'nav-arrow-right' : 'nav-arrow-down'} size={12} />
+				<span class="cf-head-name">{field.name}</span>
+				<span class="cf-count">{ids.length}</span>
+			</button>
+		{:else}
+			<span class="cf-label">{field.name}</span>
+		{/if}
+		{#if !collapsible || !collapsed}
+		{#if canEdit && !rollupReadonly}
 			{#if multiChips}
 				<!-- multi reference field: each value is a removable chip + an "+ Add" picker -->
 				<div class="cf-multi">
@@ -338,6 +360,7 @@
 			</form>
 		{:else}
 			<span class="pill-val pill-val--ro">{@render display()}</span>
+		{/if}
 		{/if}
 	</div>
 {/if}
@@ -424,13 +447,45 @@
 		border: 1px solid color-mix(in oklab, var(--c) 40%, transparent);
 	}
 
-	/* multi reference field: inline removable chips + an "Add" picker */
-	.cf-pill--multi {
-		align-items: flex-start;
+	/* collapsible multi field: header (chevron + name + count) over a stacked body */
+	.cf-pill--collapsible {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 4px;
 	}
 
-	.cf-pill--multi .cf-label {
-		padding-top: 4px;
+	.cf-head {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		width: 100%;
+		border: none;
+		background: none;
+		padding: 0;
+		cursor: pointer;
+		color: var(--color-muted);
+		font-family: inherit;
+		text-align: left;
+		transition: color var(--dur-fast) ease;
+	}
+
+	.cf-head:hover {
+		color: var(--color-fg);
+	}
+
+	.cf-head-name {
+		font-size: 12px;
+	}
+
+	.cf-count {
+		font-size: 11px;
+		font-variant-numeric: tabular-nums;
+		color: var(--color-muted);
+		background: var(--color-surface-muted);
+		border-radius: 999px;
+		padding: 0 6px;
+		min-width: 18px;
+		text-align: center;
 	}
 
 	.cf-multi {

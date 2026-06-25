@@ -53,7 +53,7 @@
 				rows="2">{data.project.description ?? ''}</textarea
 			>
 		</div>
-		<div class="u-flex" style="gap: var(--sp-4); margin-bottom: var(--sp-3);">
+		<div class="u-flex date-row" style="gap: var(--sp-4); margin-bottom: var(--sp-3);">
 			<div class="field" style="margin: 0;">
 				<label class="label" for="pstart">{$t('Start date')}</label>
 				<input
@@ -119,7 +119,7 @@
 	<h4 class="section-title">{$t('Edit grants')}</h4>
 	<div class="card section">
 		{#each data.grants as g (g.id)}
-			<div class="u-flex" style="margin-bottom: var(--sp-1);">
+			<div class="u-flex grant-row" style="margin-bottom: var(--sp-1);">
 				<span class="u-small">{userName(g.userId)}</span>
 				<span class="badge">{grantLabel(g)}</span>
 				<form method="POST" action="?/revokePermission" use:enhance>
