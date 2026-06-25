@@ -20,6 +20,7 @@
 		appliesToLabel,
 		ROLLUP_RELATIONS,
 		ROLLUP_FORMULAS,
+		rollupFormulaLabel,
 		type FieldConfig
 	} from '$lib/customFields';
 
@@ -164,7 +165,7 @@
 	<input type="hidden" name="color" {value} />
 {/snippet}
 
-{#snippet configFields(type: string, cfg: Record<string, any>)}
+{#snippet configFields(type: string, cfg: Record<string, any>, appliesTo: string = 'all', isTaskEntity: boolean = true)}
 	{#if type === 'number'}
 		<select class="select cfg-in" bind:value={cfg.numberFormat} aria-label={$t('Number format')}>
 			{#each NUMBER_FORMATS as f (f)}<option value={f}>{$t(NUMBER_FORMAT_LABELS[f])}</option>{/each}
@@ -174,6 +175,29 @@
 		{/if}
 		{#if cfg.numberFormat === 'custom'}
 			<input class="input cfg-in" bind:value={cfg.formatString} placeholder={$t('Google Sheets number format')} maxlength="80" />
+		{/if}
+		{#if isTaskEntity && appliesTo !== 'tasks'}
+			<!-- Roll up sub-task values onto the parent task's same field (computed). -->
+			<label class="cfg-check"><input type="checkbox" bind:checked={cfg.rollupToParent} /> {$t('Roll up to parent task')}</label>
+			{#if cfg.rollupToParent}
+				<Popover ariaLabel={$t('Rollup formula')}>
+					{#snippet trigger()}
+						<span class="cfg-pop">{$t(rollupFormulaLabel(cfg.rollupFormula ?? 'sum'))}<Icon name="nav-arrow-down" size={12} /></span>
+					{/snippet}
+					{#snippet panel(close)}
+						<div class="cfg-formula">
+							{#each ROLLUP_FORMULAS as [val, lbl] (val)}
+								<button
+									type="button"
+									class="cfg-formula-opt"
+									class:on={(cfg.rollupFormula ?? 'sum') === val}
+									onclick={() => { cfg.rollupFormula = val; close(); }}
+								>{$t(lbl)}</button>
+							{/each}
+						</div>
+					{/snippet}
+				</Popover>
+			{/if}
 		{/if}
 	{:else if type === 'date'}
 		<select class="select cfg-in" bind:value={cfg.dateFormat} aria-label={$t('Date format')}>
@@ -234,7 +258,7 @@
 					<input type="hidden" name="config" value={JSON.stringify(editConfig)} />
 					<input name="name" class="input name-in" bind:value={editName} required maxlength="60" />
 					<span class="badge">{$t(fieldTypeLabel(f.type))}</span>
-					{@render configFields(f.type, editConfig)}
+					{@render configFields(f.type, editConfig, editAppliesTo, (f.entity ?? 'task') === 'task')}
 					<select class="select cfg-in" name="appliesTo" bind:value={editAppliesTo} aria-label={$t('Applies to')}>
 						{#each APPLIES_TO as a (a)}<option value={a}>{$t(appliesToLabel(a))}</option>{/each}
 					</select>
@@ -354,7 +378,7 @@
 			</select>
 			<input type="hidden" name="config" value={JSON.stringify(newConfig)} />
 			<input type="hidden" name="entity" value={entityTab} />
-			{@render configFields(newType, newConfig)}
+			{@render configFields(newType, newConfig, newAppliesTo, entityTab === 'task')}
 			{#if entityTab === 'task'}
 				<select name="appliesTo" class="select cfg-in" bind:value={newAppliesTo} aria-label={$t('Applies to')}>
 					{#each APPLIES_TO as a (a)}<option value={a}>{$t(appliesToLabel(a))}</option>{/each}
@@ -484,6 +508,49 @@
 		gap: 4px;
 		font-size: 13px;
 		white-space: nowrap;
+	}
+
+	.cfg-pop {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 13px;
+		padding: 3px 8px;
+		border: 1px solid var(--color-base-300);
+		border-radius: var(--radius-field, 0.25rem);
+		color: var(--color-fg);
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	.cfg-formula {
+		display: flex;
+		flex-direction: column;
+		min-width: 140px;
+		padding: 4px;
+	}
+
+	.cfg-formula-opt {
+		display: flex;
+		align-items: center;
+		border: none;
+		background: none;
+		color: var(--color-fg);
+		font-size: 13px;
+		text-align: left;
+		padding: 5px 8px;
+		border-radius: var(--radius-field, 0.25rem);
+		cursor: pointer;
+		transition: background-color var(--dur-fast) ease;
+	}
+
+	.cfg-formula-opt:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.cfg-formula-opt.on {
+		font-weight: 600;
+		background: var(--color-surface-muted);
 	}
 
 	.spacer {

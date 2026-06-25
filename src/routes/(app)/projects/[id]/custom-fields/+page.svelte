@@ -7,7 +7,8 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import CustomFieldEditor from '$lib/components/CustomFieldEditor.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
-	import { computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
+	import { computeTaskRollup, formatNumber, isMulti, type RollupConfig } from '$lib/customFields';
+	import { loadCollapsed, storeCollapsed } from '$lib/cfCollapse';
 	import { t } from '$lib/i18n';
 	import type { ProjectSettingsData } from '../settings/+page.server';
 
@@ -26,6 +27,21 @@
 	}
 
 	let { data, form }: { data: ProjectSettingsData; form?: { message?: string } | null } = $props();
+
+	// Multi-value project fields default collapsed; state persists per project (ADR-045).
+	let cfCollapsed = $state<Record<string, boolean>>({});
+	$effect(() => {
+		const scope = data.project.id;
+		const next: Record<string, boolean> = {};
+		for (const f of data.customFields)
+			if (f.entity === 'project' && isMulti(f)) next[f.id] = loadCollapsed(scope, f.id, true);
+		cfCollapsed = next;
+	});
+	function toggleCfCollapsed(fieldId: string) {
+		const v = !cfCollapsed[fieldId];
+		cfCollapsed[fieldId] = v;
+		storeCollapsed(data.project.id, fieldId, v);
+	}
 
 	// --- "Show" bar: choose + order which project fields appear as header chips ---
 	// Candidates = the project's own (entity='project') fields, incl. rollup (its chip
@@ -84,7 +100,7 @@
 	<CustomFieldEditor fields={data.customFields} options={data.customFieldOptions} fieldTypes={data.fieldTypes} />
 </div>
 
-{#if data.customFields.some((f) => f.entity === 'project')}
+{#if chipCandidates.length > 0}
 	<!-- Project field values: the project's own (entity='project') custom fields -->
 	<h4 class="section-title">{$t('Project fields')}</h4>
 	<div class="card section">
@@ -92,7 +108,7 @@
 			{$t('Values for this project’s own custom fields.')}
 		</p>
 		<div class="pfields">
-			{#each data.customFields.filter((f) => f.entity === 'project') as f (f.id)}
+			{#each chipCandidates as f (f.id)}
 				<CustomFieldValue
 					field={f}
 					mode="pill"
@@ -103,6 +119,9 @@
 					options={data.customFieldOptions.filter((o) => o.fieldId === f.id)}
 					users={data.users}
 					locations={data.locations}
+					collapsible={isMulti(f)}
+					collapsed={cfCollapsed[f.id] ?? false}
+					onToggleCollapse={() => toggleCfCollapsed(f.id)}
 				/>
 			{/each}
 		</div>

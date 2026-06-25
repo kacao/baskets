@@ -70,6 +70,63 @@ export function rollupAggregate(formula: string, values: number[], relatedCount:
 
 export type RollupConfig = { relation: string; targetFieldId: string; formula: string };
 
+/** A number field that aggregates its sub-tasks' values onto the parent task's
+ *  own (same-name) field. Only meaningful for `all`/`subtasks` fields — never
+ *  `tasks`-only (a top-level-only field has no parent to roll up to). */
+export function rollsUpToParent(field: {
+	type: string;
+	config?: FieldConfig | null;
+	appliesTo?: string | null;
+}): boolean {
+	return (
+		field.type === 'number' &&
+		field.config?.rollupToParent === true &&
+		(field.appliesTo ?? 'all') !== 'tasks'
+	);
+}
+
+/** RollupConfig for a number rollup-to-parent field: aggregate the field over the
+ *  task's direct sub-tasks (the target is the field itself). */
+export function numberRollupConfig(field: { id: string; config?: FieldConfig | null }): RollupConfig {
+	return {
+		relation: 'sub-task',
+		targetFieldId: field.id,
+		formula: (field.config?.rollupFormula as string) || 'sum'
+	};
+}
+
+/**
+ * Display text for a rollup value on a task: the `rollup` *type* (aggregate a
+ * `targetFieldId` over related tasks), or a number rollup-to-parent field on a
+ * parent task (aggregate the field over its direct sub-tasks). Returns null when
+ * the field isn't a rollup for this task (render it normally). Shared by the
+ * task pane (TaskPanel) and the table cells (TableView).
+ */
+export function rollupDisplayText(
+	field: { id: string; type: string; config: FieldConfig; appliesTo?: string },
+	taskId: string,
+	ctx: {
+		tasks: { id: string; parentId: string | null }[];
+		taskDeps: { taskId: string; dependsOnId: string }[];
+		fields: { id: string; config: FieldConfig }[];
+		valueOf: (taskId: string, fieldId: string) => number | null;
+		hasSubtasks: boolean;
+	}
+): string | null {
+	if (field.type === 'rollup') {
+		const cfg = field.config as unknown as RollupConfig;
+		const n = computeTaskRollup(cfg, taskId, ctx);
+		const target = ctx.fields.find((f) => f.id === cfg.targetFieldId);
+		return target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
+	}
+	if (rollsUpToParent(field) && ctx.hasSubtasks) {
+		const cfg = numberRollupConfig(field);
+		const n = computeTaskRollup(cfg, taskId, ctx);
+		return cfg.formula === 'count' ? String(n) : formatNumber(n, field.config);
+	}
+	return null;
+}
+
 /**
  * Compute a rollup value for an owner task. `valueOf(taskId, fieldId)` returns the
  * numeric value of a target field on a related task (or null). Pure + client-safe.
@@ -147,7 +204,7 @@ export type CustomFieldDef = {
 export function defaultConfig(type: string): FieldConfig {
 	switch (type) {
 		case 'number':
-			return { numberFormat: 'number', currencyCode: 'USD', formatString: '' };
+			return { numberFormat: 'number', currencyCode: 'USD', formatString: '', rollupToParent: false, rollupFormula: 'sum' };
 		case 'select':
 			return { multi: false, displayOption: 'text' };
 		case 'date':
@@ -176,6 +233,14 @@ export function sanitizeConfig(type: string, raw: unknown): FieldConfig {
 			if (numberFormat === 'currency' || numberFormat === 'accounting' || numberFormat === 'financial')
 				out.currencyCode = typeof c.currencyCode === 'string' && c.currencyCode.trim() ? c.currencyCode.trim().toUpperCase().slice(0, 3) : 'USD';
 			if (numberFormat === 'custom') out.formatString = typeof c.formatString === 'string' ? c.formatString.slice(0, 80) : '';
+			if (c.rollupToParent === true) {
+				out.rollupToParent = true;
+				out.rollupFormula = pick(
+					c.rollupFormula,
+					ROLLUP_FORMULAS.map(([k]) => k) as unknown as readonly string[],
+					'sum'
+				);
+			}
 			return out;
 		}
 		case 'select':
@@ -291,7 +356,7 @@ export function formatNumber(n: number, config: FieldConfig): string {
  *  Returns one entry per still-existing number field, formatted for display. */
 export function fieldAggregations(
 	fieldIds: string[],
-	fields: { id: string; name: string; type: string; config: FieldConfig }[],
+	fields: { id: string; name: string; type: string; config: FieldConfig; appliesTo?: string }[],
 	tasks: { id: string }[],
 	values: { taskId: string; fieldId: string; value: string }[],
 	allTasks: { id: string; parentId: string | null }[] = []
@@ -300,13 +365,20 @@ export function fieldAggregations(
 	// Sum spans each group task AND its sub-tasks (sub-tasks carry their own values).
 	const taskIds = new Set(tasks.map((t) => t.id));
 	for (const t of allTasks) if (t.parentId && taskIds.has(t.parentId)) taskIds.add(t.id);
+	// Parent tasks (≥1 sub-task): for a rollup-to-parent field their displayed value is
+	// the computed aggregate of the (already-summed) sub-tasks, so skip any stale stored
+	// value on the parent to avoid double-counting it against those sub-task rows.
+	const parentIds = new Set<string>();
+	for (const t of allTasks) if (t.parentId) parentIds.add(t.parentId);
 	const out: { id: string; name: string; text: string }[] = [];
 	for (const id of fieldIds) {
 		const field = fields.find((f) => f.id === id && f.type === 'number');
 		if (!field) continue;
+		const skipParents = rollsUpToParent(field);
 		let sum = 0;
 		for (const v of values) {
 			if (v.fieldId !== id || !taskIds.has(v.taskId)) continue;
+			if (skipParents && parentIds.has(v.taskId)) continue;
 			const n = Number(v.value);
 			if (Number.isFinite(n)) sum += n;
 		}

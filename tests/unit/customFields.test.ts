@@ -9,6 +9,10 @@ import {
 	isMulti,
 	rollupAggregate,
 	computeTaskRollup,
+	rollsUpToParent,
+	numberRollupConfig,
+	rollupDisplayText,
+	fieldAggregations,
 	MULTI_CAPABLE
 } from '$lib/customFields';
 
@@ -59,7 +63,13 @@ describe('decodeValue', () => {
 
 describe('defaultConfig', () => {
 	it('builds a number default config', () => {
-		expect(defaultConfig('number')).toEqual({ numberFormat: 'number', currencyCode: 'USD', formatString: '' });
+		expect(defaultConfig('number')).toEqual({
+			numberFormat: 'number',
+			currencyCode: 'USD',
+			formatString: '',
+			rollupToParent: false,
+			rollupFormula: 'sum'
+		});
 	});
 
 	it('builds a select default config', () => {
@@ -313,5 +323,178 @@ describe('rollup', () => {
 			}
 		);
 		expect(n).toBe(15);
+	});
+});
+
+describe('number rollup-to-parent config', () => {
+	it('sanitizes rollupToParent + rollupFormula on a number field', () => {
+		expect(sanitizeConfig('number', { numberFormat: 'number', rollupToParent: true, rollupFormula: 'average' })).toEqual({
+			numberFormat: 'number',
+			rollupToParent: true,
+			rollupFormula: 'average'
+		});
+	});
+
+	it('defaults an invalid/blank rollupFormula to "sum" when rolling up', () => {
+		expect(sanitizeConfig('number', { numberFormat: 'number', rollupToParent: true, rollupFormula: 'bogus' })).toEqual({
+			numberFormat: 'number',
+			rollupToParent: true,
+			rollupFormula: 'sum'
+		});
+		expect(sanitizeConfig('number', { numberFormat: 'number', rollupToParent: true })).toEqual({
+			numberFormat: 'number',
+			rollupToParent: true,
+			rollupFormula: 'sum'
+		});
+	});
+
+	it('drops rollup keys when rollupToParent is not exactly true', () => {
+		expect(sanitizeConfig('number', { numberFormat: 'number', rollupToParent: false, rollupFormula: 'max' })).toEqual({
+			numberFormat: 'number'
+		});
+		// truthy-but-not-true must not enable it
+		expect(sanitizeConfig('number', { numberFormat: 'number', rollupToParent: 'yes' })).toEqual({
+			numberFormat: 'number'
+		});
+	});
+});
+
+describe('rollsUpToParent', () => {
+	it('is true only for a number field with rollupToParent and a non-"tasks" appliesTo', () => {
+		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'all' })).toBe(true);
+		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'subtasks' })).toBe(true);
+		// unset appliesTo defaults to 'all'
+		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true } })).toBe(true);
+	});
+
+	it('is false for a "tasks"-only field (no parent to roll up to)', () => {
+		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'tasks' })).toBe(false);
+	});
+
+	it('is false when rollupToParent is off or the type is not number', () => {
+		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: false }, appliesTo: 'all' })).toBe(false);
+		expect(rollsUpToParent({ type: 'number', config: {}, appliesTo: 'all' })).toBe(false);
+		expect(rollsUpToParent({ type: 'rollup', config: { rollupToParent: true }, appliesTo: 'all' })).toBe(false);
+		expect(rollsUpToParent({ type: 'text', config: { rollupToParent: true }, appliesTo: 'all' })).toBe(false);
+	});
+});
+
+describe('numberRollupConfig', () => {
+	it('targets the field itself over its direct sub-tasks', () => {
+		expect(numberRollupConfig({ id: 'f1', config: { rollupFormula: 'average' } })).toEqual({
+			relation: 'sub-task',
+			targetFieldId: 'f1',
+			formula: 'average'
+		});
+	});
+
+	it('defaults the formula to "sum" when unset', () => {
+		expect(numberRollupConfig({ id: 'f1', config: {} })).toEqual({
+			relation: 'sub-task',
+			targetFieldId: 'f1',
+			formula: 'sum'
+		});
+		expect(numberRollupConfig({ id: 'f1' }).formula).toBe('sum');
+	});
+
+	it('feeds computeTaskRollup to aggregate a number field over a task’s sub-tasks', () => {
+		const tasks = [
+			{ id: 'p', parentId: null },
+			{ id: 'a', parentId: 'p' },
+			{ id: 'b', parentId: 'p' }
+		];
+		const vals: Record<string, number> = { a: 3, b: 7 };
+		const cfg = numberRollupConfig({ id: 'hours', config: { rollupFormula: 'sum' } });
+		const n = computeTaskRollup(cfg, 'p', {
+			tasks,
+			taskDeps: [],
+			valueOf: (tid, fid) => (fid === 'hours' ? (vals[tid] ?? null) : null)
+		});
+		expect(n).toBe(10);
+	});
+});
+
+describe('fieldAggregations with rollup-to-parent', () => {
+	const field = { id: 'hours', name: 'Hours', type: 'number', config: { numberFormat: 'number' }, appliesTo: 'all' as const };
+	const rollupField = { ...field, config: { numberFormat: 'number', rollupToParent: true, rollupFormula: 'sum' } };
+	const allTasks = [
+		{ id: 'p', parentId: null },
+		{ id: 'a', parentId: 'p' },
+		{ id: 'b', parentId: 'p' }
+	];
+	// a stale stored value lives on the PARENT plus its two sub-tasks
+	const values = [
+		{ taskId: 'p', fieldId: 'hours', value: '100' },
+		{ taskId: 'a', fieldId: 'hours', value: '3' },
+		{ taskId: 'b', fieldId: 'hours', value: '7' }
+	];
+
+	it('sums the parent AND its sub-tasks for a plain number field', () => {
+		const out = fieldAggregations(['hours'], [field], [{ id: 'p' }], values, allTasks);
+		expect(out[0].text).toBe('110');
+	});
+
+	it('skips a parent’s stale stored value for a rollup-to-parent field (no double-count)', () => {
+		const out = fieldAggregations(['hours'], [rollupField], [{ id: 'p' }], values, allTasks);
+		// only the two sub-task values (3 + 7) — matches the parent cell’s computed rollup
+		expect(out[0].text).toBe('10');
+	});
+
+	it('still counts a childless top-level task’s own value for a rollup-to-parent field', () => {
+		const leaf = [{ id: 'leaf', parentId: null }];
+		const leafVals = [{ taskId: 'leaf', fieldId: 'hours', value: '42' }];
+		const out = fieldAggregations(['hours'], [rollupField], [{ id: 'leaf' }], leafVals, leaf);
+		expect(out[0].text).toBe('42');
+	});
+});
+
+describe('rollupDisplayText (shared rollup display path)', () => {
+	const tasks = [
+		{ id: 'p', parentId: null },
+		{ id: 'a', parentId: 'p' },
+		{ id: 'b', parentId: 'p' }
+	];
+	const vals: Record<string, Record<string, number>> = { a: { hours: 3 }, b: { hours: 7 } };
+	const valueOf = (tid: string, fid: string) => vals[tid]?.[fid] ?? null;
+	const ctxFor = (hasSubtasks: boolean, fields: { id: string; config: Record<string, unknown> }[] = []) => ({
+		tasks,
+		taskDeps: [] as { taskId: string; dependsOnId: string }[],
+		fields,
+		valueOf,
+		hasSubtasks
+	});
+
+	it('aggregates a rollup-TYPE field over its target (sum, formatted)', () => {
+		const hours = { id: 'hours', config: { numberFormat: 'number' } };
+		const rollup = {
+			id: 'r',
+			type: 'rollup',
+			config: { relation: 'sub-task', targetFieldId: 'hours', formula: 'sum' } as Record<string, unknown>
+		};
+		expect(rollupDisplayText(rollup, 'p', ctxFor(true, [hours]))).toBe('10');
+	});
+
+	it('counts related items for a rollup-TYPE count formula (no target needed)', () => {
+		const rollup = {
+			id: 'r',
+			type: 'rollup',
+			config: { relation: 'sub-task', targetFieldId: '', formula: 'count' } as Record<string, unknown>
+		};
+		expect(rollupDisplayText(rollup, 'p', ctxFor(true))).toBe('2');
+	});
+
+	it('rolls a number rollup-to-parent field up over the parent’s sub-tasks', () => {
+		const field = { id: 'hours', type: 'number', config: { rollupToParent: true, rollupFormula: 'sum' }, appliesTo: 'all' };
+		expect(rollupDisplayText(field, 'p', ctxFor(true))).toBe('10');
+	});
+
+	it('returns null for a rollup-to-parent field with no sub-tasks (renders normally)', () => {
+		const field = { id: 'hours', type: 'number', config: { rollupToParent: true, rollupFormula: 'sum' }, appliesTo: 'all' };
+		expect(rollupDisplayText(field, 'a', ctxFor(false))).toBeNull();
+	});
+
+	it('returns null for a plain (non-rollup) number field', () => {
+		const field = { id: 'hours', type: 'number', config: {}, appliesTo: 'all' };
+		expect(rollupDisplayText(field, 'p', ctxFor(true))).toBeNull();
 	});
 });

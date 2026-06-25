@@ -3,11 +3,11 @@
 	import { onDestroy, tick } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
-	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import { page } from '$app/state';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { slide } from 'svelte/transition';
 	import { popover } from '$lib/transitions';
+	import { portal } from '$lib/portal';
 	import { presence, subscribeProject, unsubscribeProject } from '$lib/realtime.svelte';
 	import SidePane from '$lib/components/SidePane.svelte';
 	import Popover from '$lib/components/Popover.svelte';
@@ -584,13 +584,11 @@
 
 <div class="proj-page">
 
-<p class="u-tiny" style="margin-bottom: var(--sp-2);">
-	<a href="/projects" class="back-link"><Icon name="arrow-left" size={12} /> {$t('Projects')}</a>
-</p>
-
-<div class="u-flex" style="margin-bottom: var(--sp-2); flex-wrap: wrap;">
+<!-- Project header — portaled up into the shell topbar ([data-page-header]) -->
+<div class="proj-topbar" use:portal={'[data-page-header]'}>
+	<a href="/projects" class="back-link" use:tooltip={$t('Projects')} aria-label={$t('Projects')}><Icon name="arrow-left" size={16} /></a>
 	<h2 class="proj-title">
-		{#if data.project.icon}<span class="proj-icon"><EntityIcon value={data.project.icon} size={22} /></span>{/if}<span class="proj-name">{data.project.name}</span>
+		<span class="proj-name">{data.project.name}</span>
 	</h2>
 	{#if data.project.pinned}
 		<span class="u-muted" use:tooltip={$t('Pinned')}><Icon name="star" size={14} /></span>
@@ -784,8 +782,20 @@
 			{/if}
 		</div>
 	{/if}
+	{#if projectFieldPills.length > 0 || dependsOn.length > 0}
+		<div class="topbar-pills">
+			{#each projectFieldPills as f (f.id)}
+				<span class="kv-pill">
+					<span class="kv-key">{f.name}</span>
+					<span class="kv-val">{f.value}</span>
+				</span>
+			{/each}
+			{#each dependsOn as p (p.id)}
+				<a class="badge" href="/projects/{p.id}" style="text-decoration: none;">{p.name}</a>
+			{/each}
+		</div>
+	{/if}
 	{#if others.length > 0}
-		<span style="flex: 1;"></span>
 		<div class="presence" aria-label={$t('People viewing')}>
 			{#each others as u (u.id)}
 				<span class="avatar" use:tooltip={u.name}>{initials(u.name)}</span>
@@ -794,22 +804,9 @@
 	{/if}
 </div>
 {#if data.project.description}
-	<p class="u-muted" style="margin-bottom: var(--sp-2); max-width: 65ch;">
+	<p class="u-muted" style="margin: var(--sp-2) 0 var(--sp-3); max-width: 65ch;">
 		{data.project.description}
 	</p>
-{/if}
-{#if projectFieldPills.length > 0 || dependsOn.length > 0}
-	<div class="chips-row" style="margin-bottom: var(--sp-3);">
-		{#each projectFieldPills as f (f.id)}
-			<span class="kv-pill">
-				<span class="kv-key">{f.name}</span>
-				<span class="kv-val">{f.value}</span>
-			</span>
-		{/each}
-		{#each dependsOn as p (p.id)}
-			<a class="badge" href="/projects/{p.id}" style="text-decoration: none;">{p.name}</a>
-		{/each}
-	</div>
 {/if}
 
 {#if form?.message}
@@ -1094,7 +1091,10 @@
 	<SidePane title={`${$t('Customize')} — ${activeView.name}`} onClose={() => (customizing = false)}>
 		<div class="field">
 			<label class="label" for="vname">{$t('View name')}</label>
-			<form method="POST" action="?/updateView" use:enhance>
+			<!-- reset:false: value={activeView.name} is set as a property, so a default
+			     form.reset() on submit would blank it to its empty defaultValue (same as
+			     the task title) — clearing the name on click-in / click-out. -->
+			<form method="POST" action="?/updateView" use:enhance={() => async ({ update }) => update({ reset: false })}>
 				<input type="hidden" name="id" value={activeView.id} />
 				<input
 					id="vname"
@@ -1554,6 +1554,58 @@
 </div>
 
 <style>
+	/* Project header, portaled into the shell topbar's center slot ([data-page-header]).
+	   Title (left, truncates) · pinned · "…" menu · pills (fill, scroll) · presence (right). */
+	.proj-topbar {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
+		min-width: 0;
+		flex: 1 1 auto;
+	}
+
+	.proj-topbar .proj-title {
+		font-size: 15px;
+		font-weight: 600;
+		margin: 0;
+		flex: 0 1 auto;
+		min-width: 3ch;
+		overflow: hidden;
+	}
+
+	.proj-topbar .proj-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* inline, horizontally-scrollable pill strip (hidden scrollbar) */
+	.topbar-pills {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+		flex: 1 1 auto;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.topbar-pills::-webkit-scrollbar {
+		display: none;
+	}
+
+	.proj-topbar .presence {
+		margin-left: auto;
+		flex: 0 0 auto;
+	}
+
+	/* slim screens: drop the pills, keep title + menu + presence */
+	@media (max-width: 768px) {
+		.topbar-pills {
+			display: none;
+		}
+	}
+
 	.menu-wrap {
 		position: relative;
 	}
@@ -1676,7 +1728,17 @@
 	.back-link {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
+		justify-content: center;
+		flex: 0 0 auto;
+		color: var(--color-muted);
+		border-radius: var(--radius-field, 0.25rem);
+		padding: 2px;
+		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+	}
+
+	.back-link:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
 	}
 
 	.proj-title {
@@ -1684,11 +1746,6 @@
 		align-items: center;
 		gap: var(--sp-1);
 		overflow-wrap: anywhere;
-	}
-
-	.proj-icon {
-		flex: 0 0 auto;
-		line-height: 1;
 	}
 
 	.proj-name {

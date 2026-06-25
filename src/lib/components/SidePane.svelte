@@ -3,6 +3,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { openPane, closePane } from '$lib/sidePaneRegistry';
+	import { portal } from '$lib/portal';
 	import Icon from '$lib/components/Icon.svelte';
 	import { t } from '$lib/i18n';
 
@@ -63,18 +64,6 @@
 		const host = document.querySelector('[data-pane-host]') as HTMLElement | null;
 		if (host) host.style.setProperty('--pane-w', `${w}px`);
 	});
-
-	// Render the pane as a sibling of the scrollable content, up at the app shell, so
-	// the content area keeps its own scrollbars. The node keeps its Svelte identity
-	// (props, transitions, teardown) — only its DOM parent changes.
-	function portal(node: HTMLElement, target = '[data-pane-host]') {
-		document.querySelector(target)?.appendChild(node);
-		return {
-			destroy() {
-				node.remove();
-			}
-		};
-	}
 
 	function startResize(e: PointerEvent) {
 		e.preventDefault();
