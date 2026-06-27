@@ -169,7 +169,7 @@
 		'actions'
 	]);
 	const COL_DEFAULTS: Record<string, number> = {
-		select: 36, title: 320, priority: 110, assignee: 140, milestone: 160, due: 120, labels: 160, actions: 44
+		select: 300, title: 320, priority: 110, assignee: 140, milestone: 160, due: 120, labels: 160, actions: 44
 	};
 	// status is a control column: its width fits the longest status pill in the current
 	// display mode (never frozen by a resize) — so the pill always fits and Title starts
@@ -190,8 +190,10 @@
 	const hasWidths = $derived(
 		resizing !== null || Object.keys(liveWidths).length > 0 || Object.keys(colWidths).length > 0
 	);
+	// saved width wins for every column; status falls back to its mode-derived width,
+	// the rest to their static default
 	const effW = (key: string) =>
-		key === 'status' ? statusColW : (liveWidths[key] ?? colWidths[key] ?? colDefault(key));
+		liveWidths[key] ?? colWidths[key] ?? (key === 'status' ? statusColW : colDefault(key));
 	const colStyle = (key: string) => (hasWidths ? `width:${effW(key)}px` : '');
 	// explicit table width = sum of column widths (fixed layout needs a definite
 	// width; max-content would re-size columns to content and ignore the colgroup)
@@ -220,7 +222,6 @@
 			window.removeEventListener('pointermove', onMove);
 			window.removeEventListener('pointerup', onUp);
 			const widths = { ...colWidths, ...liveWidths };
-			delete widths.status; // control column, width is mode-derived not persisted
 			resizing = null;
 			if (canEditView && viewId) {
 				const fd = new FormData();
@@ -394,9 +395,9 @@
 								selection.allSelected(orderedIds)
 									? selection.clear()
 									: selection.selectAll(orderedIds)}
-						/>
+						/>{@render rh('select')}
 					</th>
-					<th class="col-status">{$i18n('Status')}</th>
+					<th class="col-status">{$i18n('Status')}{@render rh('status')}</th>
 					<th class="col-title">{$i18n('Title')}{@render rh('title')}</th>
 					{#if show('priority')}<th>{$i18n('Priority')}{@render rh('priority')}</th>{/if}
 					{#if show('assignee')}<th>{$i18n('Assignee')}{@render rh('assignee')}</th>{/if}
@@ -787,7 +788,7 @@
 		text-align: left;
 		vertical-align: middle;
 		padding-left: var(--sp-3);
-		padding-right: 0;
+		padding-right: var(--sp-3);
 	}
 
 
@@ -954,6 +955,7 @@
 	   not clip — and must not render an ellipsis for their (empty) text content */
 	.table.cols-fixed :global(th.col-actions),
 	.table.cols-fixed :global(td.col-actions),
+	.table.cols-fixed :global(th.col-status),
 	.table.cols-fixed :global(td.col-status),
 	.table.cols-fixed :global(th.col-select),
 	.table.cols-fixed :global(td.col-select) {
@@ -977,9 +979,16 @@
 	}
 
 	.col-select {
-		width: 36px;
+		/* width = checkbox + a small left gutter: shrink to content + drop DaisyUI's
+		   1rem cell padding-inline (which otherwise made this column 3-4× the checkbox) */
+		width: 1%;
+		/* left padding matches the group chevron's (--sp-3) so the checkbox left edge
+		   lines up with the chevron; right padding dropped to keep the column tight */
+		padding-left: var(--sp-3);
+		padding-right: var(--sp-3);
+		margin-right: var(--sp-3);
 		white-space: nowrap;
-		text-align: center;
+		text-align: left;
 		vertical-align: middle;
 	}
 

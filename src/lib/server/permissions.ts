@@ -116,13 +116,6 @@ export async function canEditTask(
 	return canAccessProject(user, t.projectId);
 }
 
-export async function canEditTaskById(user: SessionUser, taskId: string) {
-	if (!user) return false;
-	const [t] = await db.select().from(task).where(eq(task.id, taskId));
-	if (!t) return false;
-	return canAccessProject(user, t.projectId);
-}
-
 /** Resource ids (project itself + its views + its tasks) the user holds grants on. */
 export async function listProjectGrants(projectId: string) {
 	const viewIds = (

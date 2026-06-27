@@ -1,20 +1,13 @@
 /* Print-friendly styles for project / table views (BASDEV-9).
  * Import once globally (see wiring) so any view prints cleanly. Hides chrome
- * (sidebars, toolbars, popovers, panes) and renders the task table as plain
- * paper-friendly rows. Mark a printable region with `.print-area` and anything
- * to drop with `.no-print`. */
+ * (sidebars, dialogs, panes, buttons) and renders the task table as plain
+ * paper-friendly rows. */
 
 @media print {
 	/* hide interactive / navigational chrome */
-	.no-print,
 	nav,
 	aside,
-	.app-sidebar,
-	.app-topbar,
-	.view-toolbar,
-	.toolbar,
 	[role='dialog'],
-	.popover,
 	.side-pane,
 	button,
 	.btn {
@@ -30,9 +23,7 @@
 		padding: 0 !important;
 	}
 
-	main,
-	.app-main,
-	.print-area {
+	main {
 		display: block !important;
 		overflow: visible !important;
 		width: auto !important;

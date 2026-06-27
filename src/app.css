@@ -182,13 +182,6 @@ code,
 	margin-top: var(--sp-1);
 }
 
-.field .error {
-	font-size: 12px;
-	font-weight: 500;
-	color: var(--color-error);
-	margin-top: var(--sp-1);
-}
-
 /* ============================ UTILITIES =========================== */
 
 .u-flex {

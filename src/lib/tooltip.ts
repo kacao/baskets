@@ -6,7 +6,7 @@
 // the OS tooltip never doubles up. See ADR: Cross-cutting (motion ≤200ms).
 
 type Placement = 'top' | 'bottom';
-export type TooltipOptions = string | { text: string; placement?: Placement; delay?: number };
+type TooltipOptions = string | { text: string; placement?: Placement; delay?: number };
 
 let tipEl: HTMLDivElement | null = null;
 let showTimer: ReturnType<typeof setTimeout> | null = null;

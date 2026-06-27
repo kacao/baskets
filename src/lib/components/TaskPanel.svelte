@@ -343,29 +343,35 @@
 	};
 </script>
 
-<SidePane {onClose} title={$t('Task details')} ariaLabel={$t('Task details')}>
+<SidePane {onClose} ariaLabel={$t('Task details')}>
+	{#snippet header()}
+		{#if editable}
+			<!-- Editable title IS the pane header — full width, borderless, auto-save on
+			     blur. reset:false: value is set as a property (value={task.title}), so a
+			     default form.reset() would wipe it to its empty defaultValue. -->
+			<form method="POST" action="?/patchTask" use:enhance={() => async ({ update }) => update({ reset: false })} class="title-head">
+				<input type="hidden" name="id" value={task.id} />
+				<input
+					name="title"
+					class="title-head-input"
+					value={task.title}
+					required
+					maxlength="240"
+					aria-label={$t('Title')}
+					onblur={(e) => e.currentTarget.form?.requestSubmit()}
+				/>
+			</form>
+		{:else}
+			<h3 class="title-head-input title-head-static">{task.title}</h3>
+		{/if}
+	{/snippet}
+
 	{#if parent}
 		<button class="parent-link" type="button" onclick={() => onSelectTask?.(parent.id)}>
 			<Icon name="nav-arrow-left" size={12} /> {parent.title}
 		</button>
 	{/if}
 	{#if editable}
-		<!-- Title — full width, auto-save on blur. reset:false: the input's value is
-		     set as a property (value={task.title}), so a default form.reset() would
-		     wipe it to its empty defaultValue on a client-rendered pane. -->
-		<form method="POST" action="?/patchTask" use:enhance={() => async ({ update }) => update({ reset: false })} class="field">
-			<input type="hidden" name="id" value={task.id} />
-			<input
-				name="title"
-				class="input title-input"
-				value={task.title}
-				required
-				maxlength="240"
-				aria-label={$t('Title')}
-				onblur={(e) => e.currentTarget.form?.requestSubmit()}
-			/>
-		</form>
-
 		<!-- Pills -->
 		<div class="pills-row">
 			<!-- Status -->
@@ -697,7 +703,6 @@
 		</form>
 
 	{:else}
-		<h3 style="margin-bottom: var(--sp-2); overflow-wrap: anywhere;">{task.title}</h3>
 		{#if task.description}
 			<p class="u-small" style="margin-bottom: var(--sp-3); white-space: pre-wrap;">
 				{task.description}
@@ -835,7 +840,7 @@
 					{#each subs as s (s.id)}
 						{@const sEdit = canEditTask(s)}
 						<div class="sub-item" class:is-done={cat(s.statusId) === 'completed'} class:sub-item--sel={subChecked(s.id)}>
-							<div class="sub-head">
+							<div class="sub-row">
 								{#if sEdit}
 									<input
 										class="sub-check"
@@ -845,6 +850,8 @@
 										onclick={() => toggleSub(s.id)}
 									/>
 								{/if}
+								<div class="sub-body">
+								<div class="sub-head">
 								<button class="sub-title-btn" type="button" onclick={() => onSelectTask?.(s.id)}>{s.title}</button>
 								<span class="spacer"></span>
 								{#if sEdit}
@@ -888,6 +895,9 @@
 								{@render subAssignee(s, sEdit)}
 								{@render subMilestone(s, sEdit)}
 								{@render subDue(s, sEdit)}
+								{@render subLabels(s, sEdit)}
+							</div>
+							</div>
 							</div>
 						</div>
 					{/each}
@@ -1281,10 +1291,57 @@
 	{/if}
 {/snippet}
 
+{#snippet subLabels(s: Task, canEdit: boolean)}
+	{@const sLabels = labelsOf(s.id)}
+	{#if canEdit && labels.length > 0}
+		<Popover ariaLabel={$t('Labels')} align="right">
+			{#snippet trigger()}
+				{#if sLabels.length > 0}
+					<span class="pill-labels">{#each sLabels as l (l!.id)}<LabelChip label={l!} />{/each}</span>
+				{:else}
+					<span class="pill-val pill-ph"><Icon name="label" size={12} /> {$t('Labels')}</span>
+				{/if}
+			{/snippet}
+			{#snippet panel()}
+				{#each labels as l (l.id)}
+					{@const active = sLabels.some((x) => x!.id === l.id)}
+					<form method="POST" action="?/toggleTaskLabel" use:enhance>
+						<input type="hidden" name="taskId" value={s.id} />
+						<input type="hidden" name="labelId" value={l.id} />
+						<button class="opt" class:opt--on={active} type="submit"><LabelChip label={l} /></button>
+					</form>
+				{/each}
+			{/snippet}
+		</Popover>
+	{:else if sLabels.length > 0}
+		<span class="pill-labels">{#each sLabels as l (l!.id)}<LabelChip label={l!} />{/each}</span>
+	{/if}
+{/snippet}
+
 <style>
-	.title-input {
+	/* title lives in the pane header: fills the width (high grow beats the pane's
+	   flex:1 spacer), no border, no focus ring */
+	.title-head {
+		flex: 50 1 0%;
+		min-width: 0;
+		margin: 0;
+	}
+	.title-head-input {
+		width: 100%;
+		margin: 0;
+		border: none;
+		background: none;
+		padding: 0;
+		font-family: inherit;
 		font-size: 16px;
 		font-weight: 600;
+		color: var(--color-fg);
+		overflow-wrap: anywhere;
+	}
+	.title-head-input:focus,
+	.title-head-input:focus-visible {
+		outline: none;
+		box-shadow: none;
 	}
 
 	.textarea {
@@ -1579,13 +1636,30 @@
 		border-top: none;
 	}
 
+	/* checkbox column + body column; body holds the title row and the pills so the
+	   pills line up with the title (not with the checkbox) */
+	.sub-row {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--sp-2);
+	}
+
+	.sub-body {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
 	.sub-head {
 		display: flex;
 		align-items: center;
 		gap: var(--sp-2);
 	}
 
-	/* property pills (incl. status) sit UNDER the title */
+	.spacer {
+		flex: 1 1 auto;
+	}
+
+	/* property pills (incl. status) sit UNDER the title, aligned to the title */
 	.sub-pills {
 		display: flex;
 		flex-wrap: wrap;
@@ -1594,9 +1668,17 @@
 		margin-top: 6px;
 	}
 
-	/* row checkbox: visible on row hover or when checked */
+	.pill-labels {
+		display: inline-flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px;
+	}
+
+	/* row checkbox: visible on row hover or when checked; nudged to sit on the title line */
 	.sub-check {
 		flex: 0 0 auto;
+		margin-top: 3px;
 		cursor: pointer;
 		opacity: 0;
 		transition: opacity var(--dur-fast) ease;

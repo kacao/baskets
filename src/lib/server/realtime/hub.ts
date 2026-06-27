@@ -25,10 +25,6 @@ function hub(): HubState {
 	return g.__basketsRealtime;
 }
 
-export function realtimeClients(): Set<RealtimeClient> {
-	return hub().clients;
-}
-
 /**
  * Fire-and-forget: tell everyone currently viewing `projectId` that its data
  * changed so their pages refetch (invalidate + refetch model). The actor is

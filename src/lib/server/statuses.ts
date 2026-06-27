@@ -19,8 +19,6 @@ const DEFAULT_STATUSES: {
 	{ id: 'status-canceled', name: 'Canceled', category: 'canceled', color: '#a1a1aa', icon: 'iconoir:xmark-circle' }
 ];
 
-export const DEFAULT_STATUS_ID = 'status-backlog';
-
 let ensured = false;
 
 /** Idempotent bootstrap: guarantees the five built-in statuses exist (with colors). */

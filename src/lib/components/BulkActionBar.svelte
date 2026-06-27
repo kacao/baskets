@@ -2,21 +2,26 @@
 	import { t as i18n } from '$lib/i18n';
 	import Icon from '$lib/components/Icon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
+	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { confirmDialog } from '$lib/confirm.svelte';
 
 	type Status = { id: string; name: string; color?: string | null };
 	type Named = { id: string; name: string };
+	type Label = { id: string; name: string; color?: string | null; icon?: string | null };
 
 	let {
 		count,
 		statuses = [],
 		users = [],
 		milestones = [],
+		labels = [],
 		canEdit = true,
 		onSetStatus,
 		onSetAssignee,
 		onSetMilestone,
 		onSetPriority,
+		labelOn,
+		onToggleLabel,
 		onDelete,
 		onClear
 	}: {
@@ -24,11 +29,16 @@
 		statuses?: Status[];
 		users?: Named[];
 		milestones?: Named[];
+		labels?: Label[];
 		canEdit?: boolean;
 		onSetStatus: (statusId: string) => void | Promise<void>;
 		onSetAssignee: (assigneeId: string | null) => void | Promise<void>;
 		onSetMilestone: (milestoneId: string | null) => void | Promise<void>;
 		onSetPriority: (priority: string) => void | Promise<void>;
+		/** true when ALL selected tasks already carry this label */
+		labelOn?: (labelId: string) => boolean;
+		/** add/remove a label across the whole selection (multi-value toggle) */
+		onToggleLabel?: (labelId: string, add: boolean) => void | Promise<void>;
 		onDelete: () => void | Promise<void>;
 		onClear: () => void;
 	} = $props();
@@ -137,6 +147,30 @@
 					{/snippet}
 				</Popover>
 
+				{#if labels.length > 0 && onToggleLabel}
+					<Popover ariaLabel={$i18n('Set labels')} up>
+						{#snippet trigger()}
+							<span class="bulk-trigger"><Icon name="label" size={14} />{$i18n('Labels')}</span>
+						{/snippet}
+						{#snippet panel()}
+							<div class="bulk-menu">
+								{#each labels as l (l.id)}
+									{@const allHave = labelOn?.(l.id) ?? false}
+									<button
+										class="bulk-opt"
+										class:bulk-opt--on={allHave}
+										aria-pressed={allHave}
+										disabled={busy}
+										onclick={() => run(() => onToggleLabel(l.id, !allHave))}
+									>
+										<LabelChip label={l} />
+									</button>
+								{/each}
+							</div>
+						{/snippet}
+					</Popover>
+				{/if}
+
 				<button class="bulk-trigger bulk-danger" disabled={busy} onclick={confirmDelete}>
 					<Icon name="trash" size={14} />{$i18n('Delete')}
 				</button>
@@ -237,6 +271,12 @@
 
 	.bulk-opt:hover {
 		background: var(--color-surface-muted);
+	}
+
+	/* label rows are a toggle: highlight when ALL selected tasks carry it */
+	.bulk-opt--on {
+		background: var(--color-surface-muted);
+		font-weight: 600;
 	}
 
 	.bulk-opt:disabled {

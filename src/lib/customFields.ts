@@ -53,8 +53,6 @@ export const ROLLUP_FORMULAS = [
 	['min', 'Min'],
 	['max', 'Max']
 ] as const;
-export const rollupRelationLabel = (v: string) =>
-	ROLLUP_RELATIONS.find(([k]) => k === v)?.[1] ?? v;
 export const rollupFormulaLabel = (v: string) => ROLLUP_FORMULAS.find(([k]) => k === v)?.[1] ?? v;
 
 /** Aggregate numeric values per formula. `count` ignores values (counts items). */
@@ -167,8 +165,7 @@ export const MULTI_CAPABLE: ReadonlySet<string> = new Set([
 
 // which tasks a field applies to (independent of type)
 export const APPLIES_TO = ['all', 'tasks', 'subtasks'] as const;
-export type AppliesTo = (typeof APPLIES_TO)[number];
-export const APPLIES_TO_LABELS: Record<string, string> = {
+const APPLIES_TO_LABELS: Record<string, string> = {
 	all: 'All tasks',
 	tasks: 'Tasks only',
 	subtasks: 'Sub-tasks only'

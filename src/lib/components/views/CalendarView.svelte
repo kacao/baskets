@@ -41,13 +41,9 @@
 		customFieldOptions = [],
 		taskCustomValues = [],
 		files = [],
-		config = {},
 		canEditTask,
 		statusDisplay = 'text',
 		templates = [],
-		viewId,
-		viewName = '',
-		canEditView = false,
 		onNewTask
 	}: {
 		tasks: Task[];
@@ -63,13 +59,9 @@
 		customFieldOptions?: CustomFieldOption[];
 		taskCustomValues?: { taskId: string; fieldId: string; value: string }[];
 		files?: FileRef[];
-		config?: Record<string, unknown>;
 		canEditTask: (t: { id: string; parentId: string | null }) => boolean;
 		statusDisplay?: 'text' | 'icon' | 'text-icon';
 		templates?: { id: string; name: string }[];
-		viewId?: string;
-		viewName?: string;
-		canEditView?: boolean;
 		onNewTask?: (prefill?: Record<string, string>) => void;
 	} = $props();
 

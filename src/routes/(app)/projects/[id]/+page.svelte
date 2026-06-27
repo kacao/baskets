@@ -1491,10 +1491,6 @@
 		customFieldOptions={data.customFieldOptions}
 		taskCustomValues={data.taskCustomValues}
 		files={data.files}
-		config={viewConfig}
-		viewId={activeView.id}
-		viewName={activeView.name}
-		canEditView={Boolean(activeView && data.perm.views[activeView.id])}
 		onNewTask={openNewTask}
 		{statusDisplay}
 		{canEditTask}
@@ -1538,11 +1534,15 @@
 		statuses={data.statuses}
 		users={data.users}
 		milestones={data.milestones}
+		labels={projectLabels}
 		canEdit={canEditActiveView}
 		onSetStatus={(statusId) => bulkSubmit('bulkPatchTasks', { statusId })}
 		onSetAssignee={(assigneeId) => bulkSubmit('bulkPatchTasks', { assigneeId: assigneeId ?? '' })}
 		onSetMilestone={(milestoneId) => bulkSubmit('bulkPatchTasks', { milestoneId: milestoneId ?? '' })}
 		onSetPriority={(priority) => bulkSubmit('bulkPatchTasks', { priority })}
+		labelOn={(labelId) =>
+			selection.size > 0 && selection.ids.every((id) => labelIdsOf(id).includes(labelId))}
+		onToggleLabel={(labelId, add) => bulkSubmit('bulkSetLabel', { labelId, add: add ? '1' : '0' })}
 		onDelete={async () => {
 			await bulkSubmit('bulkDeleteTasks', {});
 			selection.clear();
