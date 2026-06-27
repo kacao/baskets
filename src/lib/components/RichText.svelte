@@ -75,7 +75,7 @@
 					class="mention"
 					href="/api/files/{s.id}"
 					target="_blank"
-					rel="noopener"><Icon name={ICONS.file} size={11} />{label}</a
+					rel="noopener noreferrer"><Icon name={ICONS.file} size={11} />{label}</a
 				>{:else if s.kind === 'project' && !missing}<a class="mention" href="/projects/{s.id}"
 					><Icon name={ICONS.project} size={11} />{label}</a
 				>{:else}<span class="mention" class:missing use:tooltip={r.sub || undefined}

@@ -734,7 +734,7 @@ export const actions: Actions = {
 			});
 
 		if (set.description !== undefined)
-			notifyMentions({
+			void notifyMentions({
 				text: set.description,
 				prevText: existing.description,
 				actorId: locals.user.id,
@@ -783,6 +783,14 @@ export const actions: Actions = {
 		if (body.length > 10000) return fail(400, { message: 'Comment too long (max 10000)' });
 
 		await createComment(taskId, locals.user.id, body);
+		void notifyMentions({
+			text: body,
+			actorId: locals.user.id,
+			actorName: locals.user.name,
+			projectId: params.id,
+			taskId,
+			contextLabel: `a comment on "${existing.title}"`
+		});
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
@@ -805,6 +813,15 @@ export const actions: Actions = {
 		if (body.length > 10000) return fail(400, { message: 'Comment too long (max 10000)' });
 
 		await updateComment(commentId, body);
+		void notifyMentions({
+			text: body,
+			prevText: existing.body,
+			actorId: locals.user.id,
+			actorName: locals.user.name,
+			projectId: params.id,
+			taskId: existing.taskId,
+			contextLabel: 'a comment'
+		});
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},

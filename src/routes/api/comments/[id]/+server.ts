@@ -33,7 +33,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 	if (text.length > 10000) return apiError(400, 'body too long (max 10000)');
 
 	const updated = await updateComment(params.id, text);
-	notifyMentions({
+	void notifyMentions({
 		text,
 		prevText: existing.body,
 		actorId: locals.user.id,

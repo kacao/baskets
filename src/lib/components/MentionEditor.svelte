@@ -280,7 +280,14 @@
 
 	function insert(cand: Cand) {
 		const node = anchorNode;
-		if (!node || !node.parentNode) {
+		const token = buildToken(cand);
+		// anchor lost (e.g. a realtime re-render landed between an async create and
+		// here) — append the reference at the end rather than silently dropping it
+		if (!node || !node.isConnected || !node.parentNode) {
+			const next = value && !value.endsWith(' ') ? `${value} ${token} ` : `${value}${token} `;
+			value = next;
+			lastValue = next;
+			render();
 			closeMenu();
 			return;
 		}
