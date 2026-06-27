@@ -51,10 +51,13 @@
 	onDestroy(() => {
 		closePane(paneId);
 		// drop the host var on close (only here, not on every w change — removing it
-		// per-change flashed .content to full width and jerked the animation)
-		(document.querySelector('[data-pane-host]') as HTMLElement | null)?.style.removeProperty(
-			'--pane-w'
-		);
+		// per-change flashed .content to full width and jerked the animation).
+		// Guard `document`: onDestroy also runs during SSR (a full-page load of a
+		// ?task= deep-link renders + destroys the pane on the server).
+		if (typeof document !== 'undefined')
+			(document.querySelector('[data-pane-host]') as HTMLElement | null)?.style.removeProperty(
+				'--pane-w'
+			);
 	});
 
 	// Expose the live pane width on the shared portal host (an ancestor of BOTH

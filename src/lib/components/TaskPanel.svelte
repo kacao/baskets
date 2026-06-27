@@ -11,6 +11,8 @@
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
 	import TaskComments from '$lib/components/TaskComments.svelte';
 	import TaskAttachments from '$lib/components/TaskAttachments.svelte';
+	import MentionEditor from '$lib/components/MentionEditor.svelte';
+	import RichText from '$lib/components/RichText.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { tooltip } from '$lib/tooltip';
@@ -86,6 +88,25 @@
 
 	const editable = $derived(canEditTask(task));
 	const subs = $derived(tasks.filter((t) => t.parentId === task.id));
+
+	// "@" mention candidates: tasks/users/locations/files come from props; the
+	// visible-project list, current project id and project-edit flag come from the
+	// board page data (TaskPanel only ever renders on the project board route).
+	const mProjects = $derived((page.data.allProjects as { id: string; name: string }[]) ?? []);
+	const mPeople = $derived(
+		(page.data.users as { id: string; name: string | null; email?: string | null }[]) ?? users
+	);
+	const mProjectId = $derived((page.params as { id?: string }).id);
+	const mCanEditProject = $derived(
+		(page.data.perm as { project?: boolean } | undefined)?.project ?? false
+	);
+
+	// Description editor is controlled (MentionEditor inserts tokens); resync the
+	// draft whenever the open task or its saved description changes (after save/reload).
+	let descDraft = $state('');
+	$effect.pre(() => {
+		descDraft = task.description ?? '';
+	});
 
 	// Save-as-template footer control: a button that morphs into a search field.
 	// Typing filters the project's templates; clicking a result overwrites that
@@ -692,21 +713,39 @@
 			class="field"
 		>
 			<input type="hidden" name="id" value={task.id} />
-			<textarea
+			<MentionEditor
 				name="description"
 				class="textarea"
-				rows="5"
+				rows={5}
 				placeholder={$t('Add a description…')}
-				aria-label={$t('Description')}
-				onblur={(e) => e.currentTarget.form?.requestSubmit()}>{task.description ?? ''}</textarea
-			>
+				ariaLabel={$t('Description')}
+				bind:value={descDraft}
+				onblur={(e) => e.currentTarget.closest('form')?.requestSubmit()}
+				{onSelectTask}
+				{tasks}
+				{locations}
+				{files}
+				projects={mProjects}
+				people={mPeople}
+				projectId={mProjectId}
+				canEditProject={mCanEditProject}
+				excludeTaskId={task.id}
+			/>
 		</form>
 
 	{:else}
 		{#if task.description}
-			<p class="u-small" style="margin-bottom: var(--sp-3); white-space: pre-wrap;">
-				{task.description}
-			</p>
+			<div class="u-small" style="margin-bottom: var(--sp-3);">
+				<RichText
+					text={task.description}
+					{tasks}
+					{locations}
+					{files}
+					projects={mProjects}
+					people={mPeople}
+					{onSelectTask}
+				/>
+			</div>
 		{/if}
 		<div class="chips-row">
 			<StatusSelect taskId={task.id} statusId={task.statusId} {statuses} canEdit={false} display={statusDisplay} />
@@ -1003,7 +1042,7 @@
 		</div>
 	{/if}
 
-	<TaskComments taskId={task.id} />
+	<TaskComments taskId={task.id} {onSelectTask} />
 
 	<div class="section pane-footer">
 		{#if editable}
@@ -1342,10 +1381,6 @@
 	.title-head-input:focus-visible {
 		outline: none;
 		box-shadow: none;
-	}
-
-	.textarea {
-		width: 100%;
 	}
 
 	.pills-row {

@@ -24,6 +24,7 @@ import {
 } from '$lib/server/db/schema';
 import { dispatchEvent } from '$lib/server/integrations';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import { notifyMentions } from '$lib/server/mentions';
 import {
 	logActivity,
 	createComment,
@@ -730,6 +731,17 @@ export const actions: Actions = {
 			void logActivity(params.id, id, locals.user.id, 'parent', {
 				from: existing.parentId,
 				to: set.parentId
+			});
+
+		if (set.description !== undefined)
+			notifyMentions({
+				text: set.description,
+				prevText: existing.description,
+				actorId: locals.user.id,
+				actorName: locals.user.name,
+				projectId: params.id,
+				taskId: id,
+				contextLabel: `"${existing.title}"`
 			});
 
 		broadcastProjectChange(params.id, locals.user.id);

@@ -6,6 +6,7 @@ import { apiError, readJson } from '$lib/server/api';
 import { canAccessProject } from '$lib/server/permissions';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { createComment, listActivity, listComments } from '$lib/server/comments';
+import { notifyMentions } from '$lib/server/mentions';
 import type { RequestHandler } from './$types';
 
 /** GET /api/tasks/:id/comments — comments (oldest first) + task activity (newest first). */
@@ -42,6 +43,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (text.length > 10000) return apiError(400, 'body too long (max 10000)');
 
 	const created = await createComment(params.id, locals.user.id, text);
+	notifyMentions({
+		text,
+		actorId: locals.user.id,
+		actorName: locals.user.name,
+		projectId: found.projectId,
+		taskId: params.id,
+		contextLabel: `a comment on "${found.title}"`
+	});
 	broadcastProjectChange(found.projectId, locals.user.id);
 	return json({ comment: created }, { status: 201 });
 };

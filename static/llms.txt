@@ -487,7 +487,7 @@ Upload a file (multipart/form-data, NOT JSON).
 Download the file bytes (`404` if missing, inaccessible, or the bytes are no longer on disk). Sent with `X-Content-Type-Options: nosniff` + `Content-Security-Policy: sandbox`; raster images stream `inline`, everything else `attachment`.
 
 ### DELETE /api/files/{id}
-Delete a file (row + disk bytes) and strip its id from any task value referencing it. `200: { "success": true }` on delete; `404` if missing/inaccessible.
+Delete a file (row + disk bytes) and strip its id from any task OR project custom-field value referencing it. `200: { "success": true }` on delete; `404` if missing/inaccessible.
 
 ## Task attachments
 
@@ -501,6 +501,18 @@ List the files attached directly to a task (excludes custom-field files).
 Upload a file straight onto a task (multipart/form-data; part `file`). The project is derived from the task; max 10 MB (`413`); blocked executable/active-markup extensions rejected (`415`); same server-derived MIME as `/api/files`.
 - 201: `{ "file": { "id", "taskId", "fieldId" (null), "filename", "mimeType", "size" } }`. `400` if no `file` part or the file is empty; `401` if unauthenticated; `404` if the task is missing/inaccessible OR the caller lacks edit permission (this endpoint returns `404` in all those cases, never `403`).
 - Set a task's cover image from one of these via the `?/setTaskCover` form action (`id`, `coverFileId`; image of the same task; empty clears).
+
+## Project files
+
+The project Files page aggregates every file in a project — task attachments, custom-field uploads, and project-level files (rows with both `taskId` and `fieldId` null).
+
+### GET /api/projects/{id}/files
+List every file belonging to a project, newest first.
+- 200: `{ "files": [{ "id", "taskId", "fieldId", "filename", "mimeType", "size", "createdAt", "createdBy" }...] }` (the on-disk path is never exposed). `401` if unauthenticated; `404` if the project is inaccessible.
+
+### POST /api/projects/{id}/files
+Upload a project-level file not tied to a task or custom field (multipart/form-data; part `file`). Max 10 MB (`413`); blocked executable/active-markup extensions rejected (`415`); same server-derived MIME as `/api/files`.
+- 201: `{ "file": { "id", "filename", "mimeType", "size" } }`. `400` if no `file` part or the file is empty; `401` if unauthenticated; `404` if the project is inaccessible; `403` if accessible but the caller cannot edit the project.
 
 ## Comments
 
