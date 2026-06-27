@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { readFile, unlink } from 'node:fs/promises';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { file, taskCustomValue } from '$lib/server/db/schema';
+import { file, projectCustomValue, taskCustomValue } from '$lib/server/db/schema';
 import { apiError } from '$lib/server/api';
 import { canAccessProject } from '$lib/server/permissions';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
@@ -66,6 +66,42 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 					.update(taskCustomValue)
 					.set({ value: JSON.stringify(next) })
 					.where(and(eq(taskCustomValue.taskId, r.taskId), eq(taskCustomValue.fieldId, r.fieldId)));
+		}
+
+		// same for project-entity custom values referencing this field
+		const projRows = await db
+			.select()
+			.from(projectCustomValue)
+			.where(eq(projectCustomValue.fieldId, f.fieldId));
+		for (const r of projRows) {
+			let ids: string[] = [];
+			try {
+				const v = JSON.parse(r.value);
+				if (Array.isArray(v)) ids = v.map(String);
+			} catch {
+				continue;
+			}
+			if (!ids.includes(f.id)) continue;
+			const next = ids.filter((x) => x !== f.id);
+			if (next.length === 0)
+				await db
+					.delete(projectCustomValue)
+					.where(
+						and(
+							eq(projectCustomValue.projectId, r.projectId),
+							eq(projectCustomValue.fieldId, r.fieldId)
+						)
+					);
+			else
+				await db
+					.update(projectCustomValue)
+					.set({ value: JSON.stringify(next) })
+					.where(
+						and(
+							eq(projectCustomValue.projectId, r.projectId),
+							eq(projectCustomValue.fieldId, r.fieldId)
+						)
+					);
 		}
 	}
 

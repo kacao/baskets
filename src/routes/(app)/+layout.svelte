@@ -60,12 +60,14 @@
 
 	// Per-project collapsible menu → tasks view + project-settings sections.
 	const projectNav = [
+		{ label: 'Overview', icon: 'text-box', to: (id: string) => `/projects/${id}/overview` },
 		{ label: 'Tasks', icon: 'task-list', to: (id: string) => `/projects/${id}` },
 		{ label: 'Milestones', icon: 'triangle-flag', to: (id: string) => `/projects/${id}/milestones` },
 		{ label: 'Statuses', icon: 'circle', to: (id: string) => `/projects/${id}/statuses` },
 		{ label: 'Labels', icon: 'label', to: (id: string) => `/projects/${id}/labels` },
 		{ label: 'Custom fields', icon: 'input-field', to: (id: string) => `/projects/${id}/custom-fields` },
 		{ label: 'Locations', icon: 'map-pin', to: (id: string) => `/projects/${id}/locations` },
+		{ label: 'Files', icon: 'multiple-pages', to: (id: string) => `/projects/${id}/files` },
 		{ label: 'Settings', icon: 'settings', to: (id: string) => `/projects/${id}/settings` }
 	];
 

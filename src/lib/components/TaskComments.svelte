@@ -1,11 +1,28 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import Icon from '$lib/components/Icon.svelte';
+	import MentionEditor from '$lib/components/MentionEditor.svelte';
+	import RichText from '$lib/components/RichText.svelte';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
 	import { tooltip } from '$lib/tooltip';
 
-	let { taskId }: { taskId: string } = $props();
+	let { taskId, onSelectTask }: { taskId: string; onSelectTask?: (id: string) => void } = $props();
+
+	// "@" mention candidates resolve from the project board's page data.
+	const mTasks = $derived((page.data.tasks as { id: string; title: string }[]) ?? []);
+	const mUsers = $derived(
+		(page.data.users as { id: string; name: string | null; email?: string | null }[]) ?? []
+	);
+	const mLocations = $derived(
+		(page.data.locations as { id: string; title: string; address: string | null }[]) ?? []
+	);
+	const mFiles = $derived(
+		(page.data.files as { id: string; filename: string; mimeType: string }[]) ?? []
+	);
+	const mProjects = $derived((page.data.allProjects as { id: string; name: string }[]) ?? []);
+	const mProjectId = $derived((page.params as { id?: string }).id);
+	const mCanEdit = $derived((page.data.perm as { project?: boolean } | undefined)?.project ?? false);
 
 	type Comment = {
 		id: string;
@@ -225,13 +242,36 @@
 								{/if}
 							</div>
 							{#if editingId === item.id}
-								<textarea class="textarea" rows="3" bind:value={editDraft}></textarea>
+								<MentionEditor
+									class="textarea"
+									rows={3}
+									bind:value={editDraft}
+									{onSelectTask}
+									tasks={mTasks}
+									locations={mLocations}
+									files={mFiles}
+									projects={mProjects}
+									people={mUsers}
+									projectId={mProjectId}
+									canEditProject={mCanEdit}
+									excludeTaskId={taskId}
+								/>
 								<div class="edit-actions">
 									<button class="btn btn-sm" type="button" onclick={cancelEdit}>{$t('Cancel')}</button>
 									<button class="btn btn-sm btn-primary" type="button" onclick={() => saveEdit(item.id)}>{$t('Save')}</button>
 								</div>
 							{:else}
-								<p class="cmt-text">{item.body}</p>
+								<p class="cmt-text">
+									<RichText
+										text={item.body}
+										tasks={mTasks}
+										locations={mLocations}
+										files={mFiles}
+										projects={mProjects}
+										people={mUsers}
+										{onSelectTask}
+									/>
+								</p>
 							{/if}
 						</div>
 					</div>
@@ -252,16 +292,26 @@
 	{/if}
 
 	<form class="add" onsubmit={addComment}>
-		<textarea
+		<MentionEditor
 			class="textarea"
-			rows="2"
+			rows={2}
 			placeholder={$t('Add a comment…')}
-			aria-label={$t('Add a comment')}
+			ariaLabel={$t('Add a comment')}
 			bind:value={draft}
 			onkeydown={(e) => {
-				if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') e.currentTarget.form?.requestSubmit();
+				if ((e.metaKey || e.ctrlKey) && e.key === 'Enter')
+					e.currentTarget.closest('form')?.requestSubmit();
 			}}
-		></textarea>
+			{onSelectTask}
+			tasks={mTasks}
+			locations={mLocations}
+			files={mFiles}
+			projects={mProjects}
+			people={mUsers}
+			projectId={mProjectId}
+			canEditProject={mCanEdit}
+			excludeTaskId={taskId}
+		/>
 		<div class="add-actions">
 			<button class="btn btn-sm btn-primary" type="submit" disabled={!draft.trim() || submitting}>
 				{$t('Comment')}
@@ -391,10 +441,6 @@
 	.act-text strong {
 		color: var(--color-fg);
 		font-weight: 600;
-	}
-
-	.textarea {
-		width: 100%;
 	}
 
 	.edit-actions,

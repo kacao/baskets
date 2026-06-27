@@ -29,6 +29,7 @@ import {
 } from '$lib/server/permissions';
 import { decodeValue } from '$lib/customFields';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import { notifyMentions } from '$lib/server/mentions';
 import { parseIconValue } from '$lib/server/icons';
 import {
 	listProjectCustomStatuses,
@@ -312,6 +313,11 @@ export const actions: Actions = {
 
 		if (!name) return fail(400, { message: 'Project name is required' });
 
+		const [existing] = await db
+			.select({ description: project.description })
+			.from(project)
+			.where(eq(project.id, params.id));
+
 		await db
 			.update(project)
 			.set({
@@ -322,6 +328,16 @@ export const actions: Actions = {
 				updatedAt: new Date()
 			})
 			.where(eq(project.id, params.id));
+
+		notifyMentions({
+			text: description || null,
+			prevText: existing?.description,
+			actorId: locals.user.id,
+			actorName: locals.user.name,
+			projectId: params.id,
+			contextLabel: `the project "${name}"`
+		});
+		broadcastProjectChange(params.id, locals.user.id);
 
 		return { success: true };
 	},

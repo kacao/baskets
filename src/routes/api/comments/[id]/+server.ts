@@ -6,6 +6,7 @@ import { apiError, readJson } from '$lib/server/api';
 import { canAccessProject, isAdmin } from '$lib/server/permissions';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { deleteComment, getComment, updateComment } from '$lib/server/comments';
+import { notifyMentions } from '$lib/server/mentions';
 import type { RequestHandler } from './$types';
 
 /** PATCH /api/comments/:id — edit a comment (author or admin). */
@@ -32,6 +33,15 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 	if (text.length > 10000) return apiError(400, 'body too long (max 10000)');
 
 	const updated = await updateComment(params.id, text);
+	notifyMentions({
+		text,
+		prevText: existing.body,
+		actorId: locals.user.id,
+		actorName: locals.user.name,
+		projectId: t.projectId,
+		taskId: existing.taskId,
+		contextLabel: 'a comment'
+	});
 	broadcastProjectChange(t.projectId, locals.user.id);
 	return json({ comment: updated });
 };
