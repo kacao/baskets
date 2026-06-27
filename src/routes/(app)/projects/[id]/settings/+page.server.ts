@@ -308,8 +308,6 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();
 		const description = String(form.get('description') ?? '').trim();
-		const startRaw = String(form.get('startDate') ?? '').trim();
-		const dueRaw = String(form.get('dueDate') ?? '').trim();
 
 		if (!name) return fail(400, { message: 'Project name is required' });
 
@@ -317,21 +315,29 @@ export const actions: Actions = {
 			.select({ description: project.description })
 			.from(project)
 			.where(eq(project.id, params.id));
+		if (!existing) return fail(404, { message: 'Project not found' });
 
-		await db
-			.update(project)
-			.set({
-				name,
-				description: description || null,
-				startDate: startRaw ? new Date(startRaw + 'T00:00:00') : null,
-				dueDate: dueRaw ? new Date(dueRaw + 'T00:00:00') : null,
-				updatedAt: new Date()
-			})
-			.where(eq(project.id, params.id));
+		// patch-style: only touch start/due when the form actually carries them, so
+		// posting from the Overview page (name + description only) doesn't null the dates
+		const patch: Partial<typeof project.$inferInsert> = {
+			name,
+			description: description || null,
+			updatedAt: new Date()
+		};
+		if (form.has('startDate')) {
+			const raw = String(form.get('startDate') ?? '').trim();
+			patch.startDate = raw ? new Date(raw + 'T00:00:00') : null;
+		}
+		if (form.has('dueDate')) {
+			const raw = String(form.get('dueDate') ?? '').trim();
+			patch.dueDate = raw ? new Date(raw + 'T00:00:00') : null;
+		}
 
-		notifyMentions({
+		await db.update(project).set(patch).where(eq(project.id, params.id));
+
+		void notifyMentions({
 			text: description || null,
-			prevText: existing?.description,
+			prevText: existing.description,
 			actorId: locals.user.id,
 			actorName: locals.user.name,
 			projectId: params.id,

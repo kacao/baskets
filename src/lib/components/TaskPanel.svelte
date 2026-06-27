@@ -104,8 +104,14 @@
 	// Description editor is controlled (MentionEditor inserts tokens); resync the
 	// draft whenever the open task or its saved description changes (after save/reload).
 	let descDraft = $state('');
+	let descTaskId = '';
 	$effect.pre(() => {
-		descDraft = task.description ?? '';
+		// resync only when SWITCHING tasks — not on every task.description change, so a
+		// realtime invalidate mid-edit can't clobber the user's in-progress text
+		if (task.id !== descTaskId) {
+			descTaskId = task.id;
+			descDraft = task.description ?? '';
+		}
 	});
 
 	// Save-as-template footer control: a button that morphs into a search field.

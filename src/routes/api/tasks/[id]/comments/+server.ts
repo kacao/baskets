@@ -43,7 +43,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (text.length > 10000) return apiError(400, 'body too long (max 10000)');
 
 	const created = await createComment(params.id, locals.user.id, text);
-	notifyMentions({
+	void notifyMentions({
 		text,
 		actorId: locals.user.id,
 		actorName: locals.user.name,

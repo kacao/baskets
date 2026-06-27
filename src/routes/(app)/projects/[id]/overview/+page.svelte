@@ -15,11 +15,15 @@
 	// Local drafts that resync when the server data changes (after save / realtime).
 	let nameDraft = $state('');
 	let descDraft = $state('');
+	let syncedProjectId = '';
 	$effect.pre(() => {
-		nameDraft = data.project.name;
-	});
-	$effect.pre(() => {
-		descDraft = data.project.description ?? '';
+		// seed once per project — not on every data change, so a realtime invalidate
+		// mid-edit can't clobber the user's in-progress title/description
+		if (data.project.id !== syncedProjectId) {
+			syncedProjectId = data.project.id;
+			nameDraft = data.project.name;
+			descDraft = data.project.description ?? '';
+		}
 	});
 </script>
 
