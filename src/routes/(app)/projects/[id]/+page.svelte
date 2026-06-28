@@ -25,7 +25,6 @@
 	import FlowView from '$lib/components/views/FlowView.svelte';
 	import FilterBar from '$lib/components/FilterBar.svelte';
 	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
-	import RichText from '$lib/components/RichText.svelte';
 	import { filterTasks } from '$lib/taskFilter';
 	import { sortTasks, parseSortBy } from '$lib/taskSort';
 	import {
@@ -804,19 +803,6 @@
 		</div>
 	{/if}
 </div>
-{#if data.project.description}
-	<div class="u-muted" style="margin: var(--sp-2) 0 var(--sp-3); max-width: 65ch;">
-		<RichText
-			text={data.project.description}
-			tasks={data.tasks}
-			locations={data.locations}
-			files={data.files}
-			projects={data.allProjects}
-			people={data.users}
-		/>
-	</div>
-{/if}
-
 {#if form?.message}
 	<div class="alert alert-error" role="alert">{form.message}</div>
 {/if}

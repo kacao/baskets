@@ -42,7 +42,7 @@ Architecture decisions as a current-state digest — the **decision + why**, not
 
 ## Project page & editing UX (ADR-012/020/023/024/025/027/030/041/044)
 
-- **Project header portaled into the shell topbar (ADR-044)** via a shared `portal` action (extracted from SidePane) — a portaled node keeps its Svelte identity + scoped styles, only its DOM parent moves. Back-link/description/viewbar stay in `.content`; the redundant "Baskets" brand was removed.
+- **Project header portaled into the shell topbar (ADR-044)** via a shared `portal` action (extracted from SidePane) — a portaled node keeps its Svelte identity + scoped styles, only its DOM parent moves. Viewbar stays in `.content`; the redundant "Baskets" brand was removed. (The project description preview was later removed from the board page — it now lives only on the Overview page.)
 - **Project header** = title/icon/pin + a "…" editor menu with hover fly-outs (Create / Status / Icon / Labels / Milestones / Delete). Board column quick-add + a focused **New-task/New-milestone pane** are the creation affordances.
 - **New-task pane (ADR-027)** with a "Create more" toggle that carries status/milestone/assignee/due to the next task; group "+" prefills the grouping value.
 - **One shared SidePane** for the task pane, Customize, and Milestones; `use:portal` makes it an **in-flow flex sibling of `.content`** so opening it scrolls content rather than reflowing children. Resizable, persisted width; full-width overlay under 900px. **Exactly one pane open at a time** (registry).
