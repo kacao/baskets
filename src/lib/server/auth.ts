@@ -28,7 +28,20 @@ export const auth = betterAuth({
 	}),
 	emailAndPassword: {
 		enabled: true,
-		minPasswordLength: 8
+		minPasswordLength: 12
+	},
+	// Explicit session lifetime (ADR-048): 14-day expiry, refreshed at most once
+	// per active day — shorter than BetterAuth's ~30-day default.
+	session: {
+		expiresIn: 60 * 60 * 24 * 14,
+		updateAge: 60 * 60 * 24
+	},
+	// Make BetterAuth's rate limiting explicit (ADR-048). It is only enabled in
+	// production by default; keep that behaviour but document the window/max here.
+	rateLimit: {
+		enabled: process.env.NODE_ENV === 'production',
+		window: 60,
+		max: 100
 	},
 	plugins: [
 		twoFactor({

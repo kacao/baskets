@@ -13,7 +13,12 @@ import {
 	user,
 	workspace
 } from '$lib/server/db/schema';
-import { canEditWorkspace, isAdmin, listWorkspaceGrants } from '$lib/server/permissions';
+import {
+	canAccessWorkspace,
+	canEditWorkspace,
+	isAdmin,
+	listWorkspaceGrants
+} from '$lib/server/permissions';
 import { parseIconValue } from '$lib/server/icons';
 import {
 	listStatuses,
@@ -31,6 +36,9 @@ async function getWorkspaceOr404(id: string) {
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const ws = await getWorkspaceOr404(params.id);
+	// ADR-019 tiering: an inaccessible workspace must look identical to a missing
+	// one (404, no existence oracle) BEFORE the accessible-but-not-editable 403.
+	if (!(await canAccessWorkspace(locals.user, params.id))) error(404, 'Workspace not found');
 	if (!(await canEditWorkspace(locals.user, params.id)))
 		error(403, 'No edit permission on this workspace');
 

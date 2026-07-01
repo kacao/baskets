@@ -11,10 +11,12 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { twoFactor, admin } from 'better-auth/plugins';
 import * as schema from '../src/lib/server/db/schema.ts';
 
+// Passwords are read from the environment for real deployments; the fallbacks are
+// dev-only defaults (never use them in production — override via SEED_*_PASSWORD).
 const ADMIN_EMAIL = 'admin@baskets.local';
-const ADMIN_PASSWORD = 'admin-baskets-2026';
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'admin-baskets-2026';
 const DEMO_EMAIL = 'demo@baskets.local';
-const DEMO_PASSWORD = 'demo-baskets-2026';
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD ?? 'demo-baskets-2026';
 
 const sqlite = new Database(process.env.DATABASE_URL ?? './data/baskets.db');
 try {
@@ -39,7 +41,7 @@ const auth = betterAuth({
 			twoFactor: schema.twoFactor
 		}
 	}),
-	emailAndPassword: { enabled: true, minPasswordLength: 8 },
+	emailAndPassword: { enabled: true, minPasswordLength: 12 },
 	plugins: [twoFactor({ issuer: 'Baskets' }), admin()]
 });
 
