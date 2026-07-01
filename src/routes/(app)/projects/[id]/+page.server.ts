@@ -39,7 +39,15 @@ import {
 	instantiateTemplate,
 	buildPayloadFromTask
 } from '$lib/server/templates';
-import { reorderMilestones } from '$lib/server/milestones';
+import {
+	reorderMilestones,
+	createMilestone as createMilestoneService,
+	updateMilestoneById,
+	deleteMilestoneById,
+	addMilestoneDep as addMilestoneDepService,
+	setMilestoneDeps as setMilestoneDepsService,
+	removeMilestoneDep as removeMilestoneDepService
+} from '$lib/server/milestones';
 import {
 	listCustomFieldOptions,
 	listProjectCustomFields,
@@ -59,8 +67,14 @@ import {
 } from '$lib/server/permissions';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
 import { ICONOIR_NAMES } from '$lib/iconoirNames';
-import { VIEW_TYPES, type ViewType } from '$lib/server/projects';
 import { createsCycle } from '$lib/server/graph';
+import {
+	createView as createViewService,
+	duplicateView as duplicateViewService,
+	updateViewById,
+	reorderViews,
+	deleteViewById
+} from '$lib/server/views';
 import {
 	createTaskService,
 	setTaskStatusService,
@@ -858,54 +872,24 @@ export const actions: Actions = {
 	/** Adds a view of the given type (multiple views per type allowed, ADR-020). */
 	createView: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
 
-		const form = await request.formData();
-		const type = String(form.get('type') ?? '');
-
-		if (!VIEW_TYPES.includes(type as ViewType)) return fail(400, { message: 'Invalid view type' });
-
-		const existing = await db
-			.select({ name: view.name })
-			.from(view)
-			.where(eq(view.projectId, params.id));
-		const base = type[0].toUpperCase() + type.slice(1);
-		let name = base;
-		for (let n = 2; existing.some((v) => v.name === name); n++) name = `${base} ${n}`;
-
-		const now = new Date();
-		const id = crypto.randomUUID();
-		await db.insert(view).values({
-			id,
-			projectId: params.id,
-			name,
-			type,
-			config: '{}',
-			position: now.getTime(),
-			createdBy: locals.user.id,
-			createdAt: now,
-			updatedAt: now
-		});
-
-		broadcastProjectChange(params.id, locals.user.id);
-		return { success: true, viewId: id };
+		const type = String((await request.formData()).get('type') ?? '');
+		const res = await createViewService(params.id, { type }, locals.user, { broadcast: true });
+		if (!res.ok) return fail(res.status, { message: res.message });
+		return { success: true, viewId: res.data.id };
 	},
 
 	/** Re-enables a hidden view, keeping its config. */
 	unhideView: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-
-		const [v] = await db.select().from(view).where(eq(view.id, id));
-		if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
-		if (!(await canEditView(locals.user, id)))
-			return fail(403, { message: 'No edit permission on this view' });
-
-		await db.update(view).set({ hidden: false, updatedAt: new Date() }).where(eq(view.id, id));
-		broadcastProjectChange(params.id, locals.user.id);
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await updateViewById(id, { hidden: false }, locals.user, {
+			has: (key) => key === 'hidden',
+			owner: { projectId: params.id },
+			broadcast: true
+		});
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true, viewId: id };
 	},
 
@@ -914,57 +898,21 @@ export const actions: Actions = {
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-
-		const [v] = await db.select().from(view).where(eq(view.id, id));
-		if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
-
-		const existing = await db
-			.select({ name: view.name })
-			.from(view)
-			.where(eq(view.projectId, params.id));
-		let name = `${v.name} copy`;
-		for (let n = 2; existing.some((x) => x.name === name); n++) name = `${v.name} copy ${n}`;
-
-		const now = new Date();
-		const newId = crypto.randomUUID();
-		await db.insert(view).values({
-			id: newId,
-			projectId: params.id,
-			name,
-			type: v.type,
-			config: v.config,
-			position: v.position + 1,
-			createdBy: locals.user.id,
-			createdAt: now,
-			updatedAt: now
-		});
-
-		broadcastProjectChange(params.id, locals.user.id);
-		return { success: true, viewId: newId };
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await duplicateViewService(params.id, id, locals.user, { broadcast: true });
+		if (!res.ok) return fail(res.status, { message: res.message });
+		return { success: true, viewId: res.data.id };
 	},
 
 	deleteView: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-
-		const [v] = await db.select().from(view).where(eq(view.id, id));
-		if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
-		if (!(await canEditView(locals.user, id)))
-			return fail(403, { message: 'No edit permission on this view' });
-
-		const visible = await db
-			.select({ id: view.id })
-			.from(view)
-			.where(and(eq(view.projectId, params.id), eq(view.hidden, false)));
-		if (!v.hidden && visible.length <= 1)
-			return fail(400, { message: 'A project must keep at least one view' });
-
-		await db.delete(view).where(eq(view.id, id));
-		broadcastProjectChange(params.id, locals.user.id);
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await deleteViewById(id, locals.user, {
+			owner: { projectId: params.id },
+			broadcast: true
+		});
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -973,36 +921,14 @@ export const actions: Actions = {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
 		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const name = String(form.get('name') ?? '').trim();
 		const configRaw = form.get('config');
-
-		const [v] = await db.select().from(view).where(eq(view.id, id));
-		if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
-		if (!(await canEditView(locals.user, id)))
-			return fail(403, { message: 'No edit permission on this view' });
-
-		if (!name) return fail(400, { message: 'View name is required' });
-
-		let config: string | undefined;
-		if (configRaw !== null) {
-			try {
-				const parsed = JSON.parse(String(configRaw));
-				if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
-					config = JSON.stringify(parsed);
-				else return fail(400, { message: 'Invalid view config' });
-			} catch {
-				return fail(400, { message: 'Invalid view config' });
-			}
-		}
-
-		// type is fixed at creation
-		await db
-			.update(view)
-			.set({ name, ...(config !== undefined ? { config } : {}), updatedAt: new Date() })
-			.where(eq(view.id, id));
-
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await updateViewById(
+			String(form.get('id') ?? ''),
+			{ name: String(form.get('name') ?? ''), config: configRaw === null ? undefined : String(configRaw) },
+			locals.user,
+			{ has: (key) => (key === 'name' ? true : key === 'config' ? configRaw !== null : false), owner: { projectId: params.id }, broadcast: true }
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -1014,19 +940,8 @@ export const actions: Actions = {
 			.split(',')
 			.map((s) => s.trim())
 			.filter(Boolean);
-
-		const rows = await db.select({ id: view.id }).from(view).where(eq(view.projectId, params.id));
-		const projectIds = new Set(rows.map((r) => r.id));
-		// the posted set must reference only this project's views
-		if (!ids.length || !ids.every((id) => projectIds.has(id)))
-			return fail(400, { message: 'Invalid order' });
-		if (!(await canEditView(locals.user, ids[0])))
-			return fail(403, { message: 'No edit permission on this view' });
-
-		for (let i = 0; i < ids.length; i++)
-			await db.update(view).set({ position: i * 10 }).where(eq(view.id, ids[i]));
-
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await reorderViews(params.id, ids, locals.user, { broadcast: true });
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -1127,41 +1042,22 @@ export const actions: Actions = {
 
 	createMilestone: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canEditProject(locals.user, params.id)))
-			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		const description = String(form.get('description') ?? '').trim() || null;
-		const startDateRaw = String(form.get('startDate') ?? '');
-		const targetDateRaw = String(form.get('targetDate') ?? '');
-
-		if (!name) return fail(400, { message: 'Milestone name is required' });
-
-		const now = new Date();
-		const msId = crypto.randomUUID();
-		await db.insert(milestone).values({
-			id: msId,
-			projectId: params.id,
-			name,
-			description,
-			startDate: startDateRaw ? new Date(startDateRaw + 'T00:00:00') : null,
-			targetDate: targetDateRaw ? new Date(targetDateRaw + 'T00:00:00') : null,
-			position: now.getTime(),
-			createdAt: now,
-			updatedAt: now
-		});
-
-		// optionally assign the new milestone to a task in one step (task-pane create)
-		const assignTaskId = String(form.get('taskId') ?? '') || null;
-		if (assignTaskId) {
-			const t = await getTask(assignTaskId);
-			if (t && t.projectId === params.id && (await canEditTask(locals.user, t)))
-				await db.update(task).set({ milestoneId: msId, updatedAt: now }).where(eq(task.id, assignTaskId));
-		}
-
-		broadcastProjectChange(params.id, locals.user.id);
-		return { success: true, milestoneId: msId };
+		const res = await createMilestoneService(
+			params.id,
+			{
+				name: String(form.get('name') ?? ''),
+				description: String(form.get('description') ?? '').trim() || null,
+				startDate: String(form.get('startDate') ?? ''),
+				targetDate: String(form.get('targetDate') ?? ''),
+				assignTaskId: String(form.get('taskId') ?? '') || null
+			},
+			locals.user,
+			{ broadcast: true }
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
+		return { success: true, milestoneId: res.data.id };
 	},
 
 	/** Reorder milestones from a comma-separated ordered id list (`ids`). */
@@ -1265,35 +1161,20 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const [ms] = await db.select().from(milestone).where(eq(milestone.id, id));
-		if (!ms || ms.projectId !== params.id) return fail(400, { message: 'Invalid milestone' });
-
-		const patch: {
-			name?: string;
-			description?: string | null;
-			startDate?: Date | null;
-			targetDate?: Date | null;
-		} = {};
-		if (form.has('name')) {
-			const name = String(form.get('name') ?? '').trim();
-			if (!name) return fail(400, { message: 'Milestone name is required' });
-			patch.name = name;
-		}
-		if (form.has('description'))
-			patch.description = String(form.get('description') ?? '').trim() || null;
-		if (form.has('startDate')) {
-			const raw = String(form.get('startDate') ?? '').trim();
-			patch.startDate = raw ? new Date(raw + 'T00:00:00') : null;
-		}
-		if (form.has('targetDate')) {
-			const raw = String(form.get('targetDate') ?? '').trim();
-			patch.targetDate = raw ? new Date(raw + 'T00:00:00') : null;
-		}
-		if (Object.keys(patch).length === 0) return fail(400, { message: 'No fields to update' });
-
-		await db.update(milestone).set({ ...patch, updatedAt: new Date() }).where(eq(milestone.id, id));
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await updateMilestoneById(
+			String(form.get('id') ?? ''),
+			{
+				name: form.has('name') ? String(form.get('name') ?? '') : undefined,
+				description: form.has('description')
+					? String(form.get('description') ?? '').trim() || null
+					: undefined,
+				startDate: form.has('startDate') ? String(form.get('startDate') ?? '').trim() : undefined,
+				targetDate: form.has('targetDate') ? String(form.get('targetDate') ?? '').trim() : undefined
+			},
+			locals.user,
+			{ has: (key) => form.has(key), owner: { projectId: params.id }, broadcast: true }
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -1302,10 +1183,12 @@ export const actions: Actions = {
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		await db.delete(milestone).where(and(eq(milestone.id, id), eq(milestone.projectId, params.id)));
-		broadcastProjectChange(params.id, locals.user.id);
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await deleteMilestoneById(id, locals.user, {
+			owner: { projectId: params.id },
+			broadcast: true
+		});
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -1315,34 +1198,13 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const milestoneId = String(form.get('milestoneId') ?? '');
-		const dependsOnId = String(form.get('dependsOnId') ?? '');
-
-		if (milestoneId === dependsOnId)
-			return fail(400, { message: 'A milestone cannot depend on itself' });
-
-		const [m, dep] = await Promise.all([
-			db.select().from(milestone).where(eq(milestone.id, milestoneId)),
-			db.select().from(milestone).where(eq(milestone.id, dependsOnId))
-		]);
-		if (!m[0] || !dep[0] || m[0].projectId !== params.id || dep[0].projectId !== params.id)
-			return fail(400, { message: 'Both milestones must belong to this project' });
-
-		const all = await db
-			.select({ milestoneId: milestoneDependency.milestoneId, dependsOnId: milestoneDependency.dependsOnId })
-			.from(milestoneDependency)
-			.innerJoin(milestone, eq(milestoneDependency.milestoneId, milestone.id))
-			.where(eq(milestone.projectId, params.id));
-		const edges = new Map<string, string[]>();
-		for (const e of all) edges.set(e.milestoneId, [...(edges.get(e.milestoneId) ?? []), e.dependsOnId]);
-		if (createsCycle(edges, milestoneId, dependsOnId))
-			return fail(400, { message: 'That dependency would create a cycle' });
-
-		await db
-			.insert(milestoneDependency)
-			.values({ milestoneId, dependsOnId })
-			.onConflictDoNothing();
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await addMilestoneDepService(
+			String(form.get('milestoneId') ?? ''),
+			String(form.get('dependsOnId') ?? ''),
+			locals.user,
+			{ owner: { projectId: params.id }, broadcast: true }
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -1353,44 +1215,13 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const milestoneId = String(form.get('milestoneId') ?? '');
-		const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-		if (!m || m.projectId !== params.id) return fail(400, { message: 'Invalid milestone' });
-
-		const projectMs = await db
-			.select({ id: milestone.id })
-			.from(milestone)
-			.where(eq(milestone.projectId, params.id));
-		const validIds = new Set(projectMs.map((r) => r.id));
-		const desired = [...new Set(form.getAll('dependsOnId').map(String))].filter(
-			(id) => id && id !== milestoneId && validIds.has(id)
+		const res = await setMilestoneDepsService(
+			String(form.get('milestoneId') ?? ''),
+			form.getAll('dependsOnId').map(String),
+			locals.user,
+			{ owner: { projectId: params.id }, broadcast: true }
 		);
-
-		// edges minus this milestone's current deps; re-add desired one by one, skipping cycles
-		const all = await db
-			.select({ milestoneId: milestoneDependency.milestoneId, dependsOnId: milestoneDependency.dependsOnId })
-			.from(milestoneDependency)
-			.innerJoin(milestone, eq(milestoneDependency.milestoneId, milestone.id))
-			.where(eq(milestone.projectId, params.id));
-		const edges = new Map<string, string[]>();
-		for (const e of all)
-			if (e.milestoneId !== milestoneId)
-				edges.set(e.milestoneId, [...(edges.get(e.milestoneId) ?? []), e.dependsOnId]);
-
-		const accepted: string[] = [];
-		for (const dep of desired) {
-			if (createsCycle(edges, milestoneId, dep)) continue;
-			accepted.push(dep);
-			edges.set(milestoneId, [...(edges.get(milestoneId) ?? []), dep]);
-		}
-
-		await db.delete(milestoneDependency).where(eq(milestoneDependency.milestoneId, milestoneId));
-		if (accepted.length)
-			await db
-				.insert(milestoneDependency)
-				.values(accepted.map((dependsOnId) => ({ milestoneId, dependsOnId })))
-				.onConflictDoNothing();
-		broadcastProjectChange(params.id, locals.user.id);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -1400,17 +1231,13 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const milestoneId = String(form.get('milestoneId') ?? '');
-		const dependsOnId = String(form.get('dependsOnId') ?? '');
-		await db
-			.delete(milestoneDependency)
-			.where(
-				and(
-					eq(milestoneDependency.milestoneId, milestoneId),
-					eq(milestoneDependency.dependsOnId, dependsOnId)
-				)
-			);
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await removeMilestoneDepService(
+			String(form.get('milestoneId') ?? ''),
+			String(form.get('dependsOnId') ?? ''),
+			locals.user,
+			{ owner: { projectId: params.id }, broadcast: true }
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -1427,23 +1254,13 @@ export const actions: Actions = {
 	hideView: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-
-		const [v] = await db.select().from(view).where(eq(view.id, id));
-		if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
-		if (!(await canEditView(locals.user, id)))
-			return fail(403, { message: 'No edit permission on this view' });
-
-		const visible = await db
-			.select({ id: view.id })
-			.from(view)
-			.where(and(eq(view.projectId, params.id), eq(view.hidden, false)));
-		if (visible.length <= 1)
-			return fail(400, { message: 'A project must keep at least one view' });
-
-		await db.update(view).set({ hidden: true, updatedAt: new Date() }).where(eq(view.id, id));
-		broadcastProjectChange(params.id, locals.user.id);
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await updateViewById(id, { hidden: true }, locals.user, {
+			has: (key) => key === 'hidden',
+			owner: { projectId: params.id },
+			broadcast: true
+		});
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	}
 };
