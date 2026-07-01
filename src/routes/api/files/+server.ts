@@ -26,6 +26,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	const [f] = await db.select().from(customField).where(eq(customField.id, fieldId));
 	if (!f || f.type !== 'files') return apiError(400, 'Not a files field');
+	// A custom-field VALUE is task/project data, so it follows access-level rules
+	// (ADR-019), not project-structure edit rights.
 	if (!(await canAccessProject(locals.user, f.projectId))) return apiError(404, 'Not found');
 
 	// an attached task must belong to the SAME project as the field (no cross-project link)

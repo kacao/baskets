@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { file, task } from '$lib/server/db/schema';
 import { apiError } from '$lib/server/api';
-import { canAccessProject, canEditProject } from '$lib/server/permissions';
+import { canAccessProject } from '$lib/server/permissions';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { UPLOADS_DIR, filePath, BLOCKED_EXT, mimeForExt } from '$lib/server/uploads';
 import type { RequestHandler } from './$types';
@@ -50,7 +50,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		.from(task)
 		.where(eq(task.id, params.id));
 	if (!t) return apiError(404, 'Not found');
-	if (!(await canEditProject(locals.user, t.projectId))) return apiError(404, 'Not found');
+	// A task attachment is task DATA, so it follows task-edit rules (access-level,
+	// ADR-019) — NOT project-structure edit rights. Matches the form action + UI
+	// (which gate at canEditTask) and the custom-field upload endpoint.
+	if (!(await canAccessProject(locals.user, t.projectId))) return apiError(404, 'Not found');
 
 	const form = await request.formData();
 	const blob = form.get('file');

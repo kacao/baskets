@@ -5,21 +5,8 @@ import { task, taskDependency } from '$lib/server/db/schema';
 import { apiError, readJson } from '$lib/server/api';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject, canEditTask } from '$lib/server/permissions';
+import { createsCycle } from '$lib/server/graph';
 import type { RequestHandler } from './$types';
-
-/** DFS cycle check: would adding from -> to make `to` reach back to `from`? */
-function createsCycle(edges: Map<string, string[]>, from: string, to: string) {
-	const stack = [to];
-	const seen = new Set<string>();
-	while (stack.length) {
-		const cur = stack.pop()!;
-		if (cur === from) return true;
-		if (seen.has(cur)) continue;
-		seen.add(cur);
-		for (const next of edges.get(cur) ?? []) stack.push(next);
-	}
-	return false;
-}
 
 export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');

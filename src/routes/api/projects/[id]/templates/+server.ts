@@ -21,6 +21,9 @@ import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
+	// A missing project must 404 for everyone (incl. admins) — mirror the siblings.
+	const [proj] = await db.select({ id: project.id }).from(project).where(eq(project.id, params.id));
+	if (!proj) return apiError(404, 'Not found');
 	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Not found');
 	const templates = await listTemplatesForProject(params.id);
 	return json({ templates });
@@ -28,6 +31,11 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
+	const [exists] = await db
+		.select({ id: project.id })
+		.from(project)
+		.where(eq(project.id, params.id));
+	if (!exists) return apiError(404, 'Not found');
 	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Not found');
 
 	const body = await readJson(request);

@@ -1,10 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join, dirname, extname } from 'node:path';
+import { join, extname } from 'node:path';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { file } from '$lib/server/db/schema';
+import { file, project } from '$lib/server/db/schema';
 import { apiError } from '$lib/server/api';
 import { canAccessProject, canEditProject } from '$lib/server/permissions';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
@@ -18,6 +18,9 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 // is NEVER returned.
 export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
+	// A missing project must 404 for everyone (incl. admins) — mirror the siblings.
+	const [proj] = await db.select({ id: project.id }).from(project).where(eq(project.id, params.id));
+	if (!proj) return apiError(404, 'Not found');
 	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Not found');
 
 	const files = await db
@@ -42,6 +45,10 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 // file. The project is taken from the route — editing is required.
 export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
+	const [proj] = await db.select({ id: project.id }).from(project).where(eq(project.id, params.id));
+	if (!proj) return apiError(404, 'Not found');
+	// A project-level file (no task, no field) is project STRUCTURE, so it needs
+	// edit rights: access → 404 (ADR-019), then accessible-but-not-editable → 403.
 	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Not found');
 	if (!(await canEditProject(locals.user, params.id))) return apiError(403, 'Forbidden');
 
@@ -59,7 +66,6 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// server-derived from extension — never the client-claimed blob.type
 	const mimeType = mimeForExt(ext);
 	await mkdir(join(UPLOADS_DIR, params.id), { recursive: true });
-	await mkdir(dirname(filePath(rel)), { recursive: true });
 	await writeFile(filePath(rel), Buffer.from(await blob.arrayBuffer()));
 
 	await db.insert(file).values({

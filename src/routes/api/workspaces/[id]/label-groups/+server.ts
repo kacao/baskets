@@ -4,6 +4,7 @@ import { db } from '$lib/server/db';
 import { labelGroup, workspace } from '$lib/server/db/schema';
 import { apiError, readJson } from '$lib/server/api';
 import { canAccessWorkspace, canEditWorkspace } from '$lib/server/permissions';
+import { createLabelGroup } from '$lib/server/labels';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals }) => {
@@ -37,26 +38,11 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	const body = await readJson(request);
 	if (!body) return apiError(400, 'Invalid JSON body');
 
-	const name = typeof body.name === 'string' ? body.name.trim() : '';
-	if (!name) return apiError(400, 'Group name is required');
-	if (name.length > 40) return apiError(400, 'Name too long (max 40)');
-
-	const existing = await db
-		.select({ name: labelGroup.name })
-		.from(labelGroup)
-		.where(eq(labelGroup.workspaceId, params.id));
-	if (existing.some((g) => g.name.toLowerCase() === name.toLowerCase()))
-		return apiError(400, 'A group with that name exists');
-
-	const [created] = await db
-		.insert(labelGroup)
-		.values({
-			id: crypto.randomUUID(),
-			name,
-			workspaceId: params.id,
-			position: Date.now(),
-			createdAt: new Date()
-		})
-		.returning();
-	return json({ group: created }, { status: 201 });
+	const res = await createLabelGroup(
+		params.id,
+		typeof body.name === 'string' ? body.name : '',
+		locals.user
+	);
+	if (!res.ok) return apiError(res.status, res.message);
+	return json({ group: res.data }, { status: 201 });
 };
