@@ -36,11 +36,13 @@ ORIGIN=https://your-domain npm run start
 
 - Email/password auth, optional TOTP 2FA, per-user API keys for the REST API
 - Workspaces own projects, custom statuses, and labels; owner + grants control sharing and visibility
-- Projects with multiple views — table, board, list, dashboard, map, timeline, and calendar
-- Tasks with statuses, priority, assignee, milestones, labels, start/due dates, dependencies, and one level of sub-tasks
+- Projects with multiple views — table, board, list, dashboard, map, timeline, calendar, and flow
+- Per-project **Overview** (title/description editor) and **Files** pages, plus milestones, locations, labels, and custom fields
+- Tasks with statuses, priority, assignee, milestones, labels, start/due dates, locations, dependencies, and one level of sub-tasks
 - Typed custom fields (text, number, select, date, person, files, task, rollup, …) on tasks and projects
+- **@-mention references** — link Tasks, Locations, Files, Projects, or People inside descriptions/comments (inline pills); bare URLs auto-link; mentions notify
 - Realtime live updates and presence avatars
-- Search, filter, and saved filters across views
+- Search and filter across views
 - Comments, activity log, and in-app notifications
 - Bulk actions, task templates, recurring tasks, and CSV export
 - Photo/document capture, mobile-responsive

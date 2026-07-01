@@ -206,6 +206,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
+		scrollbar-gutter: stable;
 		overscroll-behavior: contain;
 		padding: var(--sp-3) var(--sp-3) var(--sp-4);
 	}

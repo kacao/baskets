@@ -275,6 +275,31 @@ code,
 	touch-action: none;
 }
 
+/* Staggered enter for list surfaces: add `stagger-in` to a container and its
+   direct children fade+rise in sequence. Modern browsers cascade natively via
+   sibling-index(); where unsupported the @supports block is skipped so items
+   animate together (graceful — no stagger, no gap). The reduced-motion rule
+   below collapses it to an instant appear. */
+@keyframes staggerIn {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+.stagger-in > * {
+	animation: staggerIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@supports (animation-delay: calc(sibling-index() * 1ms)) {
+	.stagger-in > * {
+		/* cap the cascade so long lists don't delay the tail by seconds */
+		animation-delay: min(calc((sibling-index() - 1) * 55ms), 400ms);
+	}
+}
+
 /* Reduced motion: kill transitions */
 @media (prefers-reduced-motion: reduce) {
 	*,

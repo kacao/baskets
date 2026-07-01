@@ -86,6 +86,9 @@
 	// expands sub-task rows inline. ?task= deep-links a task open (board card clicks).
 	let expanded = $state<Record<string, boolean>>({});
 	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
+	// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
+	// the top is the "← back" target, reset on any fresh open from outside the pane
+	let backStack = $state<string[]>([]);
 	// keep the pane in sync with browser back/forward to a ?task= link, without
 	// fighting user clicks (effect tracks the URL only, never selectedId)
 	let lastTaskParam = $state(page.url.searchParams.get('task'));
@@ -94,13 +97,27 @@
 		if (fromUrl !== lastTaskParam) {
 			lastTaskParam = fromUrl;
 			selectedId = fromUrl;
+			backStack = [];
 		}
 	});
-	const selected = $derived(tasks.find((t) => t.id === selectedId) ?? null);
+	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
 
 	function openDetail(t: Task) {
 		selectedId = selectedId === t.id ? null : t.id;
+		backStack = [];
 	}
+	function navTask(id: string) {
+		if (id === selectedId) return;
+		if (selectedId) backStack = [...backStack, selectedId];
+		selectedId = id;
+	}
+	function navBack() {
+		selectedId = backStack[backStack.length - 1] ?? null;
+		backStack = backStack.slice(0, -1);
+	}
+	const backTask = $derived(
+		backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
+	);
 
 	const show = (key: string) => config[key] !== false; // columns default on
 	const showCount = $derived(config.showCount === true); // group task count — default off
@@ -700,8 +717,13 @@
 		{canEditTask}
 		{templates}
 		{statusDisplay}
-		onClose={() => (selectedId = null)}
-		onSelectTask={(id) => (selectedId = id)}
+		back={backTask}
+		onBack={navBack}
+		onClose={() => {
+			selectedId = null;
+			backStack = [];
+		}}
+		onSelectTask={(id) => navTask(id)}
 	/>
 {/if}
 </div>
