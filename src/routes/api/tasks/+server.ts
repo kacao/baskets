@@ -1,23 +1,21 @@
 import { json } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { location, milestone, project, task, user } from '$lib/server/db/schema';
+import { milestone, project, task } from '$lib/server/db/schema';
 import {
 	apiError,
 	readJson,
 	optionalString,
+	parseDateField,
 	ApiValidationError,
 	PRIORITIES
 } from '$lib/server/api';
-import { dispatchEvent } from '$lib/server/integrations';
-import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject } from '$lib/server/permissions';
-import { listProjectStatuses } from '$lib/server/statuses';
 import {
 	apiCustomFieldEntries,
-	customValuesByTask,
-	writeTaskCustomValues
+	customValuesByTask
 } from '$lib/server/customFields';
+import { createTaskService } from '$lib/server/tasks';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
@@ -56,36 +54,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!PRIORITIES.includes(priority as (typeof PRIORITIES)[number]))
 		return apiError(400, `priority must be one of: ${PRIORITIES.join(', ')}`);
 
+	// Existence 404 BEFORE access (ADR-019: identical to a no-access 404).
 	const [proj] = await db.select().from(project).where(eq(project.id, projectId));
 	if (!proj) return apiError(404, 'Project not found');
 	if (!(await canAccessProject(locals.user, projectId)))
 		return apiError(404, 'Project not found');
 
-	if (parentId) {
-		const [parent] = await db.select().from(task).where(eq(task.id, parentId));
-		if (!parent || parent.projectId !== projectId) return apiError(400, 'Invalid parent task');
-		if (parent.parentId) return apiError(400, 'Sub-tasks cannot have their own sub-tasks');
-	}
-
-	const eligible = await listProjectStatuses(projectId);
-
-	// status: accepts statusId or status name; defaults to first todo-category status
-	let statusId: string;
-	const requested =
-		typeof body.statusId === 'string'
-			? eligible.find((s) => s.id === body.statusId)
-			: typeof body.status === 'string'
-				? eligible.find((s) => s.name.toLowerCase() === (body.status as string).toLowerCase())
-				: undefined;
-	if (body.statusId !== undefined || body.status !== undefined) {
-		if (!requested)
-			return apiError(400, `status must be one of: ${eligible.map((s) => s.name).join(', ')}`);
-		statusId = requested.id;
-	} else {
-		const fallback = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-		if (!fallback) return apiError(400, 'Project has no eligible statuses');
-		statusId = fallback.id;
-	}
+	// status: accepts statusId or status name; the service defaults + validates.
+	const statusId = typeof body.statusId === 'string' ? body.statusId : undefined;
+	const statusName =
+		statusId === undefined && typeof body.status === 'string' ? body.status : undefined;
 
 	if (body.milestoneId !== undefined && body.milestoneId !== null) {
 		if (typeof body.milestoneId !== 'string') return apiError(400, 'milestoneId must be a string');
@@ -96,15 +74,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (body.locationId !== undefined && body.locationId !== null) {
 		if (typeof body.locationId !== 'string') return apiError(400, 'locationId must be a string');
-		const [l] = await db.select().from(location).where(eq(location.id, body.locationId));
-		if (!l || l.projectId !== projectId)
-			return apiError(400, 'locationId must reference a location of the same project');
 	}
 
 	if (body.assigneeId !== undefined && body.assigneeId !== null) {
 		if (typeof body.assigneeId !== 'string') return apiError(400, 'assigneeId must be a string');
-		const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, body.assigneeId));
-		if (!u) return apiError(400, 'assigneeId must reference a valid user');
 	}
 
 	let description: string | null;
@@ -117,8 +90,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	let dueDate: Date | null = null;
 	if (typeof body.dueDate === 'string' && body.dueDate) {
-		dueDate = new Date(body.dueDate.includes('T') ? body.dueDate : body.dueDate + 'T00:00:00');
-		if (isNaN(dueDate.getTime())) return apiError(400, 'dueDate must be a valid date');
+		try {
+			dueDate = parseDateField(body.dueDate);
+		} catch {
+			return apiError(400, 'dueDate must be a valid date');
+		}
 	}
 
 	let order: number | null = null;
@@ -128,50 +104,30 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		order = body.order;
 	}
 
-	const now = new Date();
-	const [created] = await db
-		.insert(task)
-		.values({
-			id: crypto.randomUUID(),
+	const res = await createTaskService(
+		{
 			projectId,
-			parentId,
 			title,
-			description,
+			parentId,
 			priority,
 			statusId,
+			statusName,
 			assigneeId: typeof body.assigneeId === 'string' ? body.assigneeId : null,
 			milestoneId: typeof body.milestoneId === 'string' ? body.milestoneId : null,
 			locationId: typeof body.locationId === 'string' ? body.locationId : null,
 			location: typeof body.location === 'string' ? body.location.trim() || null : null,
+			description,
 			order,
 			dueDate,
-			createdBy: locals.user.id,
-			position: now.getTime(),
-			createdAt: now,
-			updatedAt: now
-		})
-		.returning();
+			cf:
+				body.customFields && typeof body.customFields === 'object' && !Array.isArray(body.customFields)
+					? apiCustomFieldEntries(body.customFields as Record<string, unknown>)
+					: undefined
+		},
+		locals.user
+	);
+	if (!res.ok) return apiError(res.status, res.message);
 
-	if (body.customFields && typeof body.customFields === 'object' && !Array.isArray(body.customFields)) {
-		const res = await writeTaskCustomValues(
-			created.id,
-			projectId,
-			apiCustomFieldEntries(body.customFields as Record<string, unknown>)
-		);
-		if (res.error) {
-			await db.delete(task).where(eq(task.id, created.id));
-			return apiError(400, res.error);
-		}
-	}
-
-	void dispatchEvent({
-		type: 'task.created',
-		actor: locals.user.name,
-		projectName: proj.name,
-		taskTitle: title
-	});
-	broadcastProjectChange(projectId, locals.user.id);
-
-	const values = await customValuesByTask(projectId, [created.id]);
-	return json({ task: { ...created, customFields: values[created.id] ?? {} } }, { status: 201 });
+	const values = await customValuesByTask(projectId, [res.data.id]);
+	return json({ task: { ...res.data, customFields: values[res.data.id] ?? {} } }, { status: 201 });
 };

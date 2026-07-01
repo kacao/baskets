@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, asc, count, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, or } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
 	customField,
@@ -22,11 +22,9 @@ import {
 	user,
 	view
 } from '$lib/server/db/schema';
-import { dispatchEvent } from '$lib/server/integrations';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { notifyMentions } from '$lib/server/mentions';
 import {
-	logActivity,
 	createComment,
 	updateComment,
 	deleteComment,
@@ -41,13 +39,11 @@ import {
 	instantiateTemplate,
 	buildPayloadFromTask
 } from '$lib/server/templates';
-import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
 import { reorderMilestones } from '$lib/server/milestones';
 import {
 	listCustomFieldOptions,
 	listProjectCustomFields,
-	listProjectCustomValues,
-	writeTaskCustomValues
+	listProjectCustomValues
 } from '$lib/server/customFields';
 import { decodeValue, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
 import {
@@ -64,6 +60,19 @@ import {
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
 import { ICONOIR_NAMES } from '$lib/iconoirNames';
 import { VIEW_TYPES, type ViewType } from '$lib/server/projects';
+import { createsCycle } from '$lib/server/graph';
+import {
+	createTaskService,
+	setTaskStatusService,
+	moveTaskService,
+	updateTaskService,
+	deleteTaskService,
+	bulkUpdateTasks,
+	bulkReparentToNew as bulkReparentToNewService,
+	bulkDeleteTasks as bulkDeleteTasksService,
+	bulkSetLabel as bulkSetLabelService,
+	type UpdateTaskInput
+} from '$lib/server/tasks';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Statuses assignable to the PROJECT itself: defaults + its workspace's. */
@@ -110,20 +119,6 @@ function parseCoords(form: FormData): { lat: number | null; lng: number | null }
 			return { error: 'Longitude must be between -180 and 180' };
 	}
 	return { lat, lng };
-}
-
-/** True if adding edge from -> to creates a cycle (graph: id -> dependsOn ids). */
-function createsCycle(edges: Map<string, string[]>, from: string, to: string) {
-	const stack = [to];
-	const seen = new Set<string>();
-	while (stack.length) {
-		const cur = stack.pop()!;
-		if (cur === from) return true;
-		if (seen.has(cur)) continue;
-		seen.add(cur);
-		for (const next of edges.get(cur) ?? []) stack.push(next);
-	}
-	return false;
 }
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -353,96 +348,26 @@ export const actions: Actions = {
 
 	createTask: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canAccessProject(locals.user, params.id)))
-			return fail(403, { message: 'No access to this project' });
 
 		const form = await request.formData();
-		const title = String(form.get('title') ?? '').trim();
-		const parentId = String(form.get('parentId') ?? '') || null;
-		const priority = String(form.get('priority') ?? 'none');
-
-		if (!title) return fail(400, { message: 'Task title is required' });
-		if (title.length > 240) return fail(400, { message: 'Title too long (max 240)' });
-		if (!PRIORITIES.includes(priority as (typeof PRIORITIES)[number]))
-			return fail(400, { message: 'Invalid priority' });
-
-		if (parentId) {
-			const parent = await getTask(parentId);
-			if (!parent || parent.projectId !== params.id)
-				return fail(400, { message: 'Invalid parent task' });
-			if (parent.parentId)
-				return fail(400, { message: 'Sub-tasks cannot have their own sub-tasks' });
-		}
-
-		const eligible = await listProjectStatuses(params.id);
-		const requestedStatusId = String(form.get('statusId') ?? '');
-		let defaultStatus = requestedStatusId
-			? eligible.find((s) => s.id === requestedStatusId)
-			: undefined;
-		if (requestedStatusId && !defaultStatus)
-			return fail(400, { message: 'Status not eligible for this project' });
-		defaultStatus ??= eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-		if (!defaultStatus) return fail(400, { message: 'Project has no eligible statuses' });
-
-		// optional prefilled fields (new-task pane: milestone / assignee / due date)
-		const assigneeId = String(form.get('assigneeId') ?? '') || null;
-		if (assigneeId) {
-			const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
-			if (!u) return fail(400, { message: 'Unknown assignee' });
-		}
-		const milestoneId = String(form.get('milestoneId') ?? '') || null;
-		if (milestoneId) {
-			const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-			if (!m || m.projectId !== params.id)
-				return fail(400, { message: 'Milestone must belong to this project' });
-		}
 		const dueRaw = String(form.get('dueDate') ?? '');
-		const dueDate = dueRaw ? new Date(dueRaw + 'T00:00:00') : null;
-
-		const now = new Date();
-		const taskId = crypto.randomUUID();
-		await db.insert(task).values({
-			id: taskId,
-			projectId: params.id,
-			parentId,
-			title,
-			priority,
-			statusId: defaultStatus.id,
-			assigneeId,
-			milestoneId,
-			dueDate,
-			createdBy: locals.user.id,
-			position: now.getTime(),
-			createdAt: now,
-			updatedAt: now
-		});
-
-		const cfRes = await writeTaskCustomValues(taskId, params.id, cfEntries(form));
-		if (cfRes.error) {
-			await db.delete(task).where(eq(task.id, taskId));
-			return fail(400, { message: cfRes.error });
-		}
-
-		// optional label prefill (label-grouped quick-add); silently skip an invalid one
-		const labelId = String(form.get('labelId') ?? '') || null;
-		if (labelId) {
-			const [l] = await db.select().from(label).where(eq(label.id, labelId));
-			const [proj0] = await db.select({ workspaceId: project.workspaceId }).from(project).where(eq(project.id, params.id));
-			if (l && proj0 && l.workspaceId === proj0.workspaceId)
-				await db.insert(taskLabel).values({ taskId, labelId }).onConflictDoNothing();
-		}
-
-		const [proj] = await db.select().from(project).where(eq(project.id, params.id));
-		void dispatchEvent({
-			type: 'task.created',
-			actor: locals.user.name,
-			projectName: proj?.name ?? 'Unknown project',
-			taskTitle: title
-		});
-
-		void logActivity(params.id, taskId, locals.user.id, 'created', { title });
-
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await createTaskService(
+			{
+				projectId: params.id,
+				title: String(form.get('title') ?? ''),
+				parentId: String(form.get('parentId') ?? '') || null,
+				priority: String(form.get('priority') ?? 'none'),
+				statusId: String(form.get('statusId') ?? '') || undefined,
+				assigneeId: String(form.get('assigneeId') ?? '') || null,
+				milestoneId: String(form.get('milestoneId') ?? '') || null,
+				dueDate: dueRaw ? new Date(dueRaw + 'T00:00:00') : null,
+				cf: cfEntries(form),
+				labelId: String(form.get('labelId') ?? '') || null,
+				logCreate: true
+			},
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -450,73 +375,13 @@ export const actions: Actions = {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
 		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const statusId = String(form.get('statusId') ?? '');
-
-		const existing = await getTask(id);
-		if (!existing || existing.projectId !== params.id)
-			return fail(400, { message: 'Invalid task' });
-		if (!(await canEditTask(locals.user, existing)))
-			return fail(403, { message: 'No edit permission on this task' });
-
-		const eligible = await listProjectStatuses(params.id);
-		const target = eligible.find((s) => s.id === statusId);
-		if (!target) return fail(400, { message: 'Status not eligible for this project' });
-
-		await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.id, id));
-
-		void logActivity(params.id, id, locals.user.id, 'status', { to: statusId });
-
-		// Recurring task: when it moves into a completed status, spawn the next
-		// occurrence with its due date advanced by the recurrence rule (BASDEV-8).
-		const wasCompleted = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-		if (target.category === 'completed' && !wasCompleted && existing.recurrence) {
-			const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
-			const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-			if (backlog) {
-				const spawnNow = new Date();
-				await db.insert(task).values({
-					id: crypto.randomUUID(),
-					projectId: existing.projectId,
-					parentId: existing.parentId,
-					title: existing.title,
-					description: existing.description,
-					priority: existing.priority,
-					statusId: backlog.id,
-					assigneeId: existing.assigneeId,
-					milestoneId: existing.milestoneId,
-					locationId: existing.locationId,
-					startDate: existing.startDate,
-					dueDate: nextDue,
-					recurrence: existing.recurrence,
-					createdBy: locals.user.id,
-					position: spawnNow.getTime(),
-					createdAt: spawnNow,
-					updatedAt: spawnNow
-				});
-			}
-		}
-
-		// Completing a parent completes its sub-tasks
-		if (target.category === 'completed') {
-			await db
-				.update(task)
-				.set({ statusId, updatedAt: new Date() })
-				.where(eq(task.parentId, id));
-		}
-
-		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-		if (target.category === 'completed' && !wasDone) {
-			const [proj] = await db.select().from(project).where(eq(project.id, existing.projectId));
-			void dispatchEvent({
-				type: 'task.completed',
-				actor: locals.user.name,
-				projectName: proj?.name ?? 'Unknown project',
-				taskTitle: existing.title
-			});
-		}
-
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await setTaskStatusService(
+			String(form.get('id') ?? ''),
+			params.id,
+			String(form.get('statusId') ?? ''),
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -525,82 +390,14 @@ export const actions: Actions = {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
 		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const statusId = String(form.get('statusId') ?? '');
-		const beforeId = String(form.get('beforeId') ?? '') || null;
-
-		const existing = await getTask(id);
-		if (!existing || existing.projectId !== params.id || existing.parentId)
-			return fail(400, { message: 'Invalid task' });
-		if (!(await canEditTask(locals.user, existing)))
-			return fail(403, { message: 'No edit permission on this task' });
-
-		const eligible = await listProjectStatuses(params.id);
-		const target = eligible.find((s) => s.id === statusId);
-		if (!target) return fail(400, { message: 'Status not eligible for this project' });
-
-		const colTasks = (
-			await db
-				.select()
-				.from(task)
-				.where(
-					and(
-						eq(task.projectId, params.id),
-						eq(task.statusId, statusId),
-						isNull(task.parentId)
-					)
-				)
-				.orderBy(asc(task.position), asc(task.createdAt))
-		).filter((t) => t.id !== id);
-
-		let idx = beforeId ? colTasks.findIndex((t) => t.id === beforeId) : colTasks.length;
-		if (idx < 0) idx = colTasks.length;
-		const prev = colTasks[idx - 1]?.position;
-		const next = colTasks[idx]?.position;
-
-		let position: number;
-		if (prev === undefined && next === undefined) {
-			position = Date.now();
-		} else if (prev === undefined) {
-			position = next! - 1024;
-		} else if (next === undefined) {
-			position = prev + 1024;
-		} else if (next - prev > 1) {
-			position = Math.floor((prev + next) / 2);
-		} else {
-			// no gap left between neighbors — renumber the column
-			for (let i = 0; i < colTasks.length; i++) {
-				await db
-					.update(task)
-					.set({ position: (i + (i >= idx ? 1 : 0)) * 1024 })
-					.where(eq(task.id, colTasks[i].id));
-			}
-			position = idx * 1024;
-		}
-
-		await db
-			.update(task)
-			.set({ statusId, position, updatedAt: new Date() })
-			.where(eq(task.id, id));
-
-		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-		if (target.category === 'completed') {
-			await db
-				.update(task)
-				.set({ statusId, updatedAt: new Date() })
-				.where(eq(task.parentId, id));
-		}
-		if (target.category === 'completed' && !wasDone) {
-			const [proj] = await db.select().from(project).where(eq(project.id, params.id));
-			void dispatchEvent({
-				type: 'task.completed',
-				actor: locals.user.name,
-				projectName: proj?.name ?? 'Unknown project',
-				taskTitle: existing.title
-			});
-		}
-
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await moveTaskService(
+			String(form.get('id') ?? ''),
+			params.id,
+			String(form.get('statusId') ?? ''),
+			String(form.get('beforeId') ?? '') || null,
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -610,141 +407,42 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const id = String(form.get('id') ?? '');
-		const existing = await getTask(id);
-		if (!existing || existing.projectId !== params.id)
-			return fail(400, { message: 'Invalid task' });
-		if (!(await canEditTask(locals.user, existing)))
-			return fail(403, { message: 'No edit permission on this task' });
 
-		const set: Partial<typeof task.$inferInsert> = {};
-
-		if (form.has('title')) {
-			const title = String(form.get('title') ?? '').trim();
-			if (!title) return fail(400, { message: 'Task title is required' });
-			if (title.length > 240) return fail(400, { message: 'Title too long (max 240)' });
-			set.title = title;
-		}
-		if (form.has('description')) {
-			set.description = String(form.get('description') ?? '').trim() || null;
-		}
-		if (form.has('priority')) {
-			const priority = String(form.get('priority') ?? 'none');
-			if (!PRIORITIES.includes(priority as (typeof PRIORITIES)[number]))
-				return fail(400, { message: 'Invalid priority' });
-			set.priority = priority;
-		}
-		if (form.has('assigneeId')) {
-			const assigneeId = String(form.get('assigneeId') ?? '') || null;
-			if (assigneeId) {
-				const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
-				if (!u) return fail(400, { message: 'Unknown assignee' });
-			}
-			set.assigneeId = assigneeId;
-		}
-		if (form.has('milestoneId')) {
-			const milestoneId = String(form.get('milestoneId') ?? '') || null;
-			if (milestoneId) {
-				const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-				if (!m || m.projectId !== params.id)
-					return fail(400, { message: 'Milestone must belong to this project' });
-			}
-			set.milestoneId = milestoneId;
-		}
-		if (form.has('locationId')) {
-			const locationId = String(form.get('locationId') ?? '') || null;
-			if (locationId) {
-				const [l] = await db.select().from(location).where(eq(location.id, locationId));
-				if (!l || l.projectId !== params.id)
-					return fail(400, { message: 'Location must belong to this project' });
-			}
-			set.locationId = locationId;
-		}
+		const input: UpdateTaskInput = {};
+		if (form.has('title')) input.title = String(form.get('title') ?? '');
+		if (form.has('description')) input.description = String(form.get('description') ?? '');
+		if (form.has('priority')) input.priority = String(form.get('priority') ?? 'none');
+		if (form.has('assigneeId')) input.assigneeId = String(form.get('assigneeId') ?? '') || null;
+		if (form.has('milestoneId')) input.milestoneId = String(form.get('milestoneId') ?? '') || null;
+		if (form.has('locationId')) input.locationId = String(form.get('locationId') ?? '') || null;
 		if (form.has('order')) {
 			const raw = String(form.get('order') ?? '').trim();
-			if (raw === '') set.order = null;
+			if (raw === '') input.order = null;
 			else {
 				const order = Number(raw);
 				if (!Number.isInteger(order)) return fail(400, { message: 'Order must be a whole number' });
-				set.order = order;
+				input.order = order;
 			}
 		}
 		if (form.has('startDate')) {
 			const raw = String(form.get('startDate') ?? '');
-			set.startDate = raw ? new Date(raw + 'T00:00:00') : null;
+			input.startDate = raw ? new Date(raw + 'T00:00:00') : null;
 		}
 		if (form.has('dueDate')) {
 			const raw = String(form.get('dueDate') ?? '');
-			set.dueDate = raw ? new Date(raw + 'T00:00:00') : null;
+			input.dueDate = raw ? new Date(raw + 'T00:00:00') : null;
 		}
-		if (form.has('recurrence')) {
-			const raw = String(form.get('recurrence') ?? '').trim();
-			if (raw === '') set.recurrence = null;
-			else if (!isValidRecurrence(raw)) return fail(400, { message: 'Invalid recurrence rule' });
-			else set.recurrence = raw;
-		}
-		// re-parent: nest this task under another (make it a sub-task). Depth-1 only.
-		if (form.has('parentId')) {
-			const parentId = String(form.get('parentId') ?? '') || null;
-			if (parentId) {
-				if (parentId === id) return fail(400, { message: 'A task cannot be its own parent' });
-				const parent = await getTask(parentId);
-				if (!parent || parent.projectId !== params.id)
-					return fail(400, { message: 'Parent must belong to this project' });
-				if (parent.parentId) return fail(400, { message: 'Sub-tasks cannot have sub-tasks' });
-				const [{ n }] = await db
-					.select({ n: count(task.id) })
-					.from(task)
-					.where(eq(task.parentId, id));
-				if (n > 0) return fail(400, { message: 'Move or remove this task’s sub-tasks first' });
-			}
-			set.parentId = parentId;
-		}
-
+		if (form.has('recurrence')) input.recurrence = String(form.get('recurrence') ?? '').trim() || null;
+		if (form.has('parentId')) input.parentId = String(form.get('parentId') ?? '') || null;
 		const cf = cfEntries(form);
-		if (Object.keys(set).length === 0 && cf.length === 0)
-			return fail(400, { message: 'No fields to update' });
+		if (cf.length > 0) input.cf = cf;
 
-		await db
-			.update(task)
-			.set({ ...set, updatedAt: new Date() })
-			.where(eq(task.id, id));
-		if (cf.length > 0) {
-			const res = await writeTaskCustomValues(id, params.id, cf);
-			if (res.error) return fail(400, { message: res.error });
-		}
-
-		if (set.title !== undefined && set.title !== existing.title)
-			void logActivity(params.id, id, locals.user.id, 'title', { from: existing.title, to: set.title });
-		if (set.statusId !== undefined && set.statusId !== existing.statusId)
-			void logActivity(params.id, id, locals.user.id, 'status', { to: set.statusId });
-		if (set.assigneeId !== undefined && set.assigneeId !== existing.assigneeId)
-			void logActivity(params.id, id, locals.user.id, 'assignee', { to: set.assigneeId });
-		if (set.milestoneId !== undefined && set.milestoneId !== existing.milestoneId)
-			void logActivity(params.id, id, locals.user.id, 'milestone', { to: set.milestoneId });
-		if (set.priority !== undefined && set.priority !== existing.priority)
-			void logActivity(params.id, id, locals.user.id, 'priority', { to: set.priority });
-		if (set.dueDate !== undefined)
-			void logActivity(params.id, id, locals.user.id, 'due', {
-				to: set.dueDate ? new Date(set.dueDate).toISOString().slice(0, 10) : null
-			});
-		if (set.parentId !== undefined && set.parentId !== existing.parentId)
-			void logActivity(params.id, id, locals.user.id, 'parent', {
-				from: existing.parentId,
-				to: set.parentId
-			});
-
-		if (set.description !== undefined)
-			void notifyMentions({
-				text: set.description,
-				prevText: existing.description,
-				actorId: locals.user.id,
-				actorName: locals.user.name,
-				projectId: params.id,
-				taskId: id,
-				contextLabel: `"${existing.title}"`
-			});
-
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await updateTaskService(id, params.id, input, locals.user, {
+			has: (key) => key === 'cf' ? cf.length > 0 : key in input,
+			logActivity: true,
+			notifyMentionsOnDescription: true
+		});
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -752,16 +450,8 @@ export const actions: Actions = {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
 		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const existing = await getTask(id);
-		if (!existing || existing.projectId !== params.id)
-			return fail(400, { message: 'Invalid task' });
-		if (!(await canEditTask(locals.user, existing)))
-			return fail(403, { message: 'No edit permission on this task' });
-
-		await db.delete(task).where(eq(task.parentId, id)); // sub-tasks first
-		await db.delete(task).where(eq(task.id, id));
-		broadcastProjectChange(params.id, locals.user.id);
+		const res = await deleteTaskService(String(form.get('id') ?? ''), params.id, locals.user);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -852,138 +542,39 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const ids = [...new Set(form.getAll('ids').map(String).filter(Boolean))];
-		if (ids.length === 0) return fail(400, { message: 'No tasks selected' });
-
-		const set: Partial<typeof task.$inferInsert> = {};
-		// Track whether the new status completes tasks, to cascade to sub-tasks (mirrors single setStatus).
-		let completedStatusId: string | null = null;
-
-		if (form.has('statusId')) {
-			const statusId = String(form.get('statusId') ?? '');
-			if (!statusId) return fail(400, { message: 'Invalid status' });
-			const eligible = await listProjectStatuses(params.id);
-			const target = eligible.find((s) => s.id === statusId);
-			if (!target) return fail(400, { message: 'Status not eligible for this project' });
-			set.statusId = statusId;
-			if (target.category === 'completed') completedStatusId = statusId;
-		}
-		if (form.has('assigneeId')) {
-			const assigneeId = String(form.get('assigneeId') ?? '') || null;
-			if (assigneeId) {
-				const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
-				if (!u) return fail(400, { message: 'Unknown assignee' });
-			}
-			set.assigneeId = assigneeId;
-		}
-		if (form.has('milestoneId')) {
-			const milestoneId = String(form.get('milestoneId') ?? '') || null;
-			if (milestoneId) {
-				const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-				if (!m || m.projectId !== params.id)
-					return fail(400, { message: 'Milestone must belong to this project' });
-			}
-			set.milestoneId = milestoneId;
-		}
-		if (form.has('priority')) {
-			const priority = String(form.get('priority') ?? 'none');
-			if (!PRIORITIES.includes(priority as (typeof PRIORITIES)[number]))
-				return fail(400, { message: 'Invalid priority' });
-			set.priority = priority;
-		}
-		// Move: re-parent selected tasks under another top-level task ('' = promote to top-level)
-		if (form.has('parentId')) {
-			const parentId = String(form.get('parentId') ?? '') || null;
-			if (parentId) {
-				if (ids.includes(parentId))
-					return fail(400, { message: 'A task cannot be moved under itself' });
-				const [p] = await db.select().from(task).where(eq(task.id, parentId));
-				if (!p || p.projectId !== params.id)
-					return fail(400, { message: 'Parent must belong to this project' });
-				if (p.parentId) return fail(400, { message: 'Parent must be a top-level task' });
-			}
-			set.parentId = parentId;
-		}
-
-		if (Object.keys(set).length === 0) return fail(400, { message: 'No fields to update' });
-
-		const rows = await db.select().from(task).where(inArray(task.id, ids));
-		const allowed: string[] = [];
-		for (const t of rows) {
-			if (t.projectId !== params.id) continue;
-			if (await canEditTask(locals.user, t)) allowed.push(t.id);
-		}
-		if (allowed.length === 0) return fail(403, { message: 'No editable tasks selected' });
-
-		// re-parenting only applies to childless tasks (one nesting level)
-		if (set.parentId !== undefined && set.parentId !== null) {
-			const kids = await db
-				.select({ parentId: task.parentId })
-				.from(task)
-				.where(inArray(task.parentId, allowed));
-			if (kids.length) return fail(400, { message: 'Cannot move a task that has sub-tasks' });
-		}
-
-		await db
-			.update(task)
-			.set({ ...set, updatedAt: new Date() })
-			.where(inArray(task.id, allowed));
-
-		// Completing a task completes its sub-tasks (mirrors single setStatus cascade).
-		if (completedStatusId)
-			await db
-				.update(task)
-				.set({ statusId: completedStatusId, updatedAt: new Date() })
-				.where(inArray(task.parentId, allowed));
-
-		broadcastProjectChange(params.id, locals.user.id);
-		return { success: true, updated: allowed.length };
+		const res = await bulkUpdateTasks(
+			ids,
+			params.id,
+			{
+				statusId: form.has('statusId') ? String(form.get('statusId') ?? '') : undefined,
+				assigneeId: form.has('assigneeId') ? String(form.get('assigneeId') ?? '') || null : undefined,
+				milestoneId: form.has('milestoneId')
+					? String(form.get('milestoneId') ?? '') || null
+					: undefined,
+				priority: form.has('priority') ? String(form.get('priority') ?? 'none') : undefined,
+				parentId: form.has('parentId') ? String(form.get('parentId') ?? '') || null : undefined,
+				has: (key) => (key === 'statusName' ? false : form.has(key))
+			},
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
+		return { success: true, updated: res.data.updated };
 	},
 
 	/** Creates a new top-level task and re-parents the selected tasks under it (Move → create). */
 	bulkReparentToNew: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
-		if (!(await canAccessProject(locals.user, params.id)))
-			return fail(403, { message: 'No access to this project' });
 
 		const form = await request.formData();
-		const title = String(form.get('title') ?? '').trim();
 		const ids = [...new Set(form.getAll('ids').map(String).filter(Boolean))];
-		if (!title) return fail(400, { message: 'Task title is required' });
-		if (title.length > 240) return fail(400, { message: 'Title too long (max 240)' });
-		if (ids.length === 0) return fail(400, { message: 'No tasks selected' });
-
-		const eligible = await listProjectStatuses(params.id);
-		const defaultStatus = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-		if (!defaultStatus) return fail(400, { message: 'Project has no eligible statuses' });
-
-		const rows = await db.select().from(task).where(inArray(task.id, ids));
-		const allowed: string[] = [];
-		for (const t of rows) {
-			if (t.projectId !== params.id) continue;
-			if (await canEditTask(locals.user, t)) allowed.push(t.id);
-		}
-		if (allowed.length === 0) return fail(403, { message: 'No editable tasks selected' });
-		const kids = await db.select({ id: task.id }).from(task).where(inArray(task.parentId, allowed));
-		if (kids.length) return fail(400, { message: 'Cannot move a task that has sub-tasks' });
-
-		const now = new Date();
-		const newId = crypto.randomUUID();
-		await db.insert(task).values({
-			id: newId,
-			projectId: params.id,
-			parentId: null,
-			title,
-			priority: 'none',
-			statusId: defaultStatus.id,
-			createdBy: locals.user.id,
-			position: now.getTime(),
-			createdAt: now,
-			updatedAt: now
-		});
-		await db.update(task).set({ parentId: newId, updatedAt: now }).where(inArray(task.id, allowed));
-
-		broadcastProjectChange(params.id, locals.user.id);
-		return { success: true, parentId: newId, moved: allowed.length };
+		const res = await bulkReparentToNewService(
+			ids,
+			params.id,
+			String(form.get('title') ?? ''),
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
+		return { success: true, parentId: res.data.parentId, moved: res.data.moved };
 	},
 
 	bulkDeleteTasks: async ({ request, params, locals }) => {
@@ -991,21 +582,9 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const ids = [...new Set(form.getAll('ids').map(String).filter(Boolean))];
-		if (ids.length === 0) return fail(400, { message: 'No tasks selected' });
-
-		const rows = await db.select().from(task).where(inArray(task.id, ids));
-		const allowed: string[] = [];
-		for (const t of rows) {
-			if (t.projectId !== params.id) continue;
-			if (await canEditTask(locals.user, t)) allowed.push(t.id);
-		}
-		if (allowed.length === 0) return fail(403, { message: 'No deletable tasks selected' });
-
-		await db.delete(task).where(inArray(task.parentId, allowed)); // sub-tasks first
-		await db.delete(task).where(inArray(task.id, allowed));
-
-		broadcastProjectChange(params.id, locals.user.id);
-		return { success: true, deleted: allowed.length };
+		const res = await bulkDeleteTasksService(ids, params.id, locals.user);
+		if (!res.ok) return fail(res.status, { message: res.message });
+		return { success: true, deleted: res.data.deleted };
 	},
 
 	/** Bulk add/remove one label across the selected tasks (labels are multi-value, so
@@ -1016,42 +595,15 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const ids = [...new Set(form.getAll('ids').map(String).filter(Boolean))];
-		if (ids.length === 0) return fail(400, { message: 'No tasks selected' });
-		const labelId = String(form.get('labelId') ?? '');
-		if (!labelId) return fail(400, { message: 'Invalid label' });
-		const add = String(form.get('add') ?? '') === '1';
-
-		// label must be a workspace label of this project's workspace OR scoped to it
-		const [l] = await db.select().from(label).where(eq(label.id, labelId));
-		const [proj] = await db.select().from(project).where(eq(project.id, params.id));
-		const ok =
-			l &&
-			proj &&
-			((l.workspaceId !== null && l.workspaceId === proj.workspaceId) ||
-				(l.projectId !== null && l.projectId === params.id));
-		if (!ok) return fail(400, { message: 'Unknown label' });
-
-		const rows = await db.select().from(task).where(inArray(task.id, ids));
-		const allowed: string[] = [];
-		for (const t of rows) {
-			if (t.projectId !== params.id) continue;
-			if (await canEditTask(locals.user, t)) allowed.push(t.id);
-		}
-		if (allowed.length === 0) return fail(403, { message: 'No editable tasks selected' });
-
-		if (add) {
-			await db
-				.insert(taskLabel)
-				.values(allowed.map((taskId) => ({ taskId, labelId })))
-				.onConflictDoNothing();
-		} else {
-			await db
-				.delete(taskLabel)
-				.where(and(inArray(taskLabel.taskId, allowed), eq(taskLabel.labelId, labelId)));
-		}
-
-		broadcastProjectChange(params.id, locals.user.id);
-		return { success: true, updated: allowed.length };
+		const res = await bulkSetLabelService(
+			ids,
+			params.id,
+			String(form.get('labelId') ?? ''),
+			String(form.get('add') ?? '') === '1',
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
+		return { success: true, updated: res.data.updated };
 	},
 
 
