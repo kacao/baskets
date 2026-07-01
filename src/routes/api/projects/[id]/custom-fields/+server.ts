@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { customField } from '$lib/server/db/schema';
+import { customField, project } from '$lib/server/db/schema';
 import { apiError, readJson } from '$lib/server/api';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject, canEditProject } from '$lib/server/permissions';
@@ -16,6 +16,10 @@ import type { RequestHandler } from './$types';
 // List custom-field DEFINITIONS for a project (config parsed, ordered for display).
 export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
+	// A missing project must 404 for everyone (incl. admins, whose canAccessProject
+	// short-circuits true) — same pattern as the other project sub-resources.
+	const [proj] = await db.select({ id: project.id }).from(project).where(eq(project.id, params.id));
+	if (!proj) return apiError(404, 'Project not found');
 	// ADR-019: inaccessible projects are indistinguishable from missing ones
 	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Project not found');
 
@@ -26,6 +30,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 // Create a custom-field definition. Mirrors the createCustomField form action.
 export const POST: RequestHandler = async ({ request, params, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
+	const [proj] = await db.select({ id: project.id }).from(project).where(eq(project.id, params.id));
+	if (!proj) return apiError(404, 'Project not found');
 	// ADR-019: don't confirm existence to users who can't edit — 404, not 403
 	if (!(await canAccessProject(locals.user, params.id))) return apiError(404, 'Project not found');
 	if (!(await canEditProject(locals.user, params.id)))
