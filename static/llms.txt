@@ -499,7 +499,7 @@ List the files attached directly to a task (excludes custom-field files).
 
 ### POST /api/tasks/{id}/files
 Upload a file straight onto a task (multipart/form-data; part `file`). The project is derived from the task; max 10 MB (`413`); blocked executable/active-markup extensions rejected (`415`); same server-derived MIME as `/api/files`.
-- 201: `{ "file": { "id", "taskId", "fieldId" (null), "filename", "mimeType", "size" } }`. `400` if no `file` part or the file is empty; `401` if unauthenticated; `404` if the task is missing/inaccessible OR the caller lacks edit permission (this endpoint returns `404` in all those cases, never `403`).
+- 201: `{ "file": { "id", "taskId", "fieldId" (null), "filename", "mimeType", "size" } }`. `400` if no `file` part or the file is empty; `401` if unauthenticated; `404` if the task is missing/inaccessible. A task attachment is task DATA, so it needs project ACCESS (not project-structure edit rights), consistent with editing a task; inaccessible ≡ missing (`404`, never `403`).
 - Set a task's cover image from one of these via the `?/setTaskCover` form action (`id`, `coverFileId`; image of the same task; empty clears).
 
 ## Project files
