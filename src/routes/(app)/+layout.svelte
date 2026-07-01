@@ -278,7 +278,7 @@
 
 		<div class="main-body" data-pane-host>
 			{#key page.url.pathname}
-				<main class="content" in:fade={{ duration: 150 }}>
+				<main class="content">
 					{@render children()}
 				</main>
 			{/key}
@@ -309,6 +309,7 @@
 		top: 0;
 		height: 100vh;
 		overflow-y: auto;
+		scrollbar-gutter: stable;
 		background: var(--color-bg);
 	}
 
@@ -759,6 +760,19 @@
 		min-width: 0;
 		overflow: scroll;
 		padding: var(--sp-4) var(--sp-4) var(--sp-7);
+		/* subtle page swap: replays on each navigation via the {#key} remount.
+		   Barely-there (never fully blanks) so list pages' .stagger-in cascade
+		   reads as the motion, not a big-block blink. */
+		animation: pageFade 140ms ease-out both;
+	}
+
+	@keyframes pageFade {
+		from {
+			opacity: 0.5;
+		}
+		to {
+			opacity: 1;
+		}
 	}
 
 	/* When a SidePane is open it sets --pane-w on the host; keep the content's

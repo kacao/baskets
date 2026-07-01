@@ -57,13 +57,9 @@
 		<p class="u-muted">{$t('Create your first project to get started.')}</p>
 	</div>
 {:else}
-	<div class="grid">
-		{#each data.projects as p, i (p.id)}
-			<a
-				href="/projects/{p.id}"
-				class="project-card"
-				transition:fly={{ y: 10, duration: 150, delay: i * 30 }}
-			>
+	<div class="grid stagger-in">
+		{#each data.projects as p (p.id)}
+			<a href="/projects/{p.id}" class="project-card">
 				<h4 class="project-name">
 					{#if p.icon}<EntityIcon value={p.icon} size={18} /> {/if}{p.name}
 				</h4>

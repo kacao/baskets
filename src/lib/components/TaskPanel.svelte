@@ -59,6 +59,8 @@
 		canEditTask,
 		onClose,
 		onSelectTask,
+		back = null,
+		onBack,
 		statusDisplay = 'text',
 		templates = []
 	}: {
@@ -78,11 +80,21 @@
 		canEditTask: (t: { id: string; parentId: string | null }) => boolean;
 		onClose: () => void;
 		onSelectTask?: (id: string) => void;
+		// nav origin ("← where I came from"): set when navigating between tasks
+		// inside the pane (sub-task, task-cf link, dep, mention). Falls back to the
+		// data parent so a directly-opened sub-task still shows its parent crumb.
+		back?: { id: string; title: string } | null;
+		onBack?: () => void;
 		statusDisplay?: 'text' | 'icon' | 'text-icon';
 		templates?: { id: string; name: string }[];
 	} = $props();
 
 	const parent = $derived(task.parentId ? (tasks.find((t) => t.id === task.parentId) ?? null) : null);
+	const backCrumb = $derived(back ?? parent);
+	function crumbClick() {
+		if (back) onBack?.();
+		else if (parent) onSelectTask?.(parent.id);
+	}
 
 	const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const;
 
@@ -393,9 +405,9 @@
 		{/if}
 	{/snippet}
 
-	{#if parent}
-		<button class="parent-link" type="button" onclick={() => onSelectTask?.(parent.id)}>
-			<Icon name="nav-arrow-left" size={12} /> {parent.title}
+	{#if backCrumb}
+		<button class="parent-link" type="button" onclick={crumbClick}>
+			<Icon name="nav-arrow-left" size={12} /> {backCrumb.title}
 		</button>
 	{/if}
 	{#if editable}

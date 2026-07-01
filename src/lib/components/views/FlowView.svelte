@@ -68,7 +68,22 @@
 	} = $props();
 
 	let selectedId = $state<string | null>(null);
+	// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
+	// the top is the "← back" target, reset on any fresh open from outside the pane
+	let backStack = $state<string[]>([]);
 	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
+	function navTask(id: string) {
+		if (id === selectedId) return;
+		if (selectedId) backStack = [...backStack, selectedId];
+		selectedId = id;
+	}
+	function navBack() {
+		selectedId = backStack[backStack.length - 1] ?? null;
+		backStack = backStack.slice(0, -1);
+	}
+	const backTask = $derived(
+		backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
+	);
 	// "Statuses shown" (Customize) — graph nodes limited to these statuses; absent = all
 	const graphTasks = $derived(statusIds ? tasks.filter((t) => statusIds.includes(t.statusId)) : tasks);
 	// main flow charts only top-level tasks; sub-tasks appear via focus-mode expansion
@@ -108,7 +123,7 @@
 					{taskDeps}
 					milestoneDeps={[]}
 					focusMode
-					onSelect={(id) => (selectedId = id)}
+					onSelect={(id) => { selectedId = id; backStack = []; }}
 				/>
 			{:else}
 				<Canvas
@@ -119,7 +134,7 @@
 					{taskDeps}
 					{milestoneDeps}
 					{showMilestones}
-					onSelect={(id) => (selectedId = id)}
+					onSelect={(id) => { selectedId = id; backStack = []; }}
 					onMilestoneOpen={(id) => (focusedMilestone = id)}
 				/>
 			{/if}
@@ -147,8 +162,13 @@
 		{canEditTask}
 		{templates}
 		{statusDisplay}
-		onClose={() => (selectedId = null)}
-		onSelectTask={(id) => (selectedId = id)}
+		back={backTask}
+		onBack={navBack}
+		onClose={() => {
+			selectedId = null;
+			backStack = [];
+		}}
+		onSelectTask={(id) => navTask(id)}
 	/>
 {/if}
 
