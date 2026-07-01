@@ -32,12 +32,22 @@ import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { notifyMentions } from '$lib/server/mentions';
 import { parseIconValue } from '$lib/server/icons';
 import {
+	createProjectStatus,
+	deleteStatusById,
 	listProjectCustomStatuses,
 	listStatuses,
 	listWorkspaceStatuses,
-	STATUS_CATEGORIES,
-	type StatusCategory
+	reorderProjectStatuses,
+	setProjectEligibleStatuses,
+	updateStatusById,
+	STATUS_CATEGORIES
 } from '$lib/server/statuses';
+import {
+	createLabel,
+	deleteLabelById,
+	toggleProjectLabel,
+	updateLabelById
+} from '$lib/server/labels';
 import {
 	APPLIES_TO,
 	CUSTOM_FIELD_TYPES,
@@ -52,20 +62,6 @@ import { deleteFilesForField } from '$lib/server/uploads';
 import { importProjectFromExport } from '$lib/server/projectIO';
 import { milestoneProgressByProject, reorderMilestones } from '$lib/server/milestones';
 import type { Actions, PageServerLoad } from './$types';
-
-/** Defaults + the project's workspace statuses + its own statuses are assignable here. */
-async function assignableStatuses(projectId: string) {
-	const [proj] = await db
-		.select({ workspaceId: project.workspaceId })
-		.from(project)
-		.where(eq(project.id, projectId));
-	const [defaults, wsStatuses, customs] = await Promise.all([
-		listStatuses(),
-		proj?.workspaceId ? listWorkspaceStatuses(proj.workspaceId) : Promise.resolve([]),
-		listProjectCustomStatuses(projectId)
-	]);
-	return [...defaults, ...wsStatuses, ...customs];
-}
 
 /** Accept a #rrggbb hex color, else null. */
 function parseColor(v: FormDataEntryValue | null): string | null {
@@ -445,40 +441,18 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		const description = String(form.get('description') ?? '').trim() || null;
-		const category = String(form.get('category') ?? 'backlog');
-
-		if (!name) return fail(400, { message: 'Status name is required' });
-		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
-		if (description && description.length > 200) return fail(400, { message: 'Description too long (max 200)' });
-		if (!STATUS_CATEGORIES.includes(category as StatusCategory))
-			return fail(400, { message: 'Invalid category' });
-
-		const color = parseColor(form.get('color'));
-		const icon = parseIconValue(form.get('icon'));
-
-		const taken = await assignableStatuses(params.id);
-		if (taken.some((s) => s.name.toLowerCase() === name.toLowerCase()))
-			return fail(400, { message: 'A status with that name already exists here' });
-
-		const id = crypto.randomUUID();
-		const now = new Date();
-		await db.insert(status).values({
-			id,
-			name,
-			description,
-			category,
-			color,
-			icon,
-			projectId: params.id,
-			position: (taken.at(-1)?.position ?? 0) + 10,
-			builtIn: false,
-			createdAt: now
-		});
-		// project statuses are eligible in their project by definition
-		await db.insert(projectStatus).values({ projectId: params.id, statusId: id });
-
+		const res = await createProjectStatus(
+			params.id,
+			{
+				name: String(form.get('name') ?? ''),
+				description: String(form.get('description') ?? '').trim() || null,
+				category: String(form.get('category') ?? 'backlog'),
+				color: form.get('color'),
+				icon: form.get('icon')
+			},
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -488,29 +462,19 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const name = String(form.get('name') ?? '').trim();
-		const description = String(form.get('description') ?? '').trim() || null;
-		const category = String(form.get('category') ?? 'backlog');
-
-		const [s] = await db.select().from(status).where(eq(status.id, id));
-		if (!s || s.projectId !== params.id)
-			return fail(400, { message: 'Not a status of this project' });
-
-		if (!name) return fail(400, { message: 'Status name is required' });
-		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
-		if (description && description.length > 200) return fail(400, { message: 'Description too long (max 200)' });
-		if (!STATUS_CATEGORIES.includes(category as StatusCategory))
-			return fail(400, { message: 'Invalid category' });
-
-		const color = parseColor(form.get('color'));
-		const icon = parseIconValue(form.get('icon'));
-
-		const taken = await assignableStatuses(params.id);
-		if (taken.some((x) => x.id !== id && x.name.toLowerCase() === name.toLowerCase()))
-			return fail(400, { message: 'A status with that name already exists here' });
-
-		await db.update(status).set({ name, description, category, color, icon }).where(eq(status.id, id));
+		const res = await updateStatusById(
+			String(form.get('id') ?? ''),
+			{
+				name: String(form.get('name') ?? ''),
+				description: String(form.get('description') ?? '').trim() || null,
+				category: String(form.get('category') ?? 'backlog'),
+				color: form.get('color'),
+				icon: form.get('icon')
+			},
+			locals.user,
+			{ has: () => true, owner: { projectId: params.id } }
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -519,20 +483,9 @@ export const actions: Actions = {
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-
-		const [s] = await db.select().from(status).where(eq(status.id, id));
-		if (!s || s.projectId !== params.id)
-			return fail(400, { message: 'Not a status of this project' });
-
-		const [{ n }] = await db
-			.select({ n: count(task.id) })
-			.from(task)
-			.where(eq(task.statusId, id));
-		if (n > 0) return fail(400, { message: `Status is used by ${n} task(s)` });
-
-		await db.delete(status).where(eq(status.id, id));
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await deleteStatusById(id, locals.user, { owner: { projectId: params.id } });
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -542,28 +495,9 @@ export const actions: Actions = {
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
 
-		const ids = String((await request.formData()).get('ids') ?? '')
-			.split(',')
-			.map((s) => s.trim())
-			.filter(Boolean);
-
-		const owned = await listProjectCustomStatuses(params.id);
-		const ownedIds = new Set(owned.map((s) => s.id));
-		if (ids.length !== owned.length || !ids.every((id) => ownedIds.has(id)))
-			return fail(400, { message: 'Invalid order' });
-
-		const [proj] = await db
-			.select({ workspaceId: project.workspaceId })
-			.from(project)
-			.where(eq(project.id, params.id));
-		const inherited = [
-			...(await listStatuses()),
-			...(proj?.workspaceId ? await listWorkspaceStatuses(proj.workspaceId) : [])
-		];
-		// keep project customs sorted after defaults + workspace statuses globally
-		const base = Math.max(0, ...inherited.map((s) => s.position)) + 10;
-		for (let i = 0; i < ids.length; i++)
-			await db.update(status).set({ position: base + i * 10 }).where(eq(status.id, ids[i]));
+		const ids = String((await request.formData()).get('ids') ?? '').split(',');
+		const res = await reorderProjectStatuses(params.id, ids, locals.user);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -572,26 +506,9 @@ export const actions: Actions = {
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
 
-		const form = await request.formData();
-		const statusIds = form.getAll('statusIds').map(String).filter(Boolean);
-		if (statusIds.length === 0)
-			return fail(400, { message: 'A project needs at least one eligible status' });
-
-		const valid = new Set((await assignableStatuses(params.id)).map((s) => s.id));
-		if (!statusIds.every((id) => valid.has(id))) return fail(400, { message: 'Unknown status' });
-
-		const inUse = await db
-			.select({ statusId: task.statusId })
-			.from(task)
-			.where(eq(task.projectId, params.id));
-		const keep = new Set(statusIds);
-		if (inUse.some((t) => !keep.has(t.statusId)))
-			return fail(400, { message: 'Cannot remove a status still used by tasks in this project' });
-
-		await db.delete(projectStatus).where(eq(projectStatus.projectId, params.id));
-		await db
-			.insert(projectStatus)
-			.values(statusIds.map((statusId) => ({ projectId: params.id, statusId })));
+		const statusIds = (await request.formData()).getAll('statusIds').map(String).filter(Boolean);
+		const res = await setProjectEligibleStatuses(params.id, statusIds, locals.user);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -878,24 +795,9 @@ export const actions: Actions = {
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
 
-		const form = await request.formData();
-		const labelId = String(form.get('labelId') ?? '');
-
-		const [has] = await db
-			.select()
-			.from(projectLabel)
-			.where(and(eq(projectLabel.projectId, params.id), eq(projectLabel.labelId, labelId)));
-		if (has) {
-			await db
-				.delete(projectLabel)
-				.where(and(eq(projectLabel.projectId, params.id), eq(projectLabel.labelId, labelId)));
-		} else {
-			const [l] = await db.select().from(label).where(eq(label.id, labelId));
-			const [proj] = await db.select().from(project).where(eq(project.id, params.id));
-			if (!l || !proj || l.workspaceId !== proj.workspaceId)
-				return fail(400, { message: 'Unknown label' });
-			await db.insert(projectLabel).values({ projectId: params.id, labelId });
-		}
+		const labelId = String((await request.formData()).get('labelId') ?? '');
+		const res = await toggleProjectLabel(params.id, labelId, locals.user);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -907,25 +809,12 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		if (!name) return fail(400, { message: 'Label name is required' });
-		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
-		const existing = await db
-			.select({ name: label.name })
-			.from(label)
-			.where(eq(label.projectId, params.id));
-		if (existing.some((l) => l.name.toLowerCase() === name.toLowerCase()))
-			return fail(400, { message: 'A label with that name exists' });
-
-		await db.insert(label).values({
-			id: crypto.randomUUID(),
-			name,
-			projectId: params.id,
-			color: parseColor(form.get('color')),
-			icon: parseIconValue(form.get('icon')),
-			position: Date.now(),
-			createdAt: new Date()
-		});
+		const res = await createLabel(
+			{ type: 'project', id: params.id },
+			{ name: String(form.get('name') ?? ''), color: form.get('color'), icon: form.get('icon') },
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -935,27 +824,13 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const [existing] = await db.select().from(label).where(eq(label.id, id));
-		if (!existing || existing.projectId !== params.id)
-			return fail(400, { message: 'Unknown label' });
-
-		const set: Partial<typeof label.$inferInsert> = {};
-		if (form.has('name')) {
-			const name = String(form.get('name') ?? '').trim();
-			if (!name) return fail(400, { message: 'Label name is required' });
-			if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
-			const others = await db
-				.select({ id: label.id, name: label.name })
-				.from(label)
-				.where(eq(label.projectId, params.id));
-			if (others.some((l) => l.id !== id && l.name.toLowerCase() === name.toLowerCase()))
-				return fail(400, { message: 'A label with that name exists' });
-			set.name = name;
-		}
-		if (form.has('color')) set.color = parseColor(form.get('color'));
-		if (form.has('icon')) set.icon = parseIconValue(form.get('icon'));
-		if (Object.keys(set).length) await db.update(label).set(set).where(eq(label.id, id));
+		const res = await updateLabelById(
+			String(form.get('id') ?? ''),
+			{ name: String(form.get('name') ?? ''), color: form.get('color'), icon: form.get('icon') },
+			locals.user,
+			{ has: (key) => form.has(key), owner: { projectId: params.id }, emptyOk: true }
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -964,9 +839,9 @@ export const actions: Actions = {
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		await db.delete(label).where(and(eq(label.id, id), eq(label.projectId, params.id)));
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await deleteLabelById(id, locals.user, { owner: { projectId: params.id } });
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 

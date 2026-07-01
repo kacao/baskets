@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, asc, count, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
 	label,
@@ -7,7 +7,6 @@ import {
 	permission,
 	project,
 	projectLabel,
-	status,
 	task,
 	taskLabel,
 	user,
@@ -21,11 +20,21 @@ import {
 } from '$lib/server/permissions';
 import { parseIconValue } from '$lib/server/icons';
 import {
+	createWorkspaceStatus,
+	deleteStatusById,
 	listStatuses,
 	listWorkspaceStatuses,
-	STATUS_CATEGORIES,
-	type StatusCategory
+	reorderWorkspaceStatuses,
+	updateStatusById,
+	STATUS_CATEGORIES
 } from '$lib/server/statuses';
+import {
+	createLabel,
+	createLabelGroup,
+	deleteLabelById,
+	deleteLabelGroupById,
+	updateLabelById
+} from '$lib/server/labels';
 import type { Actions, PageServerLoad } from './$types';
 
 async function getWorkspaceOr404(id: string) {
@@ -103,33 +112,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	};
 };
 
-/** Accept a #rrggbb hex color, else null. */
-function parseColor(v: FormDataEntryValue | null): string | null {
-	const s = String(v ?? '').trim();
-	return /^#[0-9a-fA-F]{6}$/.test(s) ? s.toLowerCase() : null;
-}
-
 async function guard(locals: App.Locals, workspaceId: string) {
 	if (!locals.user) return fail(401, { message: 'Not signed in' });
 	if (!(await canEditWorkspace(locals.user, workspaceId)))
 		return fail(403, { message: 'No edit permission on this workspace' });
 	return null;
-}
-
-/** Names a new/renamed workspace status must not collide with: defaults,
- * workspace siblings, AND statuses owned by this workspace's projects. */
-async function takenStatusNames(workspaceId: string) {
-	const projectIds = (
-		await db
-			.select({ id: project.id })
-			.from(project)
-			.where(eq(project.workspaceId, workspaceId))
-	).map((p) => p.id);
-	const projectStatuses =
-		projectIds.length > 0
-			? await db.select().from(status).where(inArray(status.projectId, projectIds))
-			: [];
-	return [...(await listStatuses()), ...(await listWorkspaceStatuses(workspaceId)), ...projectStatuses];
 }
 
 export const actions: Actions = {
@@ -184,35 +171,18 @@ export const actions: Actions = {
 		if (denied) return denied;
 
 		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		const description = String(form.get('description') ?? '').trim() || null;
-		const category = String(form.get('category') ?? 'backlog');
-
-		if (!name) return fail(400, { message: 'Status name is required' });
-		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
-		if (description && description.length > 200) return fail(400, { message: 'Description too long (max 200)' });
-		if (!STATUS_CATEGORIES.includes(category as StatusCategory))
-			return fail(400, { message: 'Invalid category' });
-
-		const color = parseColor(form.get('color'));
-		const icon = parseIconValue(form.get('icon'));
-
-		const taken = await takenStatusNames(params.id);
-		if (taken.some((s) => s.name.toLowerCase() === name.toLowerCase()))
-			return fail(400, { message: 'A status with that name already exists here' });
-
-		await db.insert(status).values({
-			id: crypto.randomUUID(),
-			name,
-			description,
-			category,
-			color,
-			icon,
-			workspaceId: params.id,
-			position: (taken.at(-1)?.position ?? 0) + 10,
-			builtIn: false,
-			createdAt: new Date()
-		});
+		const res = await createWorkspaceStatus(
+			params.id,
+			{
+				name: String(form.get('name') ?? ''),
+				description: String(form.get('description') ?? '').trim() || null,
+				category: String(form.get('category') ?? 'backlog'),
+				color: form.get('color'),
+				icon: form.get('icon')
+			},
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -221,29 +191,19 @@ export const actions: Actions = {
 		if (denied) return denied;
 
 		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const name = String(form.get('name') ?? '').trim();
-		const description = String(form.get('description') ?? '').trim() || null;
-		const category = String(form.get('category') ?? 'backlog');
-
-		const [s] = await db.select().from(status).where(eq(status.id, id));
-		if (!s || s.workspaceId !== params.id)
-			return fail(400, { message: 'Not a status of this workspace' });
-
-		if (!name) return fail(400, { message: 'Status name is required' });
-		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
-		if (description && description.length > 200) return fail(400, { message: 'Description too long (max 200)' });
-		if (!STATUS_CATEGORIES.includes(category as StatusCategory))
-			return fail(400, { message: 'Invalid category' });
-
-		const color = parseColor(form.get('color'));
-		const icon = parseIconValue(form.get('icon'));
-
-		const taken = await takenStatusNames(params.id);
-		if (taken.some((x) => x.id !== id && x.name.toLowerCase() === name.toLowerCase()))
-			return fail(400, { message: 'A status with that name already exists here' });
-
-		await db.update(status).set({ name, description, category, color, icon }).where(eq(status.id, id));
+		const res = await updateStatusById(
+			String(form.get('id') ?? ''),
+			{
+				name: String(form.get('name') ?? ''),
+				description: String(form.get('description') ?? '').trim() || null,
+				category: String(form.get('category') ?? 'backlog'),
+				color: form.get('color'),
+				icon: form.get('icon')
+			},
+			locals.user,
+			{ has: () => true, owner: { workspaceId: params.id } }
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -251,20 +211,9 @@ export const actions: Actions = {
 		const denied = await guard(locals, params.id);
 		if (denied) return denied;
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-
-		const [s] = await db.select().from(status).where(eq(status.id, id));
-		if (!s || s.workspaceId !== params.id)
-			return fail(400, { message: 'Not a status of this workspace' });
-
-		const [{ n }] = await db
-			.select({ n: count(task.id) })
-			.from(task)
-			.where(eq(task.statusId, id));
-		if (n > 0) return fail(400, { message: `Status is used by ${n} task(s)` });
-
-		await db.delete(status).where(eq(status.id, id));
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await deleteStatusById(id, locals.user, { owner: { workspaceId: params.id } });
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -273,20 +222,9 @@ export const actions: Actions = {
 		const denied = await guard(locals, params.id);
 		if (denied) return denied;
 
-		const ids = String((await request.formData()).get('ids') ?? '')
-			.split(',')
-			.map((s) => s.trim())
-			.filter(Boolean);
-
-		const owned = await listWorkspaceStatuses(params.id);
-		const ownedIds = new Set(owned.map((s) => s.id));
-		if (ids.length !== owned.length || !ids.every((id) => ownedIds.has(id)))
-			return fail(400, { message: 'Invalid order' });
-
-		// keep customs sorted after the built-in defaults globally
-		const base = Math.max(0, ...(await listStatuses()).map((d) => d.position)) + 10;
-		for (let i = 0; i < ids.length; i++)
-			await db.update(status).set({ position: base + i * 10 }).where(eq(status.id, ids[i]));
+		const ids = String((await request.formData()).get('ids') ?? '').split(',');
+		const res = await reorderWorkspaceStatuses(params.id, ids, locals.user);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -296,25 +234,9 @@ export const actions: Actions = {
 		const denied = await guard(locals, params.id);
 		if (denied) return denied;
 
-		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		if (!name) return fail(400, { message: 'Group name is required' });
-		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
-
-		const existing = await db
-			.select({ name: labelGroup.name })
-			.from(labelGroup)
-			.where(eq(labelGroup.workspaceId, params.id));
-		if (existing.some((g) => g.name.toLowerCase() === name.toLowerCase()))
-			return fail(400, { message: 'A group with that name exists' });
-
-		await db.insert(labelGroup).values({
-			id: crypto.randomUUID(),
-			name,
-			workspaceId: params.id,
-			position: Date.now(),
-			createdAt: new Date()
-		});
+		const name = String((await request.formData()).get('name') ?? '');
+		const res = await createLabelGroup(params.id, name, locals.user);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -322,12 +244,9 @@ export const actions: Actions = {
 		const denied = await guard(locals, params.id);
 		if (denied) return denied;
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		// labels in the group survive (groupId set null via FK)
-		await db
-			.delete(labelGroup)
-			.where(and(eq(labelGroup.id, id), eq(labelGroup.workspaceId, params.id)));
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await deleteLabelGroupById(id, locals.user, { workspaceId: params.id });
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -336,36 +255,17 @@ export const actions: Actions = {
 		if (denied) return denied;
 
 		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
-		const groupId = String(form.get('groupId') ?? '') || null;
-		const color = parseColor(form.get('color'));
-		const icon = parseIconValue(form.get('icon'));
-
-		if (!name) return fail(400, { message: 'Label name is required' });
-		if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
-
-		const existing = await db
-			.select({ name: label.name })
-			.from(label)
-			.where(eq(label.workspaceId, params.id));
-		if (existing.some((l) => l.name.toLowerCase() === name.toLowerCase()))
-			return fail(400, { message: 'A label with that name exists' });
-
-		if (groupId) {
-			const [g] = await db.select().from(labelGroup).where(eq(labelGroup.id, groupId));
-			if (!g || g.workspaceId !== params.id) return fail(400, { message: 'Unknown group' });
-		}
-
-		await db.insert(label).values({
-			id: crypto.randomUUID(),
-			name,
-			workspaceId: params.id,
-			groupId,
-			color,
-			icon,
-			position: Date.now(),
-			createdAt: new Date()
-		});
+		const res = await createLabel(
+			{ type: 'workspace', id: params.id },
+			{
+				name: String(form.get('name') ?? ''),
+				groupId: String(form.get('groupId') ?? '') || null,
+				color: form.get('color'),
+				icon: form.get('icon')
+			},
+			locals.user
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -374,27 +274,13 @@ export const actions: Actions = {
 		if (denied) return denied;
 
 		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		const [existing] = await db.select().from(label).where(eq(label.id, id));
-		if (!existing || existing.workspaceId !== params.id)
-			return fail(400, { message: 'Unknown label' });
-
-		const set: Partial<typeof label.$inferInsert> = {};
-		if (form.has('name')) {
-			const name = String(form.get('name') ?? '').trim();
-			if (!name) return fail(400, { message: 'Label name is required' });
-			if (name.length > 40) return fail(400, { message: 'Name too long (max 40)' });
-			const others = await db
-				.select({ id: label.id, name: label.name })
-				.from(label)
-				.where(eq(label.workspaceId, params.id));
-			if (others.some((l) => l.id !== id && l.name.toLowerCase() === name.toLowerCase()))
-				return fail(400, { message: 'A label with that name exists' });
-			set.name = name;
-		}
-		if (form.has('color')) set.color = parseColor(form.get('color'));
-		if (form.has('icon')) set.icon = parseIconValue(form.get('icon'));
-		if (Object.keys(set).length) await db.update(label).set(set).where(eq(label.id, id));
+		const res = await updateLabelById(
+			String(form.get('id') ?? ''),
+			{ name: String(form.get('name') ?? ''), color: form.get('color'), icon: form.get('icon') },
+			locals.user,
+			{ has: (key) => form.has(key), owner: { workspaceId: params.id }, emptyOk: true }
+		);
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
@@ -402,9 +288,9 @@ export const actions: Actions = {
 		const denied = await guard(locals, params.id);
 		if (denied) return denied;
 
-		const form = await request.formData();
-		const id = String(form.get('id') ?? '');
-		await db.delete(label).where(and(eq(label.id, id), eq(label.workspaceId, params.id)));
+		const id = String((await request.formData()).get('id') ?? '');
+		const res = await deleteLabelById(id, locals.user, { owner: { workspaceId: params.id } });
+		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
 	},
 
