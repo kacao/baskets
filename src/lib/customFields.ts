@@ -434,6 +434,62 @@ export function formatDate(iso: string, config: FieldConfig): string {
 	return datePart;
 }
 
+/** Reference-id → display-label resolvers for the multi-capable field types. */
+export type CfResolvers = {
+	option?: (id: string) => string;
+	user?: (id: string) => string;
+	location?: (id: string) => string;
+	task?: (id: string) => string;
+};
+
+/**
+ * A custom-field value rendered to a single display string (client + server safe;
+ * no i18n — English literals, matching the en-passthrough app). Used by the
+ * project-page header chips AND the `@[…](field:id)` mention chip (ADR-051), so a
+ * task's description can inline one of its own field values. Reference types resolve
+ * ids via `resolvers`; `rollup` is computed elsewhere (never stored) and returns ''.
+ */
+export function fieldDisplayText(
+	field: { type: string; config?: FieldConfig | null },
+	raw: string | null | undefined,
+	resolvers: CfResolvers = {}
+): string {
+	if (raw == null || raw === '') return '';
+	const cfg = sanitizeConfig(field.type, field.config ?? {});
+	const decoded = decodeValue({ type: field.type }, raw);
+	const join = (ids: unknown, resolve: (id: string) => string) =>
+		(Array.isArray(ids) ? ids : [ids])
+			.map((id) => resolve(String(id)))
+			.filter(Boolean)
+			.join(', ');
+	switch (field.type) {
+		case 'number': {
+			const n = Number(raw);
+			return Number.isFinite(n) ? formatNumber(n, cfg) : '';
+		}
+		case 'date':
+			return formatDate(String(raw), cfg);
+		case 'checkbox':
+			return raw === 'true' || raw === '1' ? 'Yes' : 'No';
+		case 'select':
+			return join(decoded, (id) => resolvers.option?.(id) ?? '');
+		case 'person':
+			return join(decoded, (id) => resolvers.user?.(id) ?? '');
+		case 'place':
+			return join(decoded, (id) => resolvers.location?.(id) ?? '');
+		case 'task':
+			return join(decoded, (id) => resolvers.task?.(id) ?? '');
+		case 'files': {
+			const n = Array.isArray(decoded) ? decoded.length : 0;
+			return n ? `${n} ${n === 1 ? 'file' : 'files'}` : '';
+		}
+		case 'rollup':
+			return '';
+		default:
+			return String(raw);
+	}
+}
+
 /* ---------------------- pure scalar value validators --------------------- */
 
 export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;

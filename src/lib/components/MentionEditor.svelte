@@ -17,6 +17,7 @@
 		type Mention,
 		type MentionKind
 	} from '$lib/mentions';
+	import { fieldDisplayText } from '$lib/customFields';
 
 	let {
 		value = $bindable(''),
@@ -37,7 +38,10 @@
 		locations = [],
 		files = [],
 		projects = [],
-		people = []
+		people = [],
+		fields = [],
+		fieldOptions = [],
+		fieldValues = []
 	}: {
 		value?: string;
 		name?: string;
@@ -58,6 +62,11 @@
 		files?: { id: string; filename: string; mimeType?: string }[];
 		projects?: { id: string; name: string }[];
 		people?: { id: string; name: string | null; email?: string | null }[];
+		// `field` refs (ADR-051): the owning task's own custom fields + current
+		// values → a `[name | value]` pill (select-only, resolved live).
+		fields?: { id: string; name: string; type: string; config: Record<string, unknown> }[];
+		fieldOptions?: { id: string; fieldId: string; title: string }[];
+		fieldValues?: { fieldId: string; value: string }[];
 	} = $props();
 
 	const KIND_LABEL: Record<MentionKind, string> = {
@@ -65,15 +74,31 @@
 		location: 'Location',
 		file: 'File',
 		project: 'Project',
-		person: 'Person'
+		person: 'Person',
+		field: 'Field'
 	};
 	const KIND_ICON: Record<MentionKind, string> = {
 		task: 'task-list',
 		location: 'map-pin',
 		file: 'page',
 		project: 'folder',
-		person: 'user'
+		person: 'user',
+		field: 'label'
 	};
+	// current display value of a field on the owning task, for pills + candidate subs
+	function fieldValueText(fieldId: string): string {
+		const f = fields.find((x) => x.id === fieldId);
+		if (!f) return '';
+		const raw = fieldValues.find((v) => v.fieldId === fieldId)?.value ?? null;
+		return fieldDisplayText(f, raw, {
+			option: (oid) => fieldOptions.find((o) => o.id === oid)?.title ?? '',
+			user: (uid) => people.find((p) => p.id === uid)?.name ?? '',
+			location: (lid) => locations.find((l) => l.id === lid)?.title ?? '',
+			task: (tid) => tasks.find((t) => t.id === tid)?.title ?? ''
+		});
+	}
+	// kind pills to show in the picker — hide "Field" when there are no fields
+	const pickerKinds = $derived(MENTION_KINDS.filter((k) => k !== 'field' || fields.length > 0));
 	const PER_KIND = 6;
 
 	type Cand = Mention & { sub?: string | null };
@@ -109,6 +134,8 @@
 				return projects.find((x) => x.id === refId)?.name ?? null;
 			case 'person':
 				return people.find((x) => x.id === refId)?.name ?? null;
+			case 'field':
+				return fields.find((x) => x.id === refId)?.name ?? null;
 		}
 	}
 
@@ -119,15 +146,25 @@
 		el.dataset.token = buildToken(m);
 		el.dataset.kind = m.kind;
 		el.dataset.refid = m.id;
-		const label = resolveLabel(m.kind, m.id) ?? m.label;
 		const k = document.createElement('span');
 		k.className = 'cm-pill-kind';
-		k.textContent = KIND_LABEL[m.kind];
 		const l = document.createElement('span');
 		l.className = 'cm-pill-label';
-		l.textContent = label;
-		el.append(k, l);
-		el.title = label;
+		if (m.kind === 'field') {
+			// [ field name | current value ] — the value segment is the "label" slot
+			const name = resolveLabel('field', m.id) ?? m.label;
+			const value = fieldValueText(m.id);
+			k.textContent = name;
+			l.textContent = value;
+			el.append(k, ...(value ? [l] : []));
+			el.title = value ? `${name}: ${value}` : name;
+		} else {
+			const label = resolveLabel(m.kind, m.id) ?? m.label;
+			k.textContent = KIND_LABEL[m.kind];
+			l.textContent = label;
+			el.append(k, l);
+			el.title = label;
+		}
 		return el;
 	}
 
@@ -194,6 +231,9 @@
 			case 'person':
 				list = people.map((x) => ({ kind, id: x.id, label: x.name ?? 'Unknown', sub: x.email }));
 				break;
+			case 'field':
+				list = fields.map((x) => ({ kind, id: x.id, label: x.name, sub: fieldValueText(x.id) || null }));
+				break;
 		}
 		if (q) list = list.filter((c) => matches(c.label, q) || matches(c.sub, q));
 		return list.slice(0, activeKind ? PER_KIND * 3 : PER_KIND);
@@ -208,7 +248,7 @@
 		if (!q) return [];
 		const kinds = activeKind ? [activeKind] : (['task', 'location', 'file'] as MentionKind[]);
 		return kinds.filter((k) => {
-			if (k === 'project' || k === 'person') return false;
+			if (k === 'project' || k === 'person' || k === 'field') return false; // select-only
 			if ((k === 'location' || k === 'file') && !canEditProject) return false;
 			return !cands.some((c) => c.kind === k && c.label.toLowerCase() === q.toLowerCase());
 		});
@@ -580,7 +620,7 @@
 			<button type="button" class="pill" class:on={activeKind === null} onclick={() => setKind(null)}>
 				{$t('All')}
 			</button>
-			{#each MENTION_KINDS as k (k)}
+			{#each pickerKinds as k (k)}
 				<button type="button" class="pill" class:on={activeKind === k} onclick={() => setKind(k)}>
 					{$t(KIND_LABEL[k])}
 				</button>
@@ -677,6 +717,11 @@
 	}
 	.cm :global(.cm-pill:hover .cm-pill-label) {
 		background: color-mix(in srgb, var(--color-primary, #2563eb) 18%, transparent);
+	}
+	/* field pill [ name | value ]: the name is DB content, not a kind label */
+	.cm :global(.cm-pill.cm-field .cm-pill-kind) {
+		text-transform: none;
+		color: var(--color-fg);
 	}
 
 	.mmenu {

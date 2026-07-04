@@ -25,6 +25,22 @@ Without seeding, register at `/register`, then promote the first user to admin:
 sqlite3 data/baskets.db "update user set role='admin' where email='you@example.com'"
 ```
 
+### Database (SQLite or Postgres)
+
+Set the dialect in `.env` (ADR-050). Defaults to SQLite — no change needed for local dev.
+
+```bash
+# SQLite (default)
+DB_DIALECT=sqlite
+DATABASE_URL=./data/baskets.db
+
+# Postgres
+DB_DIALECT=postgres
+DATABASE_URL=postgres://user:pass@localhost:5432/baskets
+```
+
+`npm run db:push` / `db:seed` target whichever dialect is set. (MySQL is not yet supported.)
+
 ## Production
 
 ```bash

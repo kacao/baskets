@@ -13,6 +13,7 @@ import {
 	numberRollupConfig,
 	rollupDisplayText,
 	fieldAggregations,
+	fieldDisplayText,
 	MULTI_CAPABLE
 } from '$lib/customFields';
 
@@ -224,6 +225,56 @@ describe('formatDate', () => {
 		const out = formatDate(new Date().toISOString(), { dateFormat: 'relative' });
 		expect(typeof out).toBe('string');
 		expect(out.length).toBeGreaterThan(0);
+	});
+});
+
+describe('fieldDisplayText', () => {
+	it('returns empty string for null/empty raw values', () => {
+		expect(fieldDisplayText({ type: 'text' }, null)).toBe('');
+		expect(fieldDisplayText({ type: 'number' }, '')).toBe('');
+	});
+
+	it('formats a number field via its config', () => {
+		expect(fieldDisplayText({ type: 'number', config: { numberFormat: 'number' } }, '1234')).toBe(
+			'1,234'
+		);
+	});
+
+	it('renders a checkbox as Yes / No', () => {
+		expect(fieldDisplayText({ type: 'checkbox' }, 'true')).toBe('Yes');
+		expect(fieldDisplayText({ type: 'checkbox' }, 'false')).toBe('No');
+	});
+
+	it('joins a multi select via the option resolver', () => {
+		const out = fieldDisplayText({ type: 'select' }, JSON.stringify(['a', 'b']), {
+			option: (id) => ({ a: 'Red', b: 'Blue' })[id] ?? ''
+		});
+		expect(out).toBe('Red, Blue');
+	});
+
+	it('resolves person / place / task refs through resolvers', () => {
+		expect(
+			fieldDisplayText({ type: 'person' }, JSON.stringify(['u1']), { user: () => 'Ada' })
+		).toBe('Ada');
+		expect(
+			fieldDisplayText({ type: 'place' }, JSON.stringify(['l1']), { location: () => 'HQ' })
+		).toBe('HQ');
+		expect(
+			fieldDisplayText({ type: 'task' }, JSON.stringify(['t1']), { task: () => 'Inspect roof' })
+		).toBe('Inspect roof');
+	});
+
+	it('summarizes files by count (singular/plural)', () => {
+		expect(fieldDisplayText({ type: 'files' }, JSON.stringify(['f1']))).toBe('1 file');
+		expect(fieldDisplayText({ type: 'files' }, JSON.stringify(['f1', 'f2']))).toBe('2 files');
+	});
+
+	it('drops unresolved reference ids instead of leaking raw uuids', () => {
+		expect(fieldDisplayText({ type: 'person' }, JSON.stringify(['ghost']))).toBe('');
+	});
+
+	it('returns empty for a rollup (computed elsewhere, never stored)', () => {
+		expect(fieldDisplayText({ type: 'rollup' }, 'anything')).toBe('');
 	});
 });
 

@@ -4,6 +4,7 @@ import { twoFactor, admin } from 'better-auth/plugins';
 import { env } from '$env/dynamic/private';
 import { db } from './db';
 import * as schema from './db/schema';
+import { DIALECT } from './db/dialect';
 
 export const auth = betterAuth({
 	appName: 'Baskets',
@@ -17,7 +18,7 @@ export const auth = betterAuth({
 		useSecureCookies: process.env.NODE_ENV === 'production'
 	},
 	database: drizzleAdapter(db, {
-		provider: 'sqlite',
+		provider: DIALECT === 'postgres' ? 'pg' : 'sqlite',
 		schema: {
 			user: schema.user,
 			session: schema.session,

@@ -27,14 +27,7 @@
 	import BulkActionBar from '$lib/components/BulkActionBar.svelte';
 	import { filterTasks } from '$lib/taskFilter';
 	import { sortTasks, parseSortBy } from '$lib/taskSort';
-	import {
-		fieldAppliesTo,
-		buildTaskCfSearch,
-		decodeValue,
-		formatNumber,
-		formatDate,
-		sanitizeConfig
-	} from '$lib/customFields';
+	import { fieldAppliesTo, buildTaskCfSearch, fieldDisplayText } from '$lib/customFields';
 	import { selection } from '$lib/selection.svelte';
 	import { toast } from '$lib/toast.svelte';
 	import { t } from '$lib/i18n';
@@ -372,44 +365,18 @@
 	// Project header chips (ADR-040 design): the project's OWN (entity='project') custom
 	// fields rendered as two-tone key-value pills [ name | value ]. Display-only; values
 	// are edited in project settings. Resolves each type to a human label, skips empties.
+	// Header-chip value display — shares the pure resolver with the `field` mention
+	// chip (ADR-051). Reference ids resolve against the project's rosters.
 	function projectFieldDisplay(
 		field: { id: string; type: string; config: Record<string, unknown> },
 		raw: string | null | undefined
 	): string {
-		if (raw == null || raw === '') return '';
-		const cfg = sanitizeConfig(field.type, field.config);
-		const decoded = decodeValue({ type: field.type }, raw);
-		const optTitle = (id: string) =>
-			data.projectFieldOptions.find((o) => o.id === id)?.title ?? '';
-		const join = (ids: unknown, resolve: (id: string) => string) =>
-			(Array.isArray(ids) ? ids : [ids])
-				.map((id) => resolve(String(id)))
-				.filter(Boolean)
-				.join(', ');
-		switch (field.type) {
-			case 'number': {
-				const n = Number(raw);
-				return Number.isFinite(n) ? formatNumber(n, cfg) : '';
-			}
-			case 'date':
-				return formatDate(String(raw), cfg);
-			case 'checkbox':
-				return raw === 'true' || raw === '1' ? $t('Yes') : $t('No');
-			case 'select':
-				return join(decoded, optTitle);
-			case 'person':
-				return join(decoded, (id) => data.users.find((u) => u.id === id)?.name ?? '');
-			case 'place':
-				return join(decoded, (id) => data.locations.find((l) => l.id === id)?.title ?? '');
-			case 'task':
-				return join(decoded, (id) => data.tasks.find((t) => t.id === id)?.title ?? '');
-			case 'files': {
-				const n = Array.isArray(decoded) ? decoded.length : 0;
-				return n ? `${n} ${n === 1 ? $t('file') : $t('files')}` : '';
-			}
-			default:
-				return String(raw);
-		}
+		return fieldDisplayText(field, raw, {
+			option: (id) => data.projectFieldOptions.find((o) => o.id === id)?.title ?? '',
+			user: (id) => data.users.find((u) => u.id === id)?.name ?? '',
+			location: (id) => data.locations.find((l) => l.id === id)?.title ?? '',
+			task: (id) => data.tasks.find((t) => t.id === id)?.title ?? ''
+		});
 	}
 	// Header chips honor `project.chipFields` (an ordered id list set on the custom-fields
 	// page's "Show" bar): null/unset = all project fields in their natural order; a list =
