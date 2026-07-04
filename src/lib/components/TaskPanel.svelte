@@ -184,6 +184,12 @@
 	const cfValue = (fieldId: string) =>
 		taskCustomValues.find((v) => v.taskId === task.id && v.fieldId === fieldId)?.value ?? null;
 	const cfOptions = (fieldId: string) => customFieldOptions.filter((o) => o.fieldId === fieldId);
+	// this task's field values, for the `@[…](field:id)` mention chip (ADR-051)
+	const mFieldValues = $derived(
+		taskCustomValues
+			.filter((v) => v.taskId === task.id)
+			.map((v) => ({ fieldId: v.fieldId, value: v.value }))
+	);
 
 	// per-task cf search text so the `task`-cf link picker searches by cf values too
 	const cfSearchByTask = $derived(
@@ -745,6 +751,9 @@
 				{files}
 				projects={mProjects}
 				people={mPeople}
+				fields={visibleCustomFields}
+				fieldOptions={customFieldOptions}
+				fieldValues={mFieldValues}
 				projectId={mProjectId}
 				canEditProject={mCanEditProject}
 				excludeTaskId={task.id}
@@ -761,6 +770,9 @@
 					{files}
 					projects={mProjects}
 					people={mPeople}
+					fields={visibleCustomFields}
+					fieldOptions={customFieldOptions}
+					fieldValues={mFieldValues}
 					{onSelectTask}
 				/>
 			</div>

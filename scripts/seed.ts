@@ -3,13 +3,12 @@
  * Run: npm run db:push && node --env-file=.env scripts/seed.ts
  * Idempotent-ish: skips if the admin user already exists.
  */
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { eq } from 'drizzle-orm';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { twoFactor, admin } from 'better-auth/plugins';
 import * as schema from '../src/lib/server/db/schema.ts';
+import { DIALECT } from '../src/lib/server/db/dialect.ts';
 
 // Passwords are read from the environment for real deployments; the fallbacks are
 // dev-only defaults (never use them in production — override via SEED_*_PASSWORD).
@@ -18,21 +17,33 @@ const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'admin-baskets-2026';
 const DEMO_EMAIL = 'demo@baskets.local';
 const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD ?? 'demo-baskets-2026';
 
-const sqlite = new Database(process.env.DATABASE_URL ?? './data/baskets.db');
-try {
-	sqlite.pragma('journal_mode = WAL');
-} catch {
-	// some filesystems (network mounts) don't support WAL — fall back to default
+// Dialect-aware client (ADR-050) — mirrors src/lib/server/db/index.ts. Drivers
+// are dynamically imported so only the selected one loads.
+let db;
+if (DIALECT === 'postgres') {
+	if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL required for DB_DIALECT=postgres');
+	const { default: postgres } = await import('postgres');
+	const { drizzle } = await import('drizzle-orm/postgres-js');
+	db = drizzle(postgres(process.env.DATABASE_URL, { max: 4 }), { schema });
+} else {
+	const { default: Database } = await import('better-sqlite3');
+	const { drizzle } = await import('drizzle-orm/better-sqlite3');
+	const sqlite = new Database(process.env.DATABASE_URL ?? './data/baskets.db');
+	try {
+		sqlite.pragma('journal_mode = WAL');
+	} catch {
+		// some filesystems (network mounts) don't support WAL — fall back to default
+	}
+	sqlite.pragma('foreign_keys = ON');
+	db = drizzle(sqlite, { schema });
 }
-sqlite.pragma('foreign_keys = ON');
-const db = drizzle(sqlite, { schema });
 
 const auth = betterAuth({
 	appName: 'Baskets',
 	secret: process.env.BETTER_AUTH_SECRET ?? 'seed-secret',
 	baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
 	database: drizzleAdapter(db, {
-		provider: 'sqlite',
+		provider: DIALECT === 'postgres' ? 'pg' : 'sqlite',
 		schema: {
 			user: schema.user,
 			session: schema.session,

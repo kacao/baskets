@@ -24,3 +24,6 @@ tests/webwright/final_runs/
 tests/webwright/screenshots/
 tests/webwright/outputs/
 tests/webwright/final_script_log.txt
+
+# drizzle-kit generate output (project is push-based, no committed migrations)
+drizzle/

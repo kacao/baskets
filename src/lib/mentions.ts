@@ -5,9 +5,18 @@
 // `id` is the entity id (for `person` it is the user id). Client + server safe:
 // this module touches no DOM and no server-only imports.
 
-export type MentionKind = 'task' | 'location' | 'file' | 'project' | 'person';
+// `field` (ADR-051) references one of the owning task's OWN custom fields; its chip
+// renders `[field name | current value]`, resolved live at render time.
+export type MentionKind = 'task' | 'location' | 'file' | 'project' | 'person' | 'field';
 
-export const MENTION_KINDS: MentionKind[] = ['task', 'location', 'file', 'project', 'person'];
+export const MENTION_KINDS: MentionKind[] = [
+	'task',
+	'location',
+	'file',
+	'project',
+	'person',
+	'field'
+];
 
 export type Mention = { kind: MentionKind; id: string; label: string };
 
@@ -15,7 +24,7 @@ export type MentionSegment = { type: 'text'; text: string } | ({ type: 'mention'
 
 // label: anything but ']' ; id: anything but ')'. Tolerant by design — a half-typed
 // token simply doesn't match and renders as plain text.
-const TOKEN_RE = /@\[([^\]]*)\]\((task|location|file|project|person):([^)]+)\)/g;
+const TOKEN_RE = /@\[([^\]]*)\]\((task|location|file|project|person|field):([^)]+)\)/g;
 
 /** Serialize a mention to its inline token form. Strips characters that would break the token. */
 export function buildToken(m: Mention): string {
