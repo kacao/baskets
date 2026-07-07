@@ -66,7 +66,7 @@ import {
 	projectAccessUserIds
 } from '$lib/server/permissions';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
-import { ICONOIR_NAMES } from '$lib/iconoirNames';
+import { ICON_NAMES } from '$lib/heroiconNames';
 import { createsCycle } from '$lib/server/graph';
 import {
 	createView as createViewService,
@@ -972,7 +972,7 @@ export const actions: Actions = {
 		const raw = String(form.get('icon') ?? '').trim();
 		let icon: string | null;
 		if (raw.startsWith('iconoir:')) {
-			if (!ICONOIR_NAMES.includes(raw.slice(8))) return fail(400, { message: 'Unknown icon' });
+			if (!ICON_NAMES.includes(raw.slice(8))) return fail(400, { message: 'Unknown icon' });
 			icon = raw;
 		} else {
 			icon = raw.slice(0, 8) || null; // emoji or legacy glyph

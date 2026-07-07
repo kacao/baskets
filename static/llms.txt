@@ -26,6 +26,7 @@ Authorization: Bearer bsk_<token>
 - Timestamps in responses are ISO-8601 strings (e.g. `"2026-06-21T00:00:00.000Z"`); a nullable date is `null` when unset. Booleans are JSON `true`/`false`.
 - Priority enum: `none | low | medium | high | urgent` (default `none`).
 - Status category (drives behavior, not the name): `backlog | planned | in-progress | completed | canceled` (`completed` = the "done" bucket that completes sub-tasks; `backlog` = new-task default).
+- Icon values (status/label/option/project `icon` fields): an emoji/glyph string, OR `iconoir:<name>` where `<name>` is a **Heroicon** name (24px outline; the `iconoir:` prefix is a historical namespace kept for back-compat — ADR-052). Unknown/invalid names → `400 "Unknown icon"`; `null`/`""` clears.
 
 ## Session
 
@@ -394,7 +395,7 @@ Update project metadata. At least one field required (else `400 "No fields to up
   - `name` string, trimmed non-empty, max 120.
   - `description` string|null.
   - `pinned` boolean (`400` if not a boolean) — sidebar pin / sort-first.
-  - `icon` string|null — an emoji / glyph (≤8 chars; longer is truncated) or `iconoir:<name>` (`400 "Unknown icon"` if the iconoir name is invalid). `null`/`""` clears it.
+  - `icon` string|null — an emoji / glyph (≤8 chars; longer is truncated) or `iconoir:<name>` (a Heroicon name; see Conventions → Icon values; `400 "Unknown icon"` if unknown). `null`/`""` clears it.
   - `statusId` string|null — the project's own status (validated against the built-in defaults + this project's workspace statuses; `400 "Status not available to this project"` otherwise; no FK). `null`/`""` clears.
   - `statusDisplay` `text|icon|text-icon` (`400 "Invalid status display"` otherwise) — the project-wide FALLBACK default for how status pills render; per-view overrides live in `view.config.statusDisplay`.
   - `chipFields` string[]|null — ordered list of project-entity (`entity='project'`) custom-field ids shown as chips on the project page header. Unknown/foreign ids are dropped; `null` clears it (→ show all project fields that have a value). Stored as a JSON-array string and returned that way on the project object.

@@ -18,6 +18,7 @@ data/uploads/
 test-results/
 playwright-report/
 .playwright/
+.playwright-mcp/
 
 # webwright run artifacts (screenshots/logs, regenerated)
 tests/webwright/final_runs/

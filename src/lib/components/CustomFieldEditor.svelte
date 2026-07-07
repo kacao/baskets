@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
 	import Icon from '$lib/components/Icon.svelte';
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
@@ -115,12 +116,16 @@
 	let reorderIds = $state('');
 	// sortable reorders only the visible (current-tab) subset; splice that new order back
 	// into the shown slots of the full `items` list, leave the other tab's rows in place.
-	function onReorder(orderedShownIds: string[]) {
+	async function onReorder(orderedShownIds: string[]) {
 		const byId = new Map(items.map((i) => [i.id, i]));
 		const ordered = orderedShownIds.map((id) => byId.get(id)).filter((f): f is Field => Boolean(f));
 		let qi = 0;
 		items = items.map((it) => ((it.entity ?? 'task') === entityTab ? (ordered[qi++] ?? it) : it));
 		reorderIds = items.map((i) => i.id).join(',');
+		// flush the reorderIds binding into the hidden input BEFORE submitting — Svelte
+		// batches the state write, so a synchronous requestSubmit() would post the stale
+		// (empty on first drag) value and the server rejects it as "Invalid order".
+		await tick();
 		reorderForm?.requestSubmit();
 	}
 </script>

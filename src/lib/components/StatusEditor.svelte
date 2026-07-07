@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
 	import Icon from '$lib/components/Icon.svelte';
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
@@ -77,7 +78,7 @@
 	// Pointer-based reorder (mouse + touch; src/lib/sortable.ts), one sortable per
 	// category → reordering is automatically constrained within a category. The new
 	// order of that category's custom ids is spliced back into the full `items` list.
-	function onReorderCat(orderedIds: string[]) {
+	async function onReorderCat(orderedIds: string[]) {
 		const byId = new Map(items.map((i) => [i.id, i]));
 		const ordered = orderedIds
 			.map((id) => byId.get(id))
@@ -86,6 +87,9 @@
 		let qi = 0;
 		items = items.map((it) => (set.has(it.id) ? (ordered[qi++] ?? it) : it));
 		reorderIds = items.map((i) => i.id).join(',');
+		// flush the binding into the hidden input before submit (Svelte batches the
+		// state write; a synchronous requestSubmit posts a stale/empty value → 400)
+		await tick();
 		reorderForm?.requestSubmit();
 	}
 </script>

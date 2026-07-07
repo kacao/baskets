@@ -6,7 +6,7 @@ import { apiError, readJson, optionalString, ApiValidationError } from '$lib/ser
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject, canEditProject } from '$lib/server/permissions';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
-import { ICONOIR_NAMES } from '$lib/iconoirNames';
+import { ICON_NAMES } from '$lib/heroiconNames';
 import { customValuesByTask, listCustomFieldOptions, listProjectCustomFields } from '$lib/server/customFields';
 import type { RequestHandler } from './$types';
 
@@ -107,7 +107,7 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		} else {
 			const raw = body.icon.trim();
 			if (raw.startsWith('iconoir:')) {
-				if (!ICONOIR_NAMES.includes(raw.slice(8))) return apiError(400, 'Unknown icon');
+				if (!ICON_NAMES.includes(raw.slice(8))) return apiError(400, 'Unknown icon');
 				updates.icon = raw;
 			} else {
 				updates.icon = raw.slice(0, 8) || null;
