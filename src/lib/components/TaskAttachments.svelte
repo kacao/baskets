@@ -277,6 +277,13 @@
 		gap: 8px;
 	}
 
+	@media (max-width: 720px) {
+		/* smaller thumbs so ~4–5 fit across a phone */
+		.gallery {
+			grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+		}
+	}
+
 	.thumb {
 		position: relative;
 		aspect-ratio: 1;
@@ -375,6 +382,20 @@
 
 	.tb-btn.danger:hover {
 		color: var(--color-error, tomato);
+	}
+
+	/* touch: no hover to reveal the thumb toolbar, so keep it visible + tappable */
+	@media (hover: none) {
+		.thumb-bar {
+			opacity: 1;
+		}
+		.tb-btn {
+			min-width: 28px;
+			min-height: 28px;
+		}
+		.act {
+			min-height: 36px;
+		}
 	}
 
 	.hidden-form {

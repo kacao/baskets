@@ -101,6 +101,7 @@
 <style>
 	.map {
 		height: 480px;
+		max-width: 100%;
 		border: 1px solid var(--color-border-subtle);
 	}
 
@@ -110,5 +111,25 @@
 		border-radius: 0;
 		box-shadow: none;
 		font-family: var(--font-body);
+	}
+
+	@media (max-width: 720px) {
+		.map {
+			height: 50vh;
+			min-height: 320px;
+		}
+
+		/* enlarge Leaflet zoom controls for touch (Leaflet renders global DOM) */
+		.map :global(.leaflet-bar a) {
+			width: 40px;
+			height: 40px;
+			line-height: 40px;
+		}
+	}
+
+	@media (max-width: 375px) {
+		.map {
+			height: 45vh;
+		}
 	}
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import Icon from '$lib/components/Icon.svelte';
@@ -240,7 +241,16 @@
 
 	let collapsed = $state<Record<string, boolean>>({});
 
-	const ROW_H = 30;
+	// Row height drives the SVG/layout math. Bump it on narrow/touch screens so bars
+	// and lane toggles stay comfortably tappable.
+	let vw = $state(browser ? window.innerWidth : 1200);
+	$effect(() => {
+		if (!browser) return;
+		const onResize = () => (vw = window.innerWidth);
+		window.addEventListener('resize', onResize);
+		return () => window.removeEventListener('resize', onResize);
+	});
+	const ROW_H = $derived(vw <= 720 ? 40 : 30);
 	const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'backlog';
 
 	// Flatten rows so dependency lines can be drawn across lanes by row index.
@@ -307,7 +317,7 @@
 		<p class="u-muted tl-empty">{$t('No tasks with dates yet.')}</p>
 	{:else}
 		<div class="tl-scroll">
-			<div class="tl-grid" style={`width:${chartWidth}px`}>
+			<div class="tl-grid" style={`width:${chartWidth}px; --row-h:${ROW_H}px`}>
 				<!-- axis header -->
 				<div class="tl-axis" style={`height:${ROW_H}px`}>
 					{#each ticks as tk (tk.x)}
@@ -610,7 +620,7 @@
 	.tl-bar {
 		position: absolute;
 		top: 4px;
-		height: 22px;
+		height: calc(var(--row-h, 30px) - 8px);
 		display: flex;
 		align-items: center;
 		gap: 4px;
@@ -685,5 +695,35 @@
 	.tl-chip:hover,
 	.tl-chip.selected {
 		border-color: var(--color-fg);
+	}
+
+	@media (max-width: 720px) {
+		.tl-scroll {
+			-webkit-overflow-scrolling: touch;
+		}
+
+		/* bar height already tracks --row-h (=40px here); make the lane toggle match */
+		.tl-lane-toggle {
+			min-width: 40px;
+			min-height: 40px;
+			justify-content: center;
+		}
+
+		.tl-lane-toggle::before {
+			width: 40px;
+			height: 40px;
+		}
+	}
+
+	@media (max-width: 375px) {
+		.tl-nodates-list {
+			flex-direction: column;
+			flex-wrap: nowrap;
+		}
+
+		.tl-chip {
+			max-width: 100%;
+			width: 100%;
+		}
 	}
 </style>

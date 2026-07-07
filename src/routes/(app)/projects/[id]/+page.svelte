@@ -38,6 +38,9 @@
 	let { data, form } = $props();
 
 	let projMenuOpen = $state(false);
+	// which "…"-menu submenu is expanded (touch has no hover, so flyouts are
+	// click-toggled — they render as inline accordions on mobile). ADR-042.
+	let openSub = $state<string | null>(null);
 	// project icon picker: emit a value through a hidden setProjectIcon form
 	let iconFormEl = $state<HTMLFormElement | null>(null);
 	let pendingIcon = $state('');
@@ -567,15 +570,23 @@
 				class="dots-btn"
 				aria-label={$t('Project menu')}
 				aria-expanded={projMenuOpen}
-				onclick={() => (projMenuOpen = !projMenuOpen)}
+				onclick={() => {
+					projMenuOpen = !projMenuOpen;
+					openSub = null;
+				}}
 			>
 				<Icon name="more-horiz" size={18} />
 			</button>
 			{#if projMenuOpen}
 				<div class="menu" transition:popover>
-					<!-- Create… (hover flyout): Task / Milestone -->
-					<div class="menu-sub">
-						<button class="menu-item menu-item--sub" aria-haspopup="true">
+					<!-- Create… (flyout / mobile accordion): Task / Milestone -->
+					<div class="menu-sub" class:open={openSub === 'create'}>
+						<button
+							class="menu-item menu-item--sub"
+							aria-haspopup="true"
+							aria-expanded={openSub === 'create'}
+							onclick={() => (openSub = openSub === 'create' ? null : 'create')}
+						>
 							{$t('Create…')} <span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
 						</button>
 						<div class="flyout">
@@ -611,9 +622,14 @@
 
 					<div class="menu-rule"></div>
 
-					<!-- Status (hover flyout) -->
-					<div class="menu-sub">
-						<button class="menu-item menu-item--sub" aria-haspopup="true">
+					<!-- Status (flyout / mobile accordion) -->
+					<div class="menu-sub" class:open={openSub === 'status'}>
+						<button
+							class="menu-item menu-item--sub"
+							aria-haspopup="true"
+							aria-expanded={openSub === 'status'}
+							onclick={() => (openSub = openSub === 'status' ? null : 'status')}
+						>
 							{$t('Status')} <span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
 						</button>
 						<div class="flyout">
@@ -664,8 +680,13 @@
 
 					<div class="menu-rule"></div>
 
-					<div class="menu-sub">
-						<button class="menu-item menu-item--sub" aria-haspopup="true">
+					<div class="menu-sub" class:open={openSub === 'icon'}>
+						<button
+							class="menu-item menu-item--sub"
+							aria-haspopup="true"
+							aria-expanded={openSub === 'icon'}
+							onclick={() => (openSub = openSub === 'icon' ? null : 'icon')}
+						>
 							{$t('Icon')} <span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
 						</button>
 						<div class="flyout flyout--picker">
@@ -677,8 +698,13 @@
 						</div>
 					</div>
 
-					<div class="menu-sub">
-						<button class="menu-item menu-item--sub" aria-haspopup="true">
+					<div class="menu-sub" class:open={openSub === 'labels'}>
+						<button
+							class="menu-item menu-item--sub"
+							aria-haspopup="true"
+							aria-expanded={openSub === 'labels'}
+							onclick={() => (openSub = openSub === 'labels' ? null : 'labels')}
+						>
 							{$t('Labels')} <span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
 						</button>
 						<div class="flyout">
@@ -1773,9 +1799,27 @@
 		display: none;
 	}
 
-	.menu-sub:hover > .flyout,
-	.menu-sub:focus-within > .flyout {
+	/* desktop: open on hover/keyboard focus. Gated to pointer devices so the
+	   click-toggle below is the sole driver on touch (a focused button keeps
+	   :focus-within true and would otherwise fight the toggle). */
+	@media (hover: hover) {
+		.menu-sub:hover > .flyout,
+		.menu-sub:focus-within > .flyout {
+			display: block;
+		}
+	}
+
+	/* click-toggle (all devices; the only opener on touch) */
+	.menu-sub.open > .flyout {
 		display: block;
+	}
+
+	.sub-arrow {
+		transition: transform var(--dur-fast) ease;
+	}
+
+	.menu-sub.open .sub-arrow {
+		transform: rotate(90deg);
 	}
 
 	/* the icon picker manages its own width + internal scroll */
@@ -1787,13 +1831,33 @@
 		padding: 0;
 	}
 
-	/* keep the flyout on-screen if the menu is near the right edge */
+	/* Mobile: side-positioned flyouts fall off-screen, so render the open
+	   submenu as an inline accordion that pushes the menu content down. */
 	@media (max-width: 720px) {
+		.menu {
+			max-height: calc(100dvh - 80px);
+			overflow-y: auto;
+		}
+
 		.flyout {
+			position: static;
 			left: auto;
-			right: 100%;
-			margin-left: 0;
-			margin-right: -1px;
+			right: auto;
+			margin: 2px 0 var(--sp-1);
+			min-width: 0;
+			max-width: none;
+			width: 100%;
+			max-height: 260px;
+			border: none;
+			border-radius: 0;
+			box-shadow: none;
+			background: var(--color-surface-muted);
+			padding-left: var(--sp-2);
+		}
+
+		.flyout--picker {
+			max-height: 300px;
+			overflow-y: auto;
 		}
 	}
 

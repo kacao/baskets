@@ -212,13 +212,17 @@
 	}
 
 	@media (max-width: 900px) {
-		/* fixed full-width overlay on narrow screens so content isn't squeezed */
+		/* fixed full-width overlay on narrow screens so content isn't squeezed.
+		   Sit above the sticky topbar (z-index:10) so the pane header + close (×)
+		   aren't hidden behind it — on phones (mobile.css) this becomes a true
+		   inset:0 full-screen sheet. */
 		.side-pane {
 			position: fixed;
 			inset: 49px 0 0 0;
 			flex: none;
 			width: auto;
 			max-width: 100%;
+			z-index: 40;
 		}
 
 		.pane-resizer {

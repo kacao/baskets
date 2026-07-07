@@ -190,6 +190,16 @@
 		typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 
 	const empty = $derived(tasks.length === 0 && (focusMode || !showMilestones || milestones.length === 0));
+
+	// Hide the MiniMap on phones — it wastes scarce space (kept for wider screens).
+	let vw = $state(typeof window !== 'undefined' ? window.innerWidth : 1200);
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const onResize = () => (vw = window.innerWidth);
+		window.addEventListener('resize', onResize);
+		return () => window.removeEventListener('resize', onResize);
+	});
+	const narrow = $derived(vw <= 720);
 </script>
 
 {#if empty}
@@ -199,7 +209,9 @@
 		<SvelteFlow bind:nodes bind:edges {nodeTypes} {colorMode} fitView nodesConnectable={false} minZoom={0.2}>
 			<Background />
 			<Controls />
-			<MiniMap pannable zoomable height={96} />
+			{#if !narrow}
+				<MiniMap pannable zoomable height={96} />
+			{/if}
 		</SvelteFlow>
 	</div>
 {/if}
@@ -208,6 +220,7 @@
 	.flow-canvas {
 		width: 100%;
 		height: 100%;
+		min-height: 0;
 	}
 
 	.flow-empty {
@@ -217,5 +230,22 @@
 		height: 100%;
 		color: var(--color-muted);
 		font-size: 14px;
+	}
+
+	@media (max-width: 720px) {
+		/* MiniMap is not rendered on phones; also hide it defensively + enlarge Controls
+		   (Svelte Flow renders global DOM) */
+		:global(.svelte-flow__minimap) {
+			display: none;
+		}
+
+		:global(.svelte-flow__controls-button) {
+			width: 40px;
+			height: 40px;
+		}
+
+		.flow-canvas {
+			max-height: calc(100dvh - 100px);
+		}
 	}
 </style>

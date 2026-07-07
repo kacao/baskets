@@ -130,4 +130,14 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+
+	@media (max-width: 720px) {
+		/* larger tap target for the expand/collapse toggle; negative margins keep the
+		   node layout from growing */
+		.fn-expand {
+			min-width: 36px;
+			min-height: 36px;
+			margin: -12px -8px -12px -12px;
+		}
+	}
 </style>

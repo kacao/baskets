@@ -537,9 +537,11 @@
 			const pw = node.offsetWidth;
 			const ph = node.offsetHeight;
 			const vw = window.innerWidth;
-			const vh = window.innerHeight;
+			// visualViewport tracks the shrunken area above the on-screen keyboard;
+			// fall back to innerHeight when unavailable. ~20px buffer from the bottom.
+			const vh = window.visualViewport?.height ?? window.innerHeight;
 			let top = cur.top + cur.height + 4;
-			if (top + ph > vh - 8 && cur.top - ph - 4 > 8) top = cur.top - ph - 4;
+			if (top + ph > vh - 20 && cur.top - ph - 4 > 8) top = cur.top - ph - 4;
 			const left = Math.max(8, Math.min(cur.left, vw - pw - 8));
 			node.style.top = `${Math.max(8, top)}px`;
 			node.style.left = `${left}px`;
@@ -674,6 +676,9 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 		cursor: text;
+		/* 16px keeps iOS Safari from zooming in on focus */
+		font-size: 16px;
+		line-height: 1.4;
 	}
 	.cm:focus {
 		outline: none;
@@ -742,6 +747,11 @@
 			0 8px 24px rgb(0 0 0 / 0.12);
 		padding: 4px;
 		overflow: hidden;
+	}
+	@media (max-width: 720px) {
+		.mmenu {
+			max-width: calc(100vw - 32px);
+		}
 	}
 	.mmenu-search {
 		width: 100%;

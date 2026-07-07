@@ -914,4 +914,22 @@
 		padding: 6px 8px;
 		font-size: 13px;
 	}
+
+	/* Phones: on a narrow screen auto-fit collapses the board to one full-width
+	   column and you can't swipe between statuses. Make each .board a
+	   horizontally-scrollable row of near-full-width columns (~1 + a peek). This
+	   applies per lane row too, so grouped/swimlane boards scroll independently. */
+	@media (max-width: 720px) {
+		.board-wrap {
+			overflow-x: auto;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		.board {
+			grid-template-columns: none;
+			grid-auto-flow: column;
+			grid-auto-columns: minmax(82vw, 85vw);
+			min-width: max-content;
+		}
+	}
 </style>

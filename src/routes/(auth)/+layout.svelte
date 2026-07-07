@@ -14,10 +14,12 @@
 <style>
 	.auth-shell {
 		min-height: 100vh;
+		min-height: 100dvh;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: var(--sp-3);
+		padding: max(var(--sp-4), env(safe-area-inset-top)) max(var(--sp-3), env(safe-area-inset-right))
+			max(var(--sp-4), env(safe-area-inset-bottom)) max(var(--sp-3), env(safe-area-inset-left));
 		background: var(--color-bg);
 	}
 
@@ -55,5 +57,28 @@
 		letter-spacing: var(--heading-tracking);
 		color: var(--color-fg);
 		display: inline-block;
+	}
+
+	@media (max-width: 720px) {
+		.auth-box {
+			padding: var(--sp-4) var(--sp-3);
+		}
+
+		.auth-box :global(input),
+		.auth-box :global(.input),
+		.auth-box :global(.select),
+		.auth-box :global(.btn) {
+			width: 100%;
+		}
+	}
+
+	@media (max-width: 375px) {
+		.auth-box {
+			padding: var(--sp-3) var(--sp-2);
+		}
+
+		.auth-logo-mark {
+			font-size: 20px;
+		}
 	}
 </style>

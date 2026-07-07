@@ -106,10 +106,10 @@
 			newProjLabelColor = '#71717a';
 			await update();
 		}}
-		class="u-flex"
+		class="u-flex label-create"
 		style="flex-wrap: wrap; margin-top: var(--sp-1);"
 	>
-		<input name="name" class="input" style="width: 200px; max-width: 100%;" placeholder={$t('New project label…')} required maxlength="40" />
+		<input name="name" class="input name-in" style="width: 200px; max-width: 100%;" placeholder={$t('New project label…')} required maxlength="40" />
 		<Popover ariaLabel={$t('Label color')}>
 			{#snippet trigger()}
 				<span class="cp-swatch" style="--c: {newProjLabelColor}" aria-hidden="true"></span>
@@ -201,5 +201,18 @@
 		background: var(--color-fg);
 		border-color: var(--color-fg);
 		color: var(--color-bg);
+	}
+
+	@media (max-width: 720px) {
+		.label-create .name-in,
+		.label-create :global(.select),
+		.label-create :global(.btn) {
+			width: 100%;
+		}
+
+		.label-create :global(input[type='date']),
+		.label-create :global(input[type='time']) {
+			width: 100%;
+		}
 	}
 </style>

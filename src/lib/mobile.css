@@ -28,7 +28,9 @@
 	   is simply inert. */
 	.drawer-backdrop {
 		position: fixed;
-		inset: 59px 0 0 0;
+		/* match the sidebar drawer's `top` exactly so the dim starts at the topbar
+		   edge: content(≈49px) + padding-top max(--sp-2, notch inset). */
+		inset: calc(49px + max(var(--sp-2), env(safe-area-inset-top))) 0 0 0;
 		background: color-mix(in oklab, var(--color-base-content) 28%, transparent);
 		opacity: 0;
 		pointer-events: none;
@@ -312,5 +314,99 @@
 	.task-title:hover .title-text,
 	.row-title:hover .title-text {
 		text-decoration: none !important;
+	}
+}
+
+/* ==================================================================
+   SYSTEMIC MOBILE FIXES
+   viewport-fit=cover (src/app.html) makes env(safe-area-inset-*) real
+   on notched devices; these rules keep fixed / screen-edge UI clear of
+   the notch, home indicator and on-screen keyboard, stop iOS
+   zoom-on-focus, and give touch-only affordances real tap area.
+   Literal-class + @media convention (see top of file).
+   ================================================================== */
+
+/* --- iOS zoom-on-focus: any text-entry control < 16px zooms the whole page
+   on focus. Force 16px on real touch devices (any width). Exclude toggles /
+   pickers that have no zooming text field. ------------------------------- */
+@media (hover: none) {
+	input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+	textarea,
+	select {
+		font-size: 16px;
+	}
+
+	/* column-resize handles are a pointer affordance — useless on touch and
+	   they steal the header tap. */
+	.col-resize {
+		display: none;
+	}
+}
+
+@media (max-width: 720px) {
+	/* --- Safe-area: fixed bottom bars + the full-screen task sheet --------
+	   These sit at the very bottom on phones; lift them above the home
+	   indicator and keep the pane body / footer clear of the inset. */
+	.toaster {
+		padding-bottom: env(safe-area-inset-bottom);
+	}
+
+	.bulk-bar {
+		bottom: max(var(--sp-4), calc(var(--sp-2) + env(safe-area-inset-bottom)));
+	}
+
+	.side-pane .pane-body {
+		padding-bottom: max(var(--sp-4), env(safe-area-inset-bottom));
+	}
+
+	.side-pane .pane-footer {
+		padding-bottom: max(var(--sp-3), env(safe-area-inset-bottom));
+	}
+
+	.side-pane .pane-head {
+		padding-right: max(var(--sp-3), env(safe-area-inset-right));
+	}
+
+	/* --- Bespoke dropdowns (NOT the shared Popover, which already clamps to
+	   the viewport): cap them so they can't blow out a phone screen. ------- */
+	.bell-pop,
+	.appr-menu {
+		max-width: calc(100vw - 16px);
+	}
+
+	.col-menu {
+		max-width: calc(100vw - 24px);
+	}
+
+	/* the filter popover is left-anchored under a right-side icon button —
+	   flip it to the right edge and cap its width so it stays on-screen. */
+	.filter-pop {
+		left: auto;
+		right: 0;
+		max-width: calc(100vw - 24px);
+	}
+
+	/* --- Touch tap target for the table group-collapse chevron (its own
+	   component doesn't size it for touch). ------------------------------- */
+	.group-toggle {
+		min-width: 36px;
+		min-height: 36px;
+	}
+
+	/* --- Milestone date pickers overflow the narrow card — let their row
+	   wrap and keep the native inputs inside the card. -------------------- */
+	.ms-date-form,
+	.ms-date-pill {
+		flex-wrap: wrap;
+	}
+
+	.ms-date {
+		max-width: 100%;
+	}
+
+	/* long workspace names in the switcher menu stay clipped, not overflowing */
+	.ws-item {
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 }

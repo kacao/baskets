@@ -170,9 +170,26 @@
 		font-variant-numeric: tabular-nums;
 	}
 
+	@media (max-width: 720px) {
+		/* 140px min-width can force awkward wrapping on a phone — pin to 2 cols. */
+		.stats {
+			grid-template-columns: repeat(2, 1fr);
+		}
+
+		.stat-num {
+			font-size: 28px;
+		}
+	}
+
 	@media (max-width: 600px) {
 		.bar-label {
 			flex-basis: 110px;
+		}
+	}
+
+	@media (max-width: 375px) {
+		.stats {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>

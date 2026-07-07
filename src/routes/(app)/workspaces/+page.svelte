@@ -41,7 +41,7 @@
 		<div class="row">
 			<span class="name">{w.name}</span>
 			<span class="u-tiny u-muted count">{$t('{n} project(s)', { n: w.projectCount })}</span>
-			<span class="u-tiny u-muted">{$t('owner')}: {w.ownerName ?? w.ownerId}</span>
+			<span class="u-tiny u-muted owner">{$t('owner')}: {w.ownerName ?? w.ownerId}</span>
 			<span style="flex: 1;"></span>
 			{#if w.editable}
 				<a class="btn btn-sm" href="/workspaces/{w.id}/settings">{$t('Settings')}</a>
@@ -79,5 +79,22 @@
 
 	.btn-primary:active {
 		transform: scale(0.96);
+	}
+
+	@media (max-width: 720px) {
+		.row {
+			flex-wrap: wrap;
+		}
+
+		.name {
+			overflow-wrap: anywhere;
+			min-width: 0;
+		}
+	}
+
+	@media (max-width: 375px) {
+		.owner {
+			display: none;
+		}
 	}
 </style>

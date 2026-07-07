@@ -265,30 +265,32 @@
 	{/if}
 
 	{#if data.apiKeys.length > 0}
-		<table class="keys">
-			<thead>
-				<tr><th>{$t('Name')}</th><th>{$t('Key')}</th><th>{$t('Last used')}</th><th></th></tr>
-			</thead>
-			<tbody>
-				{#each data.apiKeys as key (key.id)}
-					<tr>
-						<td>{key.name}</td>
-						<td class="mono">{key.prefix}…</td>
-						<td>{fmtDate(key.lastUsedAt)}</td>
-						<td>
-							<form
-								method="POST"
-								action="?/revokeKey"
-								use:enhance={() => async ({ update }) => update()}
-							>
-								<input type="hidden" name="id" value={key.id} />
-								<button class="btn btn-sm btn-error" type="submit">{$t('Revoke')}</button>
-							</form>
-						</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
+		<div class="table-wrap">
+			<table class="keys">
+				<thead>
+					<tr><th>{$t('Name')}</th><th>{$t('Key')}</th><th>{$t('Last used')}</th><th></th></tr>
+				</thead>
+				<tbody>
+					{#each data.apiKeys as key (key.id)}
+						<tr>
+							<td>{key.name}</td>
+							<td class="mono">{key.prefix}…</td>
+							<td>{fmtDate(key.lastUsedAt)}</td>
+							<td>
+								<form
+									method="POST"
+									action="?/revokeKey"
+									use:enhance={() => async ({ update }) => update()}
+								>
+									<input type="hidden" name="id" value={key.id} />
+									<button class="btn btn-sm btn-error" type="submit">{$t('Revoke')}</button>
+								</form>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
 	{/if}
 
 	<form
@@ -339,8 +341,14 @@
 	.token {
 		font-size: 12px;
 		word-break: break-all;
+		overflow-wrap: anywhere;
 		flex: 1;
 		font-variant-numeric: tabular-nums;
+	}
+
+	.table-wrap {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	.keys {
@@ -388,5 +396,20 @@
 		padding: var(--sp-2);
 		font-size: 13px;
 		font-variant-numeric: tabular-nums;
+	}
+
+	@media (max-width: 720px) {
+		.token-reveal .u-flex {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.token-reveal .u-flex .btn {
+			width: 100%;
+		}
+
+		.codes {
+			grid-template-columns: repeat(2, 1fr);
+		}
 	}
 </style>

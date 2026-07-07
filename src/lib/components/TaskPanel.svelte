@@ -1425,9 +1425,18 @@
 	}
 
 	.pill-val {
+		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 160px;
+	}
+
+	@media (max-width: 375px) {
+		/* keep the sub-task inline pills from forcing horizontal overflow */
+		.sub-pills .pill-val {
+			max-width: 100px;
+			font-size: 11px;
+		}
 	}
 
 	/* popover content */
