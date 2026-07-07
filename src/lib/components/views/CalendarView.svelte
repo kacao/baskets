@@ -483,4 +483,38 @@
 		font-size: 10px;
 		font-variant-numeric: tabular-nums;
 	}
+
+	/* Phones: keep the calendar 7-wide but let cells breathe less so seven
+	   columns fit without horizontal page overflow. The grid stays 1fr-based,
+	   so it always fits its container — just tighten cell sizing. */
+	@media (max-width: 375px) {
+		.cal-day {
+			min-height: 68px;
+			padding: 1px;
+		}
+
+		.weekday {
+			font-size: 11px;
+			padding: 2px;
+		}
+
+		.day-num {
+			font-size: 11px;
+			min-width: 16px;
+			padding: 0 2px;
+		}
+
+		/* The hover-revealed "+" can't be hovered on touch and there's no room —
+		   reclaim the space (tapping a day cell isn't a create affordance here,
+		   but the pane/board is; the "+" stays available on wider screens). */
+		.day-add {
+			display: none;
+		}
+
+		.chip {
+			font-size: 10px;
+			gap: 2px;
+			padding: 1px 2px;
+		}
+	}
 </style>

@@ -524,4 +524,16 @@
 			width: 100%;
 		}
 	}
+
+	@media (max-width: 430px) {
+		/* give the title the full row so meta drops onto its own line under it,
+		   left-aligned for readability instead of crowding the title */
+		.row-title {
+			flex: 1 0 100%;
+		}
+
+		.row-meta {
+			justify-content: flex-start;
+		}
+	}
 </style>

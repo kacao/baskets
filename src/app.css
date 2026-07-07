@@ -97,6 +97,11 @@ body {
 	line-height: 1.6;
 	text-wrap: pretty;
 	-webkit-font-smoothing: antialiased;
+	/* mobile: don't let iOS auto-inflate text on rotate; kill the grey tap flash so
+	   our own :active/hover states are the only feedback */
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+	-webkit-tap-highlight-color: transparent;
 }
 
 h1,

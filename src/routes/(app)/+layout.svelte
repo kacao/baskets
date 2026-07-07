@@ -241,7 +241,7 @@
 			<div class="topbar-page" data-page-header></div>
 			<div class="u-flex">
 				{#if data.user?.role === 'admin'}
-					<span class="badge badge-neutral">{$t('admin')}</span>
+					<span class="badge badge-neutral topbar-role">{$t('admin')}</span>
 				{/if}
 				<span class="u-small u-muted topbar-user">{data.user?.name}</span>
 				<NotificationBell />
@@ -526,7 +526,9 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--sp-2);
-		padding: var(--sp-2) var(--sp-3);
+		/* extend under the notch (viewport-fit=cover) but keep content clear of it */
+		padding: max(var(--sp-2), env(safe-area-inset-top)) max(var(--sp-3), env(safe-area-inset-right))
+			var(--sp-2) max(var(--sp-3), env(safe-area-inset-left));
 		border-bottom: 1px solid var(--color-border-subtle);
 		background: var(--color-bg);
 		position: sticky;
@@ -794,16 +796,23 @@
 			display: block;
 		}
 
-		.topbar-user {
+		.topbar-user,
+		/* the "admin" role badge is decorative — reclaim its width on mobile so the
+		   project title gets room and the right controls don't overflow */
+		.topbar-role {
 			display: none;
 		}
 
 		.sidebar {
 			position: fixed;
-			top: 59px;
+			/* start below the topbar. Its height = content(≈49px) + its own
+			   padding-top, which is max(--sp-2, notch inset) — so mirror that
+			   max() here rather than adding the inset twice. */
+			top: calc(49px + max(var(--sp-2), env(safe-area-inset-top)));
 			left: 0;
 			bottom: 0;
 			height: auto;
+			padding-bottom: max(var(--sp-4), env(safe-area-inset-bottom));
 			background: var(--color-bg);
 			border-right: 1px solid var(--color-border-subtle);
 			transform: translateX(-105%);

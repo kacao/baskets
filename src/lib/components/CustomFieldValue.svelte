@@ -561,6 +561,22 @@
 		gap: 6px;
 	}
 
+	@media (max-width: 720px) {
+		.panel {
+			max-width: calc(100vw - 32px);
+		}
+	}
+
+	/* larger tap targets for the remove/add chips on touch devices */
+	@media (hover: none) {
+		.chip-x::before {
+			inset: -8px;
+		}
+		.add-chip {
+			min-height: 32px;
+		}
+	}
+
 	.input {
 		width: 100%;
 	}

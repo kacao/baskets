@@ -184,6 +184,7 @@
 	.table-wrap {
 		border: var(--border-width) solid var(--color-border-subtle);
 		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	table {
@@ -226,5 +227,11 @@
 
 	.btn-primary:active {
 		transform: scale(0.96);
+	}
+
+	@media (max-width: 720px) {
+		td .btn.btn-sm {
+			min-width: 0;
+		}
 	}
 </style>

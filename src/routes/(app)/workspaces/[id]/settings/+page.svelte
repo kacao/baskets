@@ -149,10 +149,10 @@
 			newLabelColor = '#71717a';
 			await update();
 		}}
-		class="u-flex"
+		class="u-flex label-create"
 		style="flex-wrap: wrap; margin-bottom: var(--sp-2);"
 	>
-		<input name="name" class="input" style="width: 200px; max-width: 100%;" placeholder={$t('New label…')} required maxlength="40" />
+		<input name="name" class="input name-in" style="width: 200px; max-width: 100%;" placeholder={$t('New label…')} required maxlength="40" />
 		<Popover ariaLabel={$t('Label color')}>
 			{#snippet trigger()}
 				<span class="cp-swatch" style="--c: {newLabelColor}" aria-hidden="true"></span>
@@ -195,7 +195,7 @@
 		</select>
 		<button class="btn btn-sm btn-primary" type="submit">{$t('Add')}</button>
 	</form>
-	<form method="POST" action="?/createGroup" use:enhance class="u-flex" style="flex-wrap: wrap;">
+	<form method="POST" action="?/createGroup" use:enhance class="u-flex group-create" style="flex-wrap: wrap;">
 		<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder={$t('New group…')} required />
 		<button class="btn btn-sm" type="submit">{$t('Add group')}</button>
 	</form>
@@ -232,7 +232,7 @@
 		{:else}
 			<p class="u-tiny u-muted" style="margin-bottom: var(--sp-1);">{$t('No grants yet.')}</p>
 		{/each}
-		<form method="POST" action="?/grantPermission" use:enhance class="u-flex" style="flex-wrap: wrap;">
+		<form method="POST" action="?/grantPermission" use:enhance class="u-flex grant-form" style="flex-wrap: wrap;">
 			<select class="select" name="userId" required style="width: auto; flex: 1; min-width: 140px;">
 				<option value="">{$t('user…')}</option>
 				{#each data.users.filter((u) => u.id !== data.workspace.ownerId) as u (u.id)}
@@ -327,5 +327,33 @@
 
 	.btn-primary:active {
 		transform: scale(0.96);
+	}
+
+	@media (max-width: 720px) {
+		.group-create,
+		.grant-form {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.group-create > :global(*),
+		.grant-form > :global(*) {
+			width: 100%;
+		}
+
+		.label-create .name-in,
+		.label-create :global(.select),
+		.label-create :global(.btn),
+		.grant-form :global(.select),
+		.grant-form :global(.btn) {
+			width: 100%;
+		}
+
+		.label-create :global(input[type='date']),
+		.label-create :global(input[type='time']),
+		.grant-form :global(input[type='date']),
+		.grant-form :global(input[type='time']) {
+			width: 100%;
+		}
 	}
 </style>
