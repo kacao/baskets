@@ -18,6 +18,7 @@ const realtime: Plugin = {
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), realtime],
 	server: {
+		host: true, // bind all interfaces (0.0.0.0) so the tailnet can reach the dev server
 		allowedHosts: ['inspiron']
 	}
 });

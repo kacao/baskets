@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 
-	// Renders one iconoir icon from the external sprite (static/iconoir.svg, built
-	// by scripts/build-iconoir-sprite.mjs). Icons are 24x24 stroke glyphs that use
-	// currentColor, so they inherit the surrounding text color. Decorative by
-	// default; pass `label` to expose it to assistive tech.
+	// Renders one icon from the external sprite (static/heroicons.svg, built by
+	// scripts/build-heroicons-sprite.mjs from the Heroicons 24px outline set; ADR-052).
+	// Icons are 24x24 stroke glyphs on currentColor, so they inherit the surrounding
+	// text color. `name` is a Heroicon name OR a legacy iconoir token (aliased in the
+	// sprite). Decorative by default; pass `label` to expose it to assistive tech.
 	let {
 		name,
 		size = 16,
@@ -25,7 +26,7 @@
 	aria-hidden={label ? undefined : 'true'}
 	focusable="false"
 >
-	<use href="{base}/iconoir.svg#{name}" />
+	<use href="{base}/heroicons.svg#{name}" />
 </svg>
 
 <style>

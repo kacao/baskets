@@ -1,10 +1,11 @@
 <script lang="ts">
 	import Icon from '$lib/components/Icon.svelte';
-	import { ICONOIR_NAMES } from '$lib/iconoirNames';
+	import { HEROICON_NAMES } from '$lib/heroiconNames';
 	import { t } from '$lib/i18n';
 
-	// Searchable icon picker: an emoji grid + an iconoir search grid. Emits the
-	// chosen value via onSelect — a bare emoji char, or `iconoir:<name>`.
+	// Searchable icon picker: an emoji grid + a Heroicon search grid (ADR-052). Emits
+	// the chosen value via onSelect — a bare emoji char, or `iconoir:<name>` (the
+	// `iconoir:` prefix is the historical sprite-icon namespace, kept for back-compat).
 	let {
 		value,
 		onSelect,
@@ -27,7 +28,7 @@
 
 	const matches = $derived.by(() => {
 		const q = query.trim().toLowerCase().replace(/\s+/g, '-');
-		const list = q ? ICONOIR_NAMES.filter((n) => n.includes(q)) : ICONOIR_NAMES;
+		const list = q ? HEROICON_NAMES.filter((n) => n.includes(q)) : HEROICON_NAMES;
 		return { total: list.length, shown: list.slice(0, CAP) };
 	});
 </script>

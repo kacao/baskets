@@ -288,3 +288,29 @@
 		max-width: 100%;
 	}
 }
+
+/* ------------------ touch: kill the "tap-reveals-hover" delay ------------------
+   Keyed on `hover: none` (real touch, any width) rather than max-width. On a
+   device with no hover, a tap whose FIRST effect is a :hover style change — a
+   selection checkbox fading in, a title underlining — is treated by iOS Safari as
+   "reveal the hover state" and the tap's click is SWALLOWED, so opening a task in
+   the list/table took two taps. Force those hovered states unconditionally so a
+   tap changes nothing on the hover axis and the click fires on the first tap.
+   (Also makes the row selection checkboxes actually reachable on touch.) */
+@media (hover: none) {
+	/* !important to beat the components' scoped `opacity: 0` (same specificity, but
+	   scoped styles load after this file — the mobile.css convention above). */
+	.row .bulk-check,
+	.task-row .col-select input,
+	.sub-row-tr .col-select input,
+	.group-head .group-add {
+		opacity: 1 !important;
+	}
+	/* the title's hover underline is a pointer-only affordance; drop it on touch so
+	   tapping the title doesn't trigger a hover change (the `.selected` underline,
+	   a separate rule, still marks the open task). */
+	.task-title:hover .title-text,
+	.row-title:hover .title-text {
+		text-decoration: none !important;
+	}
+}
