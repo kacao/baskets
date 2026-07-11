@@ -3,6 +3,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { openPane, closePane } from '$lib/sidePaneRegistry';
+	import { confirmState } from '$lib/confirm.svelte';
 	import { portal } from '$lib/portal';
 	import Icon from '$lib/components/Icon.svelte';
 	import { t } from '$lib/i18n';
@@ -68,6 +69,21 @@
 		if (host) host.style.setProperty('--pane-w', `${w}px`);
 	});
 
+	function onKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape') return;
+		// A confirm dialog open over the pane owns Escape (cancel) — don't also close
+		// the pane behind it. (ConfirmModal also stops Escape in the capture phase;
+		// this is belt-and-suspenders.)
+		if (confirmState.current) return;
+		// Native date/time pickers emit Escape to dismiss their own popup; don't also
+		// close the pane. (Popover-contained controls stop Escape before it reaches
+		// here.) Guards against the "picking a date closes the pane" bug.
+		const t = e.target as HTMLElement | null;
+		if (t?.matches?.('input[type="date"], input[type="datetime-local"], input[type="time"], input[type="month"], input[type="week"]'))
+			return;
+		onClose();
+	}
+
 	function startResize(e: PointerEvent) {
 		e.preventDefault();
 		dragging = true;
@@ -90,7 +106,7 @@
 	}
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
+<svelte:window onkeydown={onKeydown} />
 
 <aside
 	class="side-pane"

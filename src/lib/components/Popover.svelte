@@ -32,6 +32,21 @@
 		close();
 	};
 
+	// Escape closes the popover — and MUST NOT bubble to an ancestor like the
+	// SidePane (whose own Escape handler would close the whole pane). Listen in the
+	// capture phase so we run before those bubble-phase window handlers and can
+	// stop the event there.
+	$effect(() => {
+		if (!open) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape') return;
+			e.stopPropagation();
+			close();
+		};
+		window.addEventListener('keydown', onKey, true);
+		return () => window.removeEventListener('keydown', onKey, true);
+	});
+
 	// Portal the panel to <body> and position it as `fixed` against the trigger, so no
 	// scrollable/overflow ancestor (e.g. the side pane) can clip it. Flips to the opposite
 	// edge + clamps to the viewport; repositions on scroll/resize while open.

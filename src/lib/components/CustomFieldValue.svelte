@@ -5,7 +5,7 @@
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import { t } from '$lib/i18n';
-	import { decodeValue, formatNumber, formatDate, rollsUpToParent, type FieldConfig } from '$lib/customFields';
+	import { decodeValue, formatNumber, formatDate, numberAffix, rollsUpToParent, type FieldConfig } from '$lib/customFields';
 
 	type Option = { id: string; title: string; color: string | null; icon: string | null };
 	type FileRef = { id: string; filename: string; mimeType: string; size: number };
@@ -63,18 +63,48 @@
 
 	// svelte-ignore state_referenced_locally
 	let current = $state<string>(value ?? '');
+	// Re-seed `current` from the server `value` ONLY when the field/task identity
+	// switches or the server value genuinely changed (a real save / collaborator
+	// edit) — NOT on every page.data churn. The editor inputs bind `value={current}`
+	// one-way, so keystrokes live in the DOM until blur; an unguarded reseed on an
+	// invalidateAll (realtime ping, or a sibling pill's save) would reset the input
+	// mid-edit and drop the caret. Same class as the fixed ?task= read-effect.
+	// svelte-ignore state_referenced_locally
+	let lastServerValue = value; // plain untracked snapshot of the last synced value
+	// svelte-ignore state_referenced_locally
+	let seededKey = `${taskId}:${field.id}`;
 	$effect(() => {
-		current = value ?? '';
+		const key = `${taskId}:${field.id}`;
+		if (key !== seededKey || value !== lastServerValue) {
+			seededKey = key;
+			lastServerValue = value;
+			current = value ?? '';
+		}
 	});
 
 	let form = $state<HTMLFormElement | null>(null);
 
 	async function set(raw: string) {
 		current = raw;
+		lastServerValue = raw; // our own save; don't let the next churn re-seed over it
 		if (mode === 'pill') {
 			await tick();
 			form?.requestSubmit();
 		}
+	}
+
+	// Number editor: custom −/+ steppers (touch-friendly; native spinners are hidden)
+	// + a currency/unit affix for context. The affix is display-only editing context.
+	const numAffix = $derived(field.type === 'number' ? numberAffix(field.config) : '');
+	let numInput = $state<HTMLInputElement | null>(null);
+	function stepNumber(delta: number) {
+		// Update the value locally so rapid clicks accumulate (1→2→3) without a save
+		// per click. The pill saves on blur/Enter (like typing); input mode reads the
+		// hidden cf_ field on create. Base off the LIVE input value, not stale current.
+		const base = parseFloat(numInput?.value || current || '0') || 0;
+		const next = Math.round((base + delta) * 1e6) / 1e6; // trim float drift
+		current = String(next);
+		if (numInput) numInput.value = current; // reflect immediately for the next click
 	}
 
 	// Focus (and select existing text in) an input when it mounts — used in the pill
@@ -215,8 +245,32 @@
 			onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); set(e.currentTarget.value.trim()); close(); } }}
 		/>
 	{:else if field.type === 'number'}
-		<input class="input" type="number" value={current} step="any" use:autofocus={autoFocus} onblur={(e) => set(e.currentTarget.value.trim())}
-			onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); set(e.currentTarget.value.trim()); close(); } }} />
+		<div class="num-editor">
+			<button class="num-step" type="button" tabindex="-1" aria-label={$t('Decrease')}
+				onpointerdown={(e) => e.preventDefault()} onclick={() => stepNumber(-1)}>
+				<Icon name="minus" size={13} />
+			</button>
+			<div class="num-field">
+				{#if numAffix}<span class="num-affix">{numAffix}</span>{/if}
+				<input
+					bind:this={numInput}
+					class="input num-input"
+					class:has-affix={!!numAffix}
+					type="number"
+					inputmode="decimal"
+					value={current}
+					step="any"
+					placeholder="0"
+					use:autofocus={autoFocus}
+					onblur={(e) => set(e.currentTarget.value.trim())}
+					onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); set(e.currentTarget.value.trim()); close(); } }}
+				/>
+			</div>
+			<button class="num-step" type="button" tabindex="-1" aria-label={$t('Increase')}
+				onpointerdown={(e) => e.preventDefault()} onclick={() => stepNumber(1)}>
+				<Icon name="plus" size={13} />
+			</button>
+		</div>
 	{:else if field.type === 'date'}
 		<input
 			class="input"
@@ -579,6 +633,74 @@
 
 	.input {
 		width: 100%;
+	}
+
+	/* Number editor: [−] [ affix + right-aligned input ] [+] */
+	.num-editor {
+		display: flex;
+		align-items: stretch;
+		gap: 4px;
+		min-width: 150px;
+	}
+
+	.num-field {
+		position: relative;
+		display: flex;
+		align-items: center;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.num-affix {
+		position: absolute;
+		left: 8px;
+		color: var(--color-muted);
+		font-size: 13px;
+		pointer-events: none;
+	}
+
+	.num-input {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.num-input.has-affix {
+		padding-left: 22px;
+	}
+
+	/* hide the native spinner — the custom steppers replace it */
+	.num-input::-webkit-outer-spin-button,
+	.num-input::-webkit-inner-spin-button {
+		appearance: none;
+		margin: 0;
+	}
+
+	.num-input {
+		appearance: textfield;
+		-moz-appearance: textfield;
+	}
+
+	.num-step {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-bg);
+		color: var(--color-muted);
+		border-radius: var(--radius-field, 0.25rem);
+		cursor: pointer;
+		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+	}
+
+	.num-step:hover {
+		background: var(--color-surface-muted);
+		color: var(--color-fg);
+	}
+
+	.num-step:active {
+		background: var(--color-border-subtle);
 	}
 
 	.search {

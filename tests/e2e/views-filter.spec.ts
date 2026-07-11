@@ -71,12 +71,39 @@ async function addView(page: Page, type: 'Board' | 'List') {
 	await expect(tab).toHaveClass(/active/);
 }
 
+// Facets live behind the icon-only "Filters" (filter-list) button (ADR-035); open
+// that dropdown, keeping it open for a follow-up Clear.
+async function openFilters(page: Page) {
+	const filterPop = page.locator('.filter-pop');
+	await expect(async () => {
+		if (!(await filterPop.isVisible())) await page.getByRole('button', { name: 'Filters' }).click();
+		await expect(filterPop).toBeVisible({ timeout: 1000 });
+	}).toPass();
+	return filterPop;
+}
+
 /** Open the Status facet popover and toggle the option with the given label. */
 async function toggleStatusFacet(page: Page, label: string) {
-	await page.getByRole('button', { name: 'Status', exact: true }).first().click();
-	await page.getByRole('button', { name: label, exact: true }).click();
-	// Close the popover so it doesn't overlay the view; click the bar background.
+	const filterPop = await openFilters(page);
+	await filterPop.getByRole('button', { name: 'Status', exact: true }).click();
+	// The facet's option list is a Popover panel portaled to <body> (.pop).
+	await page.locator('.pop').getByRole('button', { name: label, exact: true }).click();
+	// Close the facet popover (capture-phase Escape), keeping the Filters dropdown open.
 	await page.keyboard.press('Escape');
+}
+
+/** Clear all active filters via the "Clear all" button inside the Filters dropdown.
+ *  Toggling a facet option closes the dropdown (its portaled panel reads as an
+ *  outside-click), so this re-opens it — retrying until "Clear all" is actually
+ *  visible (not mid close-transition). */
+async function clearFilters(page: Page) {
+	const filterPop = page.locator('.filter-pop');
+	const clearBtn = filterPop.getByRole('button', { name: 'Clear all' });
+	await expect(async () => {
+		if (!(await filterPop.isVisible())) await page.getByRole('button', { name: 'Filters' }).click();
+		await expect(clearBtn).toBeVisible({ timeout: 1000 });
+	}).toPass();
+	await clearBtn.click();
 }
 
 // Serial: each case signs in fresh; running them in parallel can trip
@@ -127,8 +154,9 @@ test.describe('views + filter', () => {
 		const before = await rows.count();
 		expect(before).toBeGreaterThanOrEqual(2);
 
-		// Filter to STATUS_A only → the beta (In progress) task drops out.
-		await toggleStatusFacet(page, STATUS_A);
+		// Inclusion semantics (ADR-035): every status starts checked/shown; unchecking
+		// "In progress" hides the beta task while the Backlog alpha task stays.
+		await toggleStatusFacet(page, STATUS_B);
 
 		await expect(page.getByText(TASK_A, { exact: true })).toBeVisible();
 		await expect(page.getByText(TASK_B, { exact: true })).toHaveCount(0);
@@ -138,7 +166,7 @@ test.describe('views + filter', () => {
 		expect(after).toBeGreaterThanOrEqual(1);
 
 		// Clear restores both tasks.
-		await page.getByRole('button', { name: /Clear/ }).click();
+		await clearFilters(page);
 		await expect(page.getByText(TASK_A, { exact: true })).toBeVisible();
 		await expect(page.getByText(TASK_B, { exact: true })).toBeVisible();
 	});
@@ -157,8 +185,8 @@ test.describe('views + filter', () => {
 		const before = await cards.count();
 		expect(before).toBeGreaterThanOrEqual(2);
 
-		// Filter to STATUS_B only → the alpha (Backlog) card drops out.
-		await toggleStatusFacet(page, STATUS_B);
+		// Unchecking "Backlog" hides the alpha card while the In-progress beta stays.
+		await toggleStatusFacet(page, STATUS_A);
 
 		await expect(page.locator('.bcard', { hasText: TASK_B })).toBeVisible();
 		await expect(page.locator('.bcard', { hasText: TASK_A })).toHaveCount(0);

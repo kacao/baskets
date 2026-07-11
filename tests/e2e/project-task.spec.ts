@@ -42,7 +42,9 @@ async function createProject(page: Page): Promise<string> {
 async function deleteProject(page: Page, projectUrl: string) {
 	await page.goto(projectUrl);
 	page.once('dialog', (d) => d.accept());
-	await page.getByRole('button', { name: 'Project menu' }).click();
+	// exact: true — the sidebar's "Toggle project menu" buttons also contain
+	// "project menu" and would otherwise make this selector ambiguous.
+	await page.getByRole('button', { name: 'Project menu', exact: true }).click();
 	await page.getByRole('button', { name: 'Delete', exact: true }).click();
 	// deleteProject redirects back to the project list.
 	await expect(page).toHaveURL(/\/projects\/?$/);
@@ -60,7 +62,7 @@ test.describe('project + task lifecycle', () => {
 			projectUrl = await createProject(page);
 
 			// --- Create a task via the project "…" → Create… → Task pane ---
-			await page.getByRole('button', { name: 'Project menu' }).click();
+			await page.getByRole('button', { name: 'Project menu', exact: true }).click();
 			await page.getByRole('button', { name: 'Create…' }).hover();
 			await page.getByRole('button', { name: 'Task', exact: true }).click();
 
@@ -93,12 +95,13 @@ test.describe('project + task lifecycle', () => {
 				page.locator('button.task-title', { hasText: TASK_TITLE_EDITED })
 			).toBeVisible();
 
-			// --- Add a sub-task via the "Add sub-task" popover ---
+			// --- Add a sub-task via the header "Add sub-task" popover (default-collapsed
+			// section; the "+" lives in the header). The popover panel portals to <body>,
+			// so its input/button are OUTSIDE the pane subtree — scope to `page`.
 			await pane.getByRole('button', { name: 'Add sub-task' }).click();
-			const subSearch = pane.getByPlaceholder('Search or create…');
-			await subSearch.fill(SUBTASK_TITLE);
+			await page.getByPlaceholder('Search or create…').fill(SUBTASK_TITLE);
 			// No matching childless task → "Create task" submit appears.
-			await pane.getByRole('button', { name: `Create task “${SUBTASK_TITLE}”` }).click();
+			await page.getByRole('button', { name: `Create task “${SUBTASK_TITLE}”` }).click();
 
 			// The new sub-task renders in the pane's sub-task list.
 			await expect(pane.getByRole('button', { name: SUBTASK_TITLE })).toBeVisible();

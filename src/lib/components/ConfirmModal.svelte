@@ -5,14 +5,31 @@
 
 	const req = $derived(confirmState.current);
 
-	function onKey(e: KeyboardEvent) {
+	// Handle Escape/Enter in the CAPTURE phase and stop propagation so the keystroke
+	// can't leak to ancestor window handlers (e.g. SidePane's Escape-closes-pane) or
+	// to a focused background field. Escape always cancels; Enter confirms ONLY when
+	// focus is inside the dialog, so an Enter typed in a background input (e.g. a
+	// milestone name field) can't silently trigger a danger delete.
+	$effect(() => {
 		if (!req) return;
-		if (e.key === 'Escape') answerConfirm(false);
-		else if (e.key === 'Enter') answerConfirm(true);
-	}
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				answerConfirm(false);
+				e.stopPropagation();
+				e.preventDefault();
+			} else if (e.key === 'Enter') {
+				const t = e.target as HTMLElement | null;
+				if (t?.closest?.('.cm-card') || e.target === document.body) {
+					answerConfirm(true);
+					e.stopPropagation();
+					e.preventDefault();
+				}
+			}
+		};
+		window.addEventListener('keydown', onKey, true);
+		return () => window.removeEventListener('keydown', onKey, true);
+	});
 </script>
-
-<svelte:window onkeydown={onKey} />
 
 {#if req}
 	{#key req.id}

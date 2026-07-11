@@ -4,6 +4,7 @@ import {
 	defaultConfig,
 	sanitizeConfig,
 	formatNumber,
+	numberAffix,
 	formatDate,
 	fieldAppliesTo,
 	isMulti,
@@ -186,6 +187,43 @@ describe('formatNumber', () => {
 
 	it('defaults to plain grouping when numberFormat is absent', () => {
 		expect(formatNumber(1000, {})).toBe('1,000');
+	});
+});
+
+describe('numberAffix', () => {
+	it('returns the currency symbol for the currency format', () => {
+		expect(numberAffix({ numberFormat: 'currency', currencyCode: 'USD' })).toBe('$');
+	});
+
+	it('returns the currency symbol for accounting and financial formats', () => {
+		expect(numberAffix({ numberFormat: 'accounting', currencyCode: 'USD' })).toBe('$');
+		expect(numberAffix({ numberFormat: 'financial', currencyCode: 'USD' })).toBe('$');
+	});
+
+	it('reflects the configured currency code (non-USD)', () => {
+		const eur = numberAffix({ numberFormat: 'currency', currencyCode: 'EUR' });
+		expect(eur).toBeTruthy();
+		expect(eur).not.toBe('$'); // EUR renders its own symbol, e.g. €
+	});
+
+	it('defaults to a USD symbol when currency format has no code', () => {
+		expect(numberAffix({ numberFormat: 'currency' })).toBe('$');
+	});
+
+	it('returns no affix for the plain number format', () => {
+		expect(numberAffix({ numberFormat: 'number' })).toBe('');
+	});
+
+	it('returns no affix for the custom format', () => {
+		expect(numberAffix({ numberFormat: 'custom', formatString: '0.0' })).toBe('');
+	});
+
+	it('returns no affix for an empty/absent config', () => {
+		expect(numberAffix({})).toBe('');
+	});
+
+	it('does not throw on an invalid currency code and returns no affix', () => {
+		expect(() => numberAffix({ numberFormat: 'currency', currencyCode: 'ZZZ' })).not.toThrow();
 	});
 });
 

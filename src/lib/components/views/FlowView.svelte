@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
+	import { page } from '$app/state';
+	import { setPaneUrl, readPaneParam } from '$lib/paneUrl';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { t } from '$lib/i18n';
@@ -67,10 +69,33 @@
 		templates?: { id: string; name: string }[];
 	} = $props();
 
-	let selectedId = $state<string | null>(null);
+	// split pane: ?task= deep-links a task open (matches Board/Table views)
+	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
 	// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
 	// the top is the "← back" target, reset on any fresh open from outside the pane
 	let backStack = $state<string[]>([]);
+	// keep the pane in sync with browser back/forward to a ?task= link, without
+	// fighting user clicks (effect tracks the URL only, never selectedId)
+	let lastTaskParam = $state(page.url.searchParams.get('task'));
+	$effect(() => {
+		const fromUrl = readPaneParam('task');
+		if (fromUrl !== untrack(() => lastTaskParam)) {
+			lastTaskParam = fromUrl;
+			selectedId = fromUrl;
+			backStack = [];
+		}
+	});
+	// mirror the open task back into the URL so the pane is linkable / restorable in
+	// another window (shallow routing — load() doesn't re-run). lastTaskParam is a
+	// plain sentinel read via untrack() in BOTH effects, so changing it in one never
+	// re-runs the other with a stale page.url (which would clobber the selection).
+	$effect(() => {
+		const id = selectedId;
+		if (id !== untrack(() => lastTaskParam)) {
+			lastTaskParam = id;
+			setPaneUrl({ task: id });
+		}
+	});
 	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
 	function navTask(id: string) {
 		if (id === selectedId) return;
