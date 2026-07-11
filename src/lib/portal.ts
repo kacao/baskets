@@ -5,6 +5,11 @@
 export function portal(node: HTMLElement, target = '[data-pane-host]') {
 	const move = (sel: string) => document.querySelector(sel)?.appendChild(node);
 	move(target);
+	// Mark the node as relocated. This action is client-only, so on SSR/first paint
+	// the node still sits in its authored DOM position; callers can hide it until
+	// this attribute lands (e.g. `.proj-topbar:not([data-portaled])`) to avoid a
+	// flash where the header renders in .content before hydration moves it up.
+	node.setAttribute('data-portaled', '');
 	return {
 		update(next: string) {
 			move(next);

@@ -349,6 +349,24 @@ export function formatNumber(n: number, config: FieldConfig): string {
 	}
 }
 
+/** Editing hint for the number INPUT: the currency symbol (e.g. "$", "€") for
+ *  money formats, else ''. Display still goes through formatNumber; this only
+ *  gives context while typing a raw number. */
+export function numberAffix(config: FieldConfig): string {
+	const fmt = (config.numberFormat as string) ?? 'number';
+	if (fmt !== 'currency' && fmt !== 'accounting' && fmt !== 'financial') return '';
+	const currency = ((config.currencyCode as string) || 'USD').toUpperCase();
+	try {
+		return (
+			new Intl.NumberFormat(undefined, { style: 'currency', currency })
+				.formatToParts(0)
+				.find((p) => p.type === 'currency')?.value ?? ''
+		);
+	} catch {
+		return '';
+	}
+}
+
 /** Per-group sums of the given number fields across a set of tasks.
  *  Returns one entry per still-existing number field, formatted for display. */
 export function fieldAggregations(

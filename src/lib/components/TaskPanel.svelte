@@ -8,6 +8,7 @@
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
+	import DatePicker from '$lib/components/DatePicker.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
 	import TaskComments from '$lib/components/TaskComments.svelte';
 	import TaskAttachments from '$lib/components/TaskAttachments.svelte';
@@ -210,13 +211,17 @@
 	// (persisted). Multi fields DEFAULT collapsed; non-multi fields are never seeded
 	// here (always expanded). Re-seeded from storage whenever the open task changes.
 	const SUBTASKS_KEY = '__subtasks'; // reserved cfCollapsed key for the Sub-tasks section
+	const DESC_KEY = '__description'; // reserved cfCollapsed key for the Description section
 	let cfCollapsed = $state<Record<string, boolean>>({});
 	$effect(() => {
 		const scope = task.id;
 		const next: Record<string, boolean> = {};
 		for (const f of customFields) if (isMulti(f)) next[f.id] = loadCollapsed(scope, f.id, true);
-		// Sub-tasks section: same persistence mechanism, but DEFAULT EXPANDED.
-		next[SUBTASKS_KEY] = loadCollapsed(scope, SUBTASKS_KEY, false);
+		// Sub-tasks section: same persistence mechanism; DEFAULT COLLAPSED (it
+		// auto-expands the first time a sub-task is added — see the effect below).
+		next[SUBTASKS_KEY] = loadCollapsed(scope, SUBTASKS_KEY, true);
+		// Description section: same mechanism, DEFAULT EXPANDED (persisted per task).
+		next[DESC_KEY] = loadCollapsed(scope, DESC_KEY, false);
 		cfCollapsed = next;
 	});
 	function toggleCfCollapsed(fieldId: string) {
@@ -224,6 +229,28 @@
 		cfCollapsed[fieldId] = v;
 		storeCollapsed(task.id, fieldId, v);
 	}
+
+	// Auto-expand the Sub-tasks section the first time a sub-task is added (0 → ≥1),
+	// and persist it so from then on the stored collapse state (the user's own
+	// toggles) wins. Plain locals — not $state — so writing them doesn't re-run this
+	// effect; it re-runs only when the open task or its sub-task count changes.
+	let prevSubCount = -1;
+	let prevSubTaskId = '';
+	$effect(() => {
+		const count = subs.length;
+		const id = task.id;
+		if (id !== prevSubTaskId) {
+			// task switched: re-baseline without auto-expanding
+			prevSubTaskId = id;
+			prevSubCount = count;
+			return;
+		}
+		if (prevSubCount === 0 && count > 0) {
+			cfCollapsed[SUBTASKS_KEY] = false;
+			storeCollapsed(id, SUBTASKS_KEY, false);
+		}
+		prevSubCount = count;
+	});
 	let cfAddQuery = $state('');
 	const cfIds = (field: { id: string; type: string }): string[] => {
 		const d = decodeValue(field, cfValue(field.id));
@@ -386,6 +413,17 @@
 		close();
 		return async ({ update }: { update: () => Promise<void> }) => update();
 	};
+
+	// patch a single date field on a task (used by the DatePicker pills). Empty
+	// string clears it. Mirrors the enhance form path but is callable from the
+	// calendar's onSelect/onClear callbacks.
+	async function setDate(taskId: string, field: 'startDate' | 'dueDate', value: string) {
+		const fd = new FormData();
+		fd.set('id', taskId);
+		fd.set(field, value);
+		await fetch(`${page.url.pathname}?/patchTask`, { method: 'POST', body: fd });
+		await invalidateAll();
+	}
 </script>
 
 <SidePane {onClose} ariaLabel={$t('Task details')}>
@@ -651,24 +689,11 @@
 					<span class="pill-val mono" class:pill-ph={!task.startDate}>{fmtDate(task.startDate ?? null) ?? $t('Start date')}</span>
 				{/snippet}
 				{#snippet panel(close)}
-					<form method="POST" action="?/patchTask" use:enhance={pick(close)} class="pop-due">
-						<input type="hidden" name="id" value={task.id} />
-						<input
-							name="startDate"
-							type="date"
-							class="input"
-							value={fmtDate(task.startDate ?? null) ?? ''}
-							onchange={(e) => e.currentTarget.form?.requestSubmit()}
-						/>
-						<button
-							class="opt opt--create"
-							type="submit"
-							onclick={(e) => {
-								const input = e.currentTarget.form?.elements.namedItem('startDate');
-								if (input instanceof HTMLInputElement) input.value = '';
-							}}>{$t('Clear')}</button
-						>
-					</form>
+					<DatePicker
+						value={fmtDate(task.startDate ?? null)}
+						onSelect={(d) => { setDate(task.id, 'startDate', d); close(); }}
+						onClear={() => { setDate(task.id, 'startDate', ''); close(); }}
+					/>
 				{/snippet}
 			</Popover>
 
@@ -678,24 +703,11 @@
 					<span class="pill-val mono" class:pill-ph={!task.dueDate}>{fmtDate(task.dueDate) ?? $t('Due date')}</span>
 				{/snippet}
 				{#snippet panel(close)}
-					<form method="POST" action="?/patchTask" use:enhance={pick(close)} class="pop-due">
-						<input type="hidden" name="id" value={task.id} />
-						<input
-							name="dueDate"
-							type="date"
-							class="input"
-							value={fmtDate(task.dueDate) ?? ''}
-							onchange={(e) => e.currentTarget.form?.requestSubmit()}
-						/>
-						<button
-							class="opt opt--create"
-							type="submit"
-							onclick={(e) => {
-								const input = e.currentTarget.form?.elements.namedItem('dueDate');
-								if (input instanceof HTMLInputElement) input.value = '';
-							}}>{$t('Clear')}</button
-						>
-					</form>
+					<DatePicker
+						value={fmtDate(task.dueDate)}
+						onSelect={(d) => { setDate(task.id, 'dueDate', d); close(); }}
+						onClear={() => { setDate(task.id, 'dueDate', ''); close(); }}
+					/>
 				{/snippet}
 			</Popover>
 
@@ -727,56 +739,7 @@
 			</Popover>
 		</div>
 
-		<!-- Description — full width, auto-save on blur. reset:false: a <textarea>'s
-		     value comes from child text, so the default form.reset() would revert it
-		     to an empty defaultValue on a client-rendered pane (wiping the text). -->
-		<form
-			method="POST"
-			action="?/patchTask"
-			use:enhance={() => async ({ update }) => update({ reset: false })}
-			class="field"
-		>
-			<input type="hidden" name="id" value={task.id} />
-			<MentionEditor
-				name="description"
-				class="textarea"
-				rows={5}
-				placeholder={$t('Add a description…')}
-				ariaLabel={$t('Description')}
-				bind:value={descDraft}
-				onblur={(e) => e.currentTarget.closest('form')?.requestSubmit()}
-				{onSelectTask}
-				{tasks}
-				{locations}
-				{files}
-				projects={mProjects}
-				people={mPeople}
-				fields={visibleCustomFields}
-				fieldOptions={customFieldOptions}
-				fieldValues={mFieldValues}
-				projectId={mProjectId}
-				canEditProject={mCanEditProject}
-				excludeTaskId={task.id}
-			/>
-		</form>
-
 	{:else}
-		{#if task.description}
-			<div class="u-small" style="margin-bottom: var(--sp-3);">
-				<RichText
-					text={task.description}
-					{tasks}
-					{locations}
-					{files}
-					projects={mProjects}
-					people={mPeople}
-					fields={visibleCustomFields}
-					fieldOptions={customFieldOptions}
-					fieldValues={mFieldValues}
-					{onSelectTask}
-				/>
-			</div>
-		{/if}
 		<div class="chips-row">
 			<StatusSelect taskId={task.id} statusId={task.statusId} {statuses} canEdit={false} display={statusDisplay} />
 			<PriorityBadge priority={task.priority} />
@@ -815,14 +778,112 @@
 		{/if}
 	{/if}
 
+	<!-- Description — collapsible section (default expanded, persisted per task). The
+	     editor is borderless/document-like; auto-saves on blur. reset:false: a
+	     contenteditable's value comes from child text, so form.reset() would wipe it. -->
+	{#if editable || task.description}
+		{@const descOpen = !cfCollapsed[DESC_KEY]}
+		<div class="section">
+			<button class="sub-toggle" type="button" aria-expanded={descOpen} onclick={() => toggleCfCollapsed(DESC_KEY)}>
+				<Icon name={descOpen ? 'nav-arrow-down' : 'nav-arrow-right'} size={14} />
+				<span class="label">{$t('Description')}</span>
+			</button>
+			{#if descOpen}
+				{#if editable}
+					<form
+						method="POST"
+						action="?/patchTask"
+						use:enhance={() => async ({ update }) => update({ reset: false })}
+						class="field"
+					>
+						<input type="hidden" name="id" value={task.id} />
+						<MentionEditor
+							name="description"
+							class="desc-editor"
+							rows={5}
+							placeholder={$t('Add a description…')}
+							ariaLabel={$t('Description')}
+							bind:value={descDraft}
+							onblur={(e) => e.currentTarget.closest('form')?.requestSubmit()}
+							{onSelectTask}
+							{tasks}
+							{locations}
+							{files}
+							projects={mProjects}
+							people={mPeople}
+							fields={visibleCustomFields}
+							fieldOptions={customFieldOptions}
+							fieldValues={mFieldValues}
+							projectId={mProjectId}
+							canEditProject={mCanEditProject}
+							excludeTaskId={task.id}
+						/>
+					</form>
+				{:else if task.description}
+					<div class="u-small desc-ro">
+						<RichText
+							text={task.description}
+							{tasks}
+							{locations}
+							{files}
+							projects={mProjects}
+							people={mPeople}
+							fields={visibleCustomFields}
+							fieldOptions={customFieldOptions}
+							fieldValues={mFieldValues}
+							{onSelectTask}
+						/>
+					</div>
+				{/if}
+			{/if}
+		</div>
+	{/if}
+
 	{#if !task.parentId}
 		{@const subsOpen = !cfCollapsed[SUBTASKS_KEY]}
 		<div class="section">
-			<button class="sub-toggle" type="button" aria-expanded={subsOpen} onclick={() => toggleCfCollapsed(SUBTASKS_KEY)}>
-				<Icon name={subsOpen ? 'nav-arrow-down' : 'nav-arrow-right'} size={14} />
-				<span class="label">{$t('Sub-tasks')}</span>
-				<span class="cf-task-count">{subs.length}</span>
-			</button>
+			<div class="sub-header">
+				<button class="sub-toggle" type="button" aria-expanded={subsOpen} onclick={() => toggleCfCollapsed(SUBTASKS_KEY)}>
+					<Icon name={subsOpen ? 'nav-arrow-down' : 'nav-arrow-right'} size={14} />
+					<span class="label">{$t('Sub-tasks')}</span>
+					<span class="cf-task-count">{subs.length}</span>
+				</button>
+				{#if editable}
+					<Popover ariaLabel={$t('Add sub-task')} align="right">
+						{#snippet trigger()}
+							<Icon name="plus" size={14} />
+						{/snippet}
+						{#snippet panel(close)}
+							<!-- svelte-ignore a11y_autofocus -->
+							<input class="pop-search" placeholder={$t('Search or create…')} bind:value={subQuery} autofocus />
+							{#each subCandidates as c (c.id)}
+								<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
+									<input type="hidden" name="id" value={c.id} />
+									<input type="hidden" name="parentId" value={task.id} />
+									<button class="opt" type="submit">{c.title}</button>
+								</form>
+							{/each}
+							{#if subQuery.trim() && subCandidates.length === 0}
+								<form
+									method="POST"
+									action="?/createTask"
+									use:enhance={() => async ({ update }) => {
+										close();
+										subQuery = '';
+										update();
+									}}
+								>
+									<input type="hidden" name="parentId" value={task.id} />
+									<input type="hidden" name="title" value={subQuery.trim()} />
+									<button class="opt opt--create" type="submit">{$t('Create task')} “{subQuery.trim()}”</button>
+								</form>
+							{:else if subCandidates.length === 0}
+								<span class="opt-empty">{$t('Type to search or create a task')}</span>
+							{/if}
+						{/snippet}
+					</Popover>
+				{/if}
+			</div>
 			{#if subsOpen}
 			{#if subSel.length > 0 && editable}
 				<div class="sub-bulk">
@@ -973,43 +1034,6 @@
 				</div>
 			{:else}
 				<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">{$t('none')}</p>
-			{/if}
-			{#if editable}
-				<div class="sub-add">
-					<Popover ariaLabel={$t('Add sub-task')}>
-						{#snippet trigger()}
-							<span class="pill-val pill-ph"><Icon name="plus" size={12} /> {$t('Add sub-task')}</span>
-						{/snippet}
-						{#snippet panel(close)}
-							<!-- svelte-ignore a11y_autofocus -->
-							<input class="pop-search" placeholder={$t('Search or create…')} bind:value={subQuery} autofocus />
-							{#each subCandidates as c (c.id)}
-								<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
-									<input type="hidden" name="id" value={c.id} />
-									<input type="hidden" name="parentId" value={task.id} />
-									<button class="opt" type="submit">{c.title}</button>
-								</form>
-							{/each}
-							{#if subQuery.trim() && subCandidates.length === 0}
-								<form
-									method="POST"
-									action="?/createTask"
-									use:enhance={() => async ({ update }) => {
-										close();
-										subQuery = '';
-										update();
-									}}
-								>
-									<input type="hidden" name="parentId" value={task.id} />
-									<input type="hidden" name="title" value={subQuery.trim()} />
-									<button class="opt opt--create" type="submit">{$t('Create task')} “{subQuery.trim()}”</button>
-								</form>
-							{:else if subCandidates.length === 0}
-								<span class="opt-empty">{$t('Type to search or create a task')}</span>
-							{/if}
-						{/snippet}
-					</Popover>
-				</div>
 			{/if}
 			{/if}
 		</div>
@@ -1341,18 +1365,11 @@
 				<span class="pill-val mono" class:pill-ph={!s.dueDate}>{fmtDate(s.dueDate) ?? $t('Due')}</span>
 			{/snippet}
 			{#snippet panel(close)}
-				<form method="POST" action="?/patchTask" use:enhance={pick(close)} class="pop-due">
-					<input type="hidden" name="id" value={s.id} />
-					<input name="dueDate" type="date" class="input" value={fmtDate(s.dueDate) ?? ''} onchange={(e) => e.currentTarget.form?.requestSubmit()} />
-					<button
-						class="opt opt--create"
-						type="submit"
-						onclick={(e) => {
-							const input = e.currentTarget.form?.elements.namedItem('dueDate');
-							if (input instanceof HTMLInputElement) input.value = '';
-						}}>{$t('Clear')}</button
-					>
-				</form>
+				<DatePicker
+					value={fmtDate(s.dueDate)}
+					onSelect={(d) => { setDate(s.id, 'dueDate', d); close(); }}
+					onClear={() => { setDate(s.id, 'dueDate', ''); close(); }}
+				/>
 			{/snippet}
 		</Popover>
 	{:else if fmtDate(s.dueDate)}
@@ -1670,20 +1687,68 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* Sub-tasks section collapse header (chevron + label + count) */
+	/* Sub-tasks section header: collapse toggle (left, fills) + icon-only add (right) */
+	.sub-header {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-bottom: var(--sp-1);
+	}
+
+	/* collapse toggle (chevron + label + count) */
 	.sub-toggle {
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		width: 100%;
+		flex: 1;
+		min-width: 0;
 		border: none;
 		background: none;
 		color: var(--color-muted);
 		cursor: pointer;
 		padding: 0;
 		text-align: left;
-		margin-bottom: var(--sp-1);
 		transition: color var(--dur-fast) ease;
+	}
+
+	/* the add-sub-task Popover trigger (Popover wraps it in .pill): keep it compact
+	   and square so it reads as an icon-only "+" button, not a labelled pill */
+	.sub-header :global(.pill) {
+		flex: 0 0 auto;
+		padding: 3px 6px;
+		color: var(--color-muted);
+	}
+
+	.sub-header :global(.pill:hover) {
+		color: var(--color-fg);
+	}
+
+	/* Description editor: borderless, document-like (no border/shadow/focus ring);
+	   a faint hover/focus bg is the only affordance. Mirrors the Overview page. */
+	:global(.desc-editor) {
+		width: 100%;
+		border: none;
+		background: transparent;
+		box-shadow: none;
+		outline: none;
+		padding: 6px;
+		margin: 0;
+		border-radius: 6px;
+		font-size: 15px;
+		line-height: 1.6;
+		color: var(--color-fg);
+		transition: background var(--dur-fast) ease;
+	}
+
+	:global(.desc-editor:hover),
+	:global(.desc-editor:focus) {
+		background: var(--color-surface-muted);
+	}
+
+	.desc-ro {
+		padding: 6px;
+		font-size: 15px;
+		line-height: 1.6;
 	}
 
 	.sub-toggle:hover {
@@ -1827,13 +1892,6 @@
 
 	.sub-item.is-done .sub-title-btn {
 		color: var(--color-muted);
-	}
-
-	.pop-due {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		padding: 4px;
 	}
 
 	.sub-add {

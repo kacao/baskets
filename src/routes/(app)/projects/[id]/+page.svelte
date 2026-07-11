@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { enhance, applyAction, deserialize } from '$app/forms';
-	import { onDestroy, tick } from 'svelte';
+	import { onDestroy, tick, untrack } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
 	import { page } from '$app/state';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { setPaneUrl, readPaneParam } from '$lib/paneUrl';
 	import { slide } from 'svelte/transition';
 	import { popover } from '$lib/transitions';
 	import { portal } from '$lib/portal';
@@ -51,16 +52,62 @@
 	}
 	let labelQuery = $state('');
 	let addingView = $state(false);
-	let customizing = $state(false);
-	let milestonesOpen = $state(false);
-	let newTaskOpen = $state(false);
+	// Project-level panes are reflected in the URL (?pane=…) so they're linkable /
+	// restorable in another window. The task pane uses ?task= (owned by the views);
+	// the single-open-pane registry keeps the two mutually exclusive. Initialise from
+	// the URL so a deep-link opens the right pane on load.
+	const paneFromUrl = () => page.url.searchParams.get('pane');
+	let customizing = $state(paneFromUrl() === 'customize');
+	let milestonesOpen = $state(paneFromUrl() === 'milestones');
+	let newTaskOpen = $state(paneFromUrl() === 'new-task');
 	let newTaskPrefill = $state<Record<string, string>>({});
-	let newMilestoneOpen = $state(false);
+	let newMilestoneOpen = $state(paneFromUrl() === 'new-milestone');
 	let ctx = $state<{ id: string; x: number; y: number } | null>(null);
 	let ctxSub = $state<'display' | null>(null);
 	let ctxRenaming = $state(false);
 
 	const requestedView = $derived(page.url.searchParams.get('view'));
+
+	// ── URL ⇄ project-pane sync ───────────────────────────────────────────────
+	// Which project-level pane is open (only one at a time). Mirrored to ?pane=.
+	const openPaneName = $derived(
+		customizing
+			? 'customize'
+			: milestonesOpen
+				? 'milestones'
+				: newTaskOpen
+					? 'new-task'
+					: newMilestoneOpen
+						? 'new-milestone'
+						: null
+	);
+	function applyPaneParam(name: string | null) {
+		customizing = name === 'customize';
+		milestonesOpen = name === 'milestones';
+		newTaskOpen = name === 'new-task';
+		newMilestoneOpen = name === 'new-milestone';
+	}
+	// `lastPaneParam` is a plain sentinel: it must be read via untrack() in BOTH
+	// effects. If either effect *tracked* it, changing it in one would re-run the
+	// other with a stale page.url and clobber the state. So the read effect fires
+	// only on page.url changes and the write effect only on openPaneName changes.
+	let lastPaneParam = $state(paneFromUrl());
+	// URL → state: browser back/forward + external navigation open/close the pane
+	$effect(() => {
+		const fromUrl = readPaneParam('pane');
+		if (fromUrl !== untrack(() => lastPaneParam)) {
+			lastPaneParam = fromUrl;
+			applyPaneParam(fromUrl);
+		}
+	});
+	// state → URL: opening/closing a pane reflects it (shallow routing — no reload).
+	$effect(() => {
+		const name = openPaneName;
+		if (name !== untrack(() => lastPaneParam)) {
+			lastPaneParam = name;
+			setPaneUrl({ pane: name });
+		}
+	});
 	const visibleViews = $derived(data.views.filter((v) => !v.hidden));
 	const hiddenViews = $derived(data.views.filter((v) => v.hidden));
 	const activeView = $derived(
@@ -844,7 +891,7 @@
 				closeMenus();
 				milestonesOpen = false;
 				customizing = true;
-				if (activeView?.id !== v.id) goto(`?view=${v.id}`, { noScroll: true, keepFocus: true });
+				if (activeView?.id !== v.id) goto(`?view=${v.id}&pane=customize`, { noScroll: true, keepFocus: true });
 			}}
 		>
 			{#if mode !== 'text'}<Icon name={VIEW_ICONS[v.type] ?? 'table'} size={14} />{/if}
@@ -972,7 +1019,7 @@
 					closeMenus();
 					milestonesOpen = false;
 					customizing = true;
-					if (activeView?.id !== id) goto(`?view=${id}`, { noScroll: true, keepFocus: true });
+					if (activeView?.id !== id) goto(`?view=${id}&pane=customize`, { noScroll: true, keepFocus: true });
 				}}
 			>
 				{$t('Customize')}
@@ -1549,6 +1596,14 @@
 		gap: var(--sp-2);
 		min-width: 0;
 		flex: 1 1 auto;
+	}
+
+	/* Hidden until the portal action relocates it into the topbar. Without this the
+	   server-rendered header paints at the top of .content and visibly teleports up
+	   on hydration. display:none (not visibility) reserves no space, so there's no
+	   layout shift in .content either. */
+	.proj-topbar:not([data-portaled]) {
+		display: none;
 	}
 
 	.proj-topbar .proj-title {

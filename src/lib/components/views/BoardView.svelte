@@ -2,7 +2,8 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { tick } from 'svelte';
+	import { setPaneUrl, readPaneParam } from '$lib/paneUrl';
+	import { tick, untrack } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -139,11 +140,22 @@
 	// fighting user clicks (effect tracks the URL only, never selectedId)
 	let lastTaskParam = $state(page.url.searchParams.get('task'));
 	$effect(() => {
-		const fromUrl = page.url.searchParams.get('task');
-		if (fromUrl !== lastTaskParam) {
+		const fromUrl = readPaneParam('task');
+		if (fromUrl !== untrack(() => lastTaskParam)) {
 			lastTaskParam = fromUrl;
 			selectedId = fromUrl;
 			backStack = [];
+		}
+	});
+	// mirror the open task back into the URL so the pane is linkable / restorable in
+	// another window (shallow routing — load() doesn't re-run). lastTaskParam is a
+	// plain sentinel read via untrack() in BOTH effects, so changing it in one never
+	// re-runs the other with a stale page.url (which would clobber the selection).
+	$effect(() => {
+		const id = selectedId;
+		if (id !== untrack(() => lastTaskParam)) {
+			lastTaskParam = id;
+			setPaneUrl({ task: id });
 		}
 	});
 	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
