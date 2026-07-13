@@ -14,6 +14,7 @@
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { tooltip } from '$lib/tooltip';
 	import { fmtDate } from '$lib/date';
+	import { groupTasks } from '$lib/taskGroups';
 
 	type Task = {
 		id: string;
@@ -159,56 +160,14 @@
 	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
 	type Group = { key: string; title: string; tasks: Task[] };
 
-	function dueBuckets(rows: Task[]): Group[] {
-		const start = new Date();
-		start.setHours(0, 0, 0, 0);
-		const today = start.getTime();
-		const week = today + 7 * 86400000;
-		const b: Record<string, Task[]> = { overdue: [], today: [], week: [], later: [], none: [] };
-		for (const t of rows) {
-			if (!t.dueDate) {
-				b.none.push(t);
-				continue;
-			}
-			const ts = new Date(new Date(t.dueDate).setHours(0, 0, 0, 0)).getTime();
-			if (ts < today) b.overdue.push(t);
-			else if (ts === today) b.today.push(t);
-			else if (ts < week) b.week.push(t);
-			else b.later.push(t);
-		}
-		return [
-			{ key: 'overdue', title: $i18n('Overdue'), tasks: b.overdue },
-			{ key: 'today', title: $i18n('Today'), tasks: b.today },
-			{ key: 'week', title: $i18n('Next 7 days'), tasks: b.week },
-			{ key: 'later', title: $i18n('Later'), tasks: b.later },
-			{ key: 'none', title: $i18n('No due date'), tasks: b.none }
-		];
-	}
-
-	const groups = $derived.by((): Group[] => {
-		const rows = ordered;
-		let g: Group[];
-		if (groupBy === 'status')
-			g = statuses.map((s) => ({ key: s.id, title: s.name, tasks: rows.filter((t) => t.statusId === s.id) }));
-		else if (groupBy === 'milestone')
-			g = [
-				...milestones.map((m) => ({ key: m.id, title: m.name, tasks: rows.filter((t) => t.milestoneId === m.id) })),
-				{ key: '_none', title: $i18n('No milestone'), tasks: rows.filter((t) => !t.milestoneId) }
-			];
-		else if (groupBy === 'assignee')
-			g = [
-				...users.map((u) => ({ key: u.id, title: u.name, tasks: rows.filter((t) => t.assigneeId === u.id) })),
-				{ key: '_none', title: $i18n('Unassigned'), tasks: rows.filter((t) => !t.assigneeId) }
-			];
-		else if (groupBy === 'due') g = dueBuckets(rows);
-		else if (groupBy === 'label')
-			g = [
-				...labels.map((l) => ({ key: l.id, title: l.name, tasks: rows.filter((t) => taskLabelIds(t.id).includes(l.id)) })),
-				{ key: '_none', title: $i18n('No label'), tasks: rows.filter((t) => taskLabelIds(t.id).length === 0) }
-			];
-		else return [{ key: '_all', title: '', tasks: rows }];
-		return hideEmptyGroups ? g.filter((x) => x.tasks.length > 0) : g;
-	});
+	const groups = $derived.by((): Group[] =>
+		groupTasks(
+			ordered,
+			groupBy,
+			{ statuses, milestones, users, labels, labelIdsOf: taskLabelIds, t: $i18n },
+			hideEmptyGroups
+		)
+	);
 	let collapsed = $state<Record<string, boolean>>({});
 </script>
 
