@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { authClient } from '$lib/auth-client';
+	import { safeRedirect } from '$lib/safeRedirect';
 	import { t } from '$lib/i18n';
 
 	let name = $state('');
@@ -8,6 +10,14 @@
 	let password = $state('');
 	let error = $state('');
 	let loading = $state(false);
+
+	// same-origin post-register destination (e.g. an /invite/<id> deep link)
+	const redirectTo = $derived(safeRedirect(page.url.searchParams.get('redirect')) ?? '/projects');
+	const loginHref = $derived(
+		page.url.searchParams.get('redirect')
+			? `/login?redirect=${encodeURIComponent(redirectTo)}`
+			: '/login'
+	);
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
@@ -27,7 +37,7 @@
 			return;
 		}
 
-		await goto('/projects');
+		await goto(redirectTo);
 	}
 </script>
 
@@ -68,7 +78,7 @@
 </form>
 
 <p class="u-small" style="margin-top: var(--sp-3);">
-	{$t('Already registered?')} <a href="/login">{$t('Sign in')}</a>
+	{$t('Already registered?')} <a href={loginHref}>{$t('Sign in')}</a>
 </p>
 
 <style>
