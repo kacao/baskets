@@ -193,13 +193,18 @@
 	);
 
 	// per-task cf search text so the `task`-cf link picker searches by cf values too
+	const optionTitleById = $derived(new Map(customFieldOptions.map((o) => [o.id, o.title])));
+	const userNameById = $derived(new Map(users.map((u) => [u.id, u.name])));
+	const locationTitleById = $derived(new Map(locations.map((l) => [l.id, l.title])));
+	const taskTitleById = $derived(new Map(tasks.map((t) => [t.id, t.title])));
+	const fileNameById = $derived(new Map(files.map((f) => [f.id, f.filename])));
 	const cfSearchByTask = $derived(
 		buildTaskCfSearch(customFields, taskCustomValues, {
-			option: (id) => customFieldOptions.find((o) => o.id === id)?.title ?? '',
-			user: (id) => users.find((u) => u.id === id)?.name ?? '',
-			location: (id) => locations.find((l) => l.id === id)?.title ?? '',
-			task: (id) => tasks.find((t) => t.id === id)?.title ?? '',
-			file: (id) => files.find((f) => f.id === id)?.filename ?? ''
+			option: (id) => optionTitleById.get(id) ?? '',
+			user: (id) => userNameById.get(id) ?? '',
+			location: (id) => locationTitleById.get(id) ?? '',
+			task: (id) => taskTitleById.get(id) ?? '',
+			file: (id) => fileNameById.get(id) ?? ''
 		})
 	);
 	const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';

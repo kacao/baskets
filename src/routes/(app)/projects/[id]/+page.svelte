@@ -137,13 +137,18 @@
 	// Per-task searchable text from custom-field values (resolved to display labels).
 	// Lets free-text search + the task-cf link picker hit custom fields. ponytail:
 	// rebuilt on any data change, O(values) — fine at app scale.
+	const optionTitleById = $derived(new Map(data.customFieldOptions.map((o) => [o.id, o.title])));
+	const userNameById = $derived(new Map(data.users.map((u) => [u.id, u.name])));
+	const locationTitleById = $derived(new Map(data.locations.map((l) => [l.id, l.title])));
+	const taskTitleById = $derived(new Map(data.tasks.map((t) => [t.id, t.title])));
+	const fileNameById = $derived(new Map(data.files.map((f) => [f.id, f.filename])));
 	const cfSearchByTask = $derived(
 		buildTaskCfSearch(data.customFields, data.taskCustomValues, {
-			option: (id) => data.customFieldOptions.find((o) => o.id === id)?.title ?? '',
-			user: (id) => data.users.find((u) => u.id === id)?.name ?? '',
-			location: (id) => data.locations.find((l) => l.id === id)?.title ?? '',
-			task: (id) => data.tasks.find((t) => t.id === id)?.title ?? '',
-			file: (id) => data.files.find((f) => f.id === id)?.filename ?? ''
+			option: (id) => optionTitleById.get(id) ?? '',
+			user: (id) => userNameById.get(id) ?? '',
+			location: (id) => locationTitleById.get(id) ?? '',
+			task: (id) => taskTitleById.get(id) ?? '',
+			file: (id) => fileNameById.get(id) ?? ''
 		})
 	);
 	const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';
