@@ -54,7 +54,7 @@ import {
 	listProjectCustomFields,
 	listProjectCustomValues
 } from '$lib/server/customFields';
-import { decodeValue, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
+import { collectVisibleUserIds, computeProjectRollupText } from '$lib/server/projectLoad';
 import {
 	accessibleWorkspaceIds,
 	canAccessProject,
@@ -270,25 +270,14 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	// ADR-019: assignee pickers/groupings expose only users who can ACCESS this
 	// project — plus any user already referenced (assignee or person custom field)
 	// so existing values still resolve to a name. Don't leak the whole roster.
-	const visibleUserIds = await projectAccessUserIds(params.id, proj.workspaceId);
-	for (const tk of tasks) if (tk.assigneeId) visibleUserIds.add(tk.assigneeId);
-	for (const f of customFields) {
-		if (f.type !== 'person') continue;
-		for (const v of taskCustomValues) {
-			if (v.fieldId !== f.id) continue;
-			const ids = decodeValue({ type: 'person' }, v.value);
-			if (Array.isArray(ids)) for (const id of ids) visibleUserIds.add(String(id));
-		}
-	}
-	// project-entity person fields (header chips) resolve their user names too
-	for (const f of projectFields) {
-		if (f.type !== 'person') continue;
-		for (const v of projectCustomValues) {
-			if (v.fieldId !== f.id) continue;
-			const ids = decodeValue({ type: 'person' }, v.value);
-			if (Array.isArray(ids)) for (const id of ids) visibleUserIds.add(String(id));
-		}
-	}
+	const visibleUserIds = collectVisibleUserIds(
+		await projectAccessUserIds(params.id, proj.workspaceId),
+		tasks,
+		customFields,
+		taskCustomValues,
+		projectFields,
+		projectCustomValues
+	);
 	const visibleUsers = users.filter((u) => visibleUserIds.has(u.id));
 
 	// Per-view edit rights (project grant covers all views); hidden views are never rendered
@@ -322,8 +311,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	// Project-entity rollup chip values (computed, never stored — aggregate a target
 	// number field over all the project's tasks). Mirrors the custom-fields page's
 	// projectRollupText so rollup fields can render as header chips.
-	const projectRollupText: Record<string, string> = {};
 	const projRollups = projectFields.filter((f) => f.type === 'rollup');
+	let projectRollupText: Record<string, string> = {};
 	if (projRollups.length > 0) {
 		const [rollupTasks, rollupValues] = await Promise.all([
 			db.select({ id: task.id, parentId: task.parentId }).from(task).where(eq(task.projectId, params.id)),
@@ -333,20 +322,13 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				.innerJoin(task, eq(taskCustomValue.taskId, task.id))
 				.where(eq(task.projectId, params.id))
 		]);
-		const valueOf = (tid: string, fid: string) => {
-			const raw = rollupValues.find((v) => v.taskId === tid && v.fieldId === fid)?.value;
-			const n = raw == null ? null : Number(raw);
-			return n != null && Number.isFinite(n) ? n : null;
-		};
-		for (const f of projRollups) {
-			const cfg = { ...(f.config as unknown as RollupConfig), relation: 'task' as const };
-			const n = computeTaskRollup(cfg, '', { tasks: rollupTasks, taskDeps: [], valueOf });
-			const target =
-				customFields.find((t) => t.id === cfg.targetFieldId) ??
-				projectFields.find((t) => t.id === cfg.targetFieldId);
-			projectRollupText[f.id] =
-				target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
-		}
+		projectRollupText = computeProjectRollupText(
+			projRollups,
+			customFields,
+			projectFields,
+			rollupTasks,
+			rollupValues
+		);
 	}
 
 	return {
