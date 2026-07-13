@@ -5,6 +5,7 @@ import { customField, customFieldOption, location, milestone, project, task, vie
 import { apiError, readJson, optionalString, ApiValidationError } from '$lib/server/api';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject, canEditProject } from '$lib/server/permissions';
+import { deleteFilesForProject } from '$lib/server/uploads';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
 import { ICON_NAMES } from '$lib/heroiconNames';
 import { customValuesByTask, listCustomFieldOptions, listProjectCustomFields } from '$lib/server/customFields';
@@ -208,6 +209,7 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 	if (!(await canEditProject(locals.user, params.id)))
 		return apiError(403, 'No edit permission on this project');
 
+	await deleteFilesForProject(params.id);
 	await db.delete(project).where(eq(project.id, params.id));
 	broadcastProjectChange(params.id, locals.user.id);
 	return new Response(null, { status: 204 });

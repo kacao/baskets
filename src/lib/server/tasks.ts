@@ -11,6 +11,7 @@ import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
 import { listProjectStatuses } from '$lib/server/statuses';
 import { canAccessProject, canEditTask } from '$lib/server/permissions';
 import { writeTaskCustomValues } from '$lib/server/customFields';
+import { deleteFilesForTasks } from '$lib/server/uploads';
 
 export type Actor = { id: string; name?: string | null };
 
@@ -620,6 +621,8 @@ export async function deleteTaskService(
 	if (!existing || existing.projectId !== projectId) return err(400, 'Invalid task');
 	if (!(await canEditTask(actor, existing))) return err(403, 'No edit permission on this task');
 
+	const subs = await db.select({ id: task.id }).from(task).where(eq(task.parentId, taskId));
+	await deleteFilesForTasks([taskId, ...subs.map((s) => s.id)]);
 	await db.delete(task).where(eq(task.parentId, taskId)); // sub-tasks first
 	await db.delete(task).where(eq(task.id, taskId));
 	broadcastProjectChange(projectId, actor.id);
@@ -832,6 +835,8 @@ export async function bulkDeleteTasks(
 	const allowed = await bulkAllowed(ids, projectId, actor);
 	if (allowed.length === 0) return err(403, 'No deletable tasks selected');
 
+	const subs = await db.select({ id: task.id }).from(task).where(inArray(task.parentId, allowed));
+	await deleteFilesForTasks([...allowed, ...subs.map((s) => s.id)]);
 	await db.delete(task).where(inArray(task.parentId, allowed)); // sub-tasks first
 	await db.delete(task).where(inArray(task.id, allowed));
 

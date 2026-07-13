@@ -23,6 +23,7 @@ import {
 	view
 } from '$lib/server/db/schema';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import { deleteFilesForProject } from '$lib/server/uploads';
 import { notifyMentions } from '$lib/server/mentions';
 import {
 	createComment,
@@ -1266,6 +1267,7 @@ export const actions: Actions = {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
+		await deleteFilesForProject(params.id);
 		await db.delete(project).where(eq(project.id, params.id));
 		broadcastProjectChange(params.id, locals.user.id);
 		redirect(303, '/projects');

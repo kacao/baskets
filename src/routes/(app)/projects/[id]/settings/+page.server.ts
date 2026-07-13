@@ -58,7 +58,7 @@ import {
 	writeProjectCustomValues,
 	validateFieldConfig
 } from '$lib/server/customFields';
-import { deleteFilesForField } from '$lib/server/uploads';
+import { deleteFilesForField, deleteFilesForProject } from '$lib/server/uploads';
 import { importProjectFromExport } from '$lib/server/projectIO';
 import {
 	milestoneProgressByProject,
@@ -398,6 +398,7 @@ export const actions: Actions = {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
+		await deleteFilesForProject(params.id);
 		await db.delete(project).where(eq(project.id, params.id));
 		redirect(303, '/projects');
 	},
