@@ -19,13 +19,13 @@ update your row in the table when done.
 
 | Plan | Title | Priority | Effort | Risk | Depends on | Status |
 |------|-------|----------|--------|------|------------|--------|
-| 001 | Gate integration tests behind a flag (kill skip-as-pass) | P1 | S | LOW | — | TODO |
-| 002 | Add indexes on hot foreign-key columns | P1 | M | LOW | — | TODO |
-| 003 | Spawn recurrence on board drag-to-done | P1 | S | LOW | — | TODO |
-| 004 | Add CI pipeline (check + unit; flag-gated integ/e2e) | P1 | M | LOW | 001 | TODO |
-| 005 | Collapse the bulk-permission N+1 | P1 | S | LOW | — | TODO |
-| 006 | Validate `Origin` on the WebSocket upgrade | P1 | S | LOW | — | TODO |
-| 007 | Scope `person` custom-field values to project members | P1 | S | LOW | — | TODO |
+| 001 | Gate integration tests behind a flag (kill skip-as-pass) | P1 | S | LOW | — | DONE |
+| 002 | Add indexes on hot foreign-key columns | P1 | M | LOW | — | DONE |
+| 003 | Spawn recurrence on board drag-to-done | P1 | S | LOW | — | DONE |
+| 004 | Add CI pipeline (check + unit; flag-gated integ/e2e) | P1 | M | LOW | 001 | DONE |
+| 005 | Collapse the bulk-permission N+1 | P1 | S | LOW | — | DONE |
+| 006 | Validate `Origin` on the WebSocket upgrade | P1 | S | LOW | — | DONE |
+| 007 | Scope `person` custom-field values to project members | P1 | S | LOW | — | DONE |
 | 008 | Unlink file bytes on task/project delete | P2 | M | MED | — | TODO |
 | 009 | Map-based resolvers for `cfSearchByTask` | P2 | S | LOW | — | TODO |
 | 010 | Keyed maps for TableView per-row/cell lookups | P2 | M | MED | — | TODO |
