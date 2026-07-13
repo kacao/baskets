@@ -18,7 +18,8 @@
 		"test:unit": "vitest run tests/unit",
 		"test:integration": "vitest run --config vitest.integration.config.ts",
 		"test:watch": "vitest",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"verify": "npm run check && npm run test:unit"
 	},
 	"dependencies": {
 		"@fontsource/ibm-plex-mono": "^5.2.7",

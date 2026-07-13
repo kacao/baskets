@@ -48,6 +48,14 @@ npm run build
 ORIGIN=https://your-domain npm run start
 ```
 
+## Testing
+
+```bash
+npm run verify        # fast gate: svelte-check + unit tests (no server needed)
+```
+
+`npm run test:integration` and `npm run test:e2e` need a running seeded dev server (`npm run dev` + `npm run db:seed`); integration additionally requires `RUN_INTEGRATION=1`.
+
 ## Features
 
 - Email/password auth, optional TOTP 2FA, per-user API keys for the REST API

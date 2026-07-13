@@ -26,5 +26,10 @@ tests/webwright/screenshots/
 tests/webwright/outputs/
 tests/webwright/final_script_log.txt
 
+# webwright scratch (tooling artifacts, not product code)
+tests/webwright/README.md
+tests/webwright/final_script.py
+tests/webwright/plan.md
+
 # drizzle-kit generate output (project is push-based, no committed migrations)
 drizzle/
