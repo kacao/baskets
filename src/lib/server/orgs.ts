@@ -11,6 +11,7 @@ import {
 	workspace
 } from './db/schema';
 import { isFirstWorkspaceForUser, seedWorkspaceSamples } from './projects';
+import { kickUser } from './realtime/hub';
 
 // Org service module (ADR-062). Primitives for the BetterAuth organization
 // plugin: membership/role reads, active-org resolution (mirrors the `workspace`
@@ -320,4 +321,262 @@ export async function listPendingInvitations(orgId: string) {
 		.from(invitation)
 		.where(and(eq(invitation.organizationId, orgId), eq(invitation.status, 'pending')))
 		.orderBy(asc(invitation.createdAt));
+}
+
+// ---------------------------------------------------------------------------
+// Membership + invitation services (ADR-062 D6/D8). The ONE code path for both
+// the org-settings form actions (W3) and the REST endpoints (W4) — thin adapters
+// only, per ADR-049. Gating follows ADR-019: a non-member actor gets 404
+// (inaccessible ≡ missing); an accessible-but-underprivileged actor gets 403.
+// The plugin's own /api/auth/organization/* endpoints remain live surface; their
+// consistency is covered by the organizationHooks in auth.ts, and these services
+// apply the same rules (owner protections, last-owner invariants, grant purges).
+// ---------------------------------------------------------------------------
+
+const INVITABLE_ROLES: OrgRole[] = ['member', 'admin'];
+const INVITATION_TTL_MS = 604800 * 1000; // 7 days, matches the plugin config
+
+async function ownerCount(orgId: string): Promise<number> {
+	const rows = await db
+		.select({ id: member.id })
+		.from(member)
+		.where(and(eq(member.organizationId, orgId), eq(member.role, 'owner')));
+	return rows.length;
+}
+
+/** 404 for non-members (org invisible), 403 for members below admin, role otherwise. */
+async function requireOrgAdmin(
+	actorId: string,
+	orgId: string
+): Promise<{ ok: true; role: OrgRole } | { ok: false; status: number; message: string }> {
+	const role = await orgRole(actorId, orgId);
+	if (!role) return { ok: false, status: 404, message: 'Not found' };
+	if (role !== 'owner' && role !== 'admin')
+		return { ok: false, status: 403, message: 'Requires organization admin' };
+	return { ok: true, role };
+}
+
+/**
+ * Invite by email (D6): creates a pending invitation row; the accept LINK
+ * (/invite/<id>) is the capability — there is deliberately NO by-email discovery
+ * surface while registration is email-unverified. Cancels prior pending invites
+ * for the same email (mirrors cancelPendingInvitationsOnReInvite). Only
+ * member/admin are invitable; ownership moves via updateMemberRoleService.
+ */
+export async function inviteMemberService(
+	actorId: string,
+	orgId: string,
+	emailRaw: string,
+	roleRaw?: string | null
+): Promise<ServiceResult<{ id: string; email: string; role: OrgRole; expiresAt: Date }>> {
+	const gate = await requireOrgAdmin(actorId, orgId);
+	if (!gate.ok) return gate;
+
+	const email = emailRaw.trim();
+	if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+		return { ok: false, status: 400, message: 'Invalid email address' };
+	const role = (roleRaw?.trim() || 'member') as OrgRole;
+	if (!INVITABLE_ROLES.includes(role))
+		return { ok: false, status: 400, message: 'Role must be member or admin' };
+
+	const members = await listMembers(orgId);
+	if (members.some((m) => m.email.toLowerCase() === email.toLowerCase()))
+		return { ok: false, status: 400, message: 'Already a member of this organization' };
+
+	const now = new Date();
+	const pending = await listPendingInvitations(orgId);
+	for (const p of pending) {
+		if (p.email.toLowerCase() === email.toLowerCase())
+			await db.update(invitation).set({ status: 'canceled' }).where(eq(invitation.id, p.id));
+	}
+
+	const id = crypto.randomUUID();
+	const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS);
+	await db.insert(invitation).values({
+		id,
+		organizationId: orgId,
+		email,
+		role,
+		status: 'pending',
+		expiresAt,
+		inviterId: actorId,
+		createdAt: now
+	});
+	return { ok: true, data: { id, email, role, expiresAt } };
+}
+
+/** Cancel a pending invitation (org owner/admin; 404 hides other orgs' invites). */
+export async function cancelInvitationService(
+	actorId: string,
+	invitationId: string
+): Promise<ServiceResult<{ id: string }>> {
+	const [row] = await db.select().from(invitation).where(eq(invitation.id, invitationId));
+	if (!row) return { ok: false, status: 404, message: 'Not found' };
+	const gate = await requireOrgAdmin(actorId, row.organizationId);
+	if (!gate.ok)
+		return gate.status === 403 ? gate : { ok: false, status: 404, message: 'Not found' };
+	if (row.status !== 'pending')
+		return { ok: false, status: 400, message: 'Invitation is no longer pending' };
+	await db.update(invitation).set({ status: 'canceled' }).where(eq(invitation.id, invitationId));
+	return { ok: true, data: { id: invitationId } };
+}
+
+/**
+ * Resolve an invitation for the /invite/[id] page. The id IS the capability
+ * (~UUID entropy, delivered out-of-band), so no auth gate — but only id-holders
+ * ever see this, and it exposes just what the accept screen needs.
+ */
+export async function getInvitationForAccept(invitationId: string) {
+	const [row] = await db
+		.select({
+			id: invitation.id,
+			email: invitation.email,
+			role: invitation.role,
+			status: invitation.status,
+			expiresAt: invitation.expiresAt,
+			orgId: invitation.organizationId,
+			orgName: organization.name
+		})
+		.from(invitation)
+		.innerJoin(organization, eq(invitation.organizationId, organization.id))
+		.where(eq(invitation.id, invitationId));
+	return row ?? null;
+}
+
+/**
+ * Accept an invitation as the signed-in user (D6): pending + unexpired + the
+ * session email must equal the invited email (case-insensitive — a speed bump,
+ * not authentication, while registration is unverified; the link is the real
+ * capability). Creates the membership (unique(orgId,userId) makes re-accepts
+ * no-ops) and purges stale same-org grants so a re-joiner starts clean.
+ */
+export async function acceptInvitationService(
+	user_: { id: string; email: string },
+	invitationId: string
+): Promise<ServiceResult<{ orgId: string }>> {
+	const [row] = await db.select().from(invitation).where(eq(invitation.id, invitationId));
+	if (!row) return { ok: false, status: 404, message: 'Not found' };
+	if (row.status !== 'pending')
+		return { ok: false, status: 400, message: 'Invitation is no longer valid' };
+	if (row.expiresAt.getTime() < Date.now())
+		return { ok: false, status: 400, message: 'Invitation has expired' };
+	if (row.email.toLowerCase() !== user_.email.toLowerCase())
+		return { ok: false, status: 403, message: 'This invitation is for a different email address' };
+
+	const role: OrgRole = INVITABLE_ROLES.includes(row.role as OrgRole)
+		? (row.role as OrgRole)
+		: 'member';
+	await db
+		.insert(member)
+		.values({
+			id: crypto.randomUUID(),
+			organizationId: row.organizationId,
+			userId: user_.id,
+			role,
+			createdAt: new Date()
+		})
+		.onConflictDoNothing();
+	await purgeStaleGrants(user_.id, row.organizationId);
+	await db.update(invitation).set({ status: 'accepted' }).where(eq(invitation.id, invitationId));
+	return { ok: true, data: { orgId: row.organizationId } };
+}
+
+/**
+ * Remove a member (D8): org owner/admin; admins cannot remove owners; the last
+ * owner is irremovable; self-removal goes through leaveOrgService (which owns the
+ * last-owner rule for self). Purges the target's org grants and kicks their live
+ * WS connections.
+ */
+export async function removeMemberService(
+	actorId: string,
+	orgId: string,
+	targetUserId: string
+): Promise<ServiceResult<{ userId: string }>> {
+	const gate = await requireOrgAdmin(actorId, orgId);
+	if (!gate.ok) return gate;
+	if (actorId === targetUserId)
+		return { ok: false, status: 400, message: 'Use “Leave organization” to remove yourself' };
+	const targetRole = await orgRole(targetUserId, orgId);
+	if (!targetRole) return { ok: false, status: 404, message: 'Member not found' };
+	if (targetRole === 'owner') {
+		if (gate.role !== 'owner')
+			return { ok: false, status: 403, message: 'Only an owner can remove an owner' };
+		if ((await ownerCount(orgId)) <= 1)
+			return { ok: false, status: 400, message: 'Cannot remove the last owner' };
+	}
+	await db
+		.delete(member)
+		.where(and(eq(member.organizationId, orgId), eq(member.userId, targetUserId)));
+	await purgeStaleGrants(targetUserId, orgId);
+	kickUser(targetUserId);
+	return { ok: true, data: { userId: targetUserId } };
+}
+
+/**
+ * Change a member's org role (D8, plugin-mirrored rules): only an owner may grant
+ * or revoke the owner role; the last owner cannot be demoted; org admins may move
+ * non-owners between member and admin.
+ */
+export async function updateMemberRoleService(
+	actorId: string,
+	orgId: string,
+	targetUserId: string,
+	newRoleRaw: string
+): Promise<ServiceResult<{ userId: string; role: OrgRole }>> {
+	const newRole = newRoleRaw as OrgRole;
+	if (!['owner', 'admin', 'member'].includes(newRole))
+		return { ok: false, status: 400, message: 'Invalid role' };
+	const gate = await requireOrgAdmin(actorId, orgId);
+	if (!gate.ok) return gate;
+	const targetRole = await orgRole(targetUserId, orgId);
+	if (!targetRole) return { ok: false, status: 404, message: 'Member not found' };
+	if (targetRole === newRole) return { ok: true, data: { userId: targetUserId, role: newRole } };
+	if ((newRole === 'owner' || targetRole === 'owner') && gate.role !== 'owner')
+		return { ok: false, status: 403, message: 'Only an owner can change ownership' };
+	if (targetRole === 'owner' && (await ownerCount(orgId)) <= 1)
+		return { ok: false, status: 400, message: 'Cannot demote the last owner' };
+	await db
+		.update(member)
+		.set({ role: newRole })
+		.where(and(eq(member.organizationId, orgId), eq(member.userId, targetUserId)));
+	return { ok: true, data: { userId: targetUserId, role: newRole } };
+}
+
+/**
+ * Leave an org (D8): the last owner must transfer ownership or delete the org
+ * first. Grants survive a self-leave but are inert (membership prerequisite) and
+ * are purged on re-join.
+ */
+export async function leaveOrgService(
+	userId: string,
+	orgId: string
+): Promise<ServiceResult<{ orgId: string }>> {
+	const role = await orgRole(userId, orgId);
+	if (!role) return { ok: false, status: 404, message: 'Not found' };
+	if (role === 'owner' && (await ownerCount(orgId)) <= 1)
+		return {
+			ok: false,
+			status: 400,
+			message: 'Transfer ownership or delete the organization first'
+		};
+	await db.delete(member).where(and(eq(member.organizationId, orgId), eq(member.userId, userId)));
+	kickUser(userId);
+	return { ok: true, data: { orgId } };
+}
+
+/** Rename an org (owner/admin). The slug is intentionally left unchanged (v1). */
+export async function updateOrganizationService(
+	actorId: string,
+	orgId: string,
+	patch: { name?: string }
+): Promise<ServiceResult<{ id: string }>> {
+	const gate = await requireOrgAdmin(actorId, orgId);
+	if (!gate.ok) return gate;
+	if (patch.name !== undefined) {
+		const name = patch.name.trim();
+		if (!name) return { ok: false, status: 400, message: 'Organization name is required' };
+		if (name.length > 120) return { ok: false, status: 400, message: 'Name too long (max 120)' };
+		await db.update(organization).set({ name }).where(eq(organization.id, orgId));
+	}
+	return { ok: true, data: { id: orgId } };
 }
