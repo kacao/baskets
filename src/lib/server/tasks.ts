@@ -76,8 +76,9 @@ export async function createTaskService(
 	if (title.length > 240) return err(400, 'Title too long (max 240)');
 	if (!isPriority(priority)) return err(400, 'Invalid priority');
 
+	let parent: Awaited<ReturnType<typeof getTask>> | null = null;
 	if (parentId) {
-		const parent = await getTask(parentId);
+		parent = await getTask(parentId);
 		if (!parent || parent.projectId !== projectId) return err(400, 'Invalid parent task');
 		if (parent.parentId) return err(400, 'Sub-tasks cannot have their own sub-tasks');
 	}
@@ -103,10 +104,17 @@ export async function createTaskService(
 		const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
 		if (!u) return err(400, 'Unknown assignee');
 	}
-	const milestoneId = input.milestoneId ?? null;
-	if (milestoneId) {
-		const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-		if (!m || m.projectId !== projectId) return err(400, 'Milestone must belong to this project');
+	// Sub-tasks inherit the parent's milestone (the milestone UI is hidden on sub-tasks
+	// and always follows the parent); top-level tasks validate the supplied milestone.
+	let milestoneId: string | null;
+	if (parent) {
+		milestoneId = parent.milestoneId;
+	} else {
+		milestoneId = input.milestoneId ?? null;
+		if (milestoneId) {
+			const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
+			if (!m || m.projectId !== projectId) return err(400, 'Milestone must belong to this project');
+		}
 	}
 	const locationId = input.locationId ?? null;
 	if (locationId) {
@@ -468,6 +476,8 @@ export async function updateTaskService(
 				.from(task)
 				.where(eq(task.parentId, taskId));
 			if (n > 0) return err(400, 'Move or remove this task’s sub-tasks first');
+			// becoming a sub-task → inherit the parent's milestone (sub-tasks follow it)
+			set.milestoneId = parent.milestoneId;
 		}
 		set.parentId = parentId;
 	}

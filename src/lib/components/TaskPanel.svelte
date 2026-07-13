@@ -296,6 +296,13 @@
 	let locQuery = $state('');
 	let depQuery = $state('');
 	const matches = (hay: string, q: string) => hay.toLowerCase().includes(q.trim().toLowerCase());
+	// A search+create popover shows "Create" when the query is non-empty AND no found
+	// entity's name EXACTLY equals it — so "Brown Coat" still offers Create even when
+	// "Plaster Brown Coat"/"Other Brown Coat" partially match.
+	const noExactMatch = (query: string, names: string[]) => {
+		const q = query.trim().toLowerCase();
+		return q !== '' && !names.some((n) => n.trim().toLowerCase() === q);
+	};
 	const mFiltered = $derived(milestones.filter((m) => matches(m.name, mQuery)));
 	const locFiltered = $derived(
 		locations.filter((l) => matches(`${l.title} ${l.address ?? ''}`, locQuery))
@@ -309,6 +316,22 @@
 				matches(x.title, depQuery)
 		)
 	);
+	// Sub-task "Blocked by": deps of a given sub-task + its candidate blockers, which
+	// (per the server's sibling rule) are only OTHER sub-tasks under the same parent.
+	let subDepQuery = $state('');
+	const subDepsOf = (s: Task) =>
+		taskDeps
+			.filter((d) => d.taskId === s.id)
+			.map((d) => tasks.find((t) => t.id === d.dependsOnId))
+			.filter(Boolean);
+	const subDepCandidates = (s: Task) =>
+		tasks.filter(
+			(x) =>
+				x.parentId === s.parentId &&
+				x.id !== s.id &&
+				!taskDeps.some((d) => d.taskId === s.id && d.dependsOnId === x.id) &&
+				matches(x.title, subDepQuery)
+		);
 	// candidates that can BECOME a sub-task of this task: top-level, not self, and
 	// childless (depth-1 — a task with its own sub-tasks can't be nested)
 	let subQuery = $state('');
@@ -527,7 +550,8 @@
 				{/snippet}
 			</Popover>
 
-			<!-- Milestone (search + create) -->
+			<!-- Milestone (search + create) — hidden on sub-tasks (they follow the parent's milestone) -->
+			{#if !task.parentId}
 			<Popover ariaLabel={$t('Milestone')}>
 				{#snippet trigger()}
 					<span class="pill-val" class:pill-ph={!task.milestoneId}
@@ -549,7 +573,7 @@
 							<button class="opt" class:opt--on={task.milestoneId === m.id} type="submit">{m.name}</button>
 						</form>
 					{/each}
-					{#if mQuery.trim() && mFiltered.length === 0}
+					{#if noExactMatch(mQuery, mFiltered.map((m) => m.name))}
 						<form
 							method="POST"
 							action="?/createMilestone"
@@ -566,6 +590,7 @@
 					{/if}
 				{/snippet}
 			</Popover>
+			{/if}
 
 			<!-- Order -->
 			<Popover ariaLabel={$t('Order')}>
@@ -629,7 +654,7 @@
 							</button>
 						</form>
 					{/each}
-					{#if locQuery.trim() && locFiltered.length === 0}
+					{#if noExactMatch(locQuery, locFiltered.map((l) => l.title))}
 						<form
 							method="POST"
 							action="?/createLocation"
@@ -746,7 +771,7 @@
 			{#if userName(task.assigneeId)}
 				<span class="badge badge-neutral">{userName(task.assigneeId)}</span>
 			{/if}
-			{#if milestoneName(task.milestoneId)}
+			{#if !task.parentId && milestoneName(task.milestoneId)}
 				<span class="badge">{milestoneName(task.milestoneId)}</span>
 			{/if}
 			{#if locationTitle(task.locationId)}
@@ -863,7 +888,7 @@
 									<button class="opt" type="submit">{c.title}</button>
 								</form>
 							{/each}
-							{#if subQuery.trim() && subCandidates.length === 0}
+							{#if noExactMatch(subQuery, subCandidates.map((c) => c.title))}
 								<form
 									method="POST"
 									action="?/createTask"
@@ -925,16 +950,6 @@
 							<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ assigneeId: '' }, close)}>{$t('Unassigned')}</button>
 							{#each users as u (u.id)}
 								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ assigneeId: u.id }, close)}>{u.name}</button>
-							{/each}
-						{/snippet}
-					</Popover>
-					<!-- Milestone -->
-					<Popover ariaLabel={$t('Set milestone')}>
-						{#snippet trigger()}<span class="pill-val"><Icon name="bookmark" size={12} /> {$t('Milestone')}</span>{/snippet}
-						{#snippet panel(close)}
-							<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ milestoneId: '' }, close)}>{$t('No milestone')}</button>
-							{#each milestones as m (m.id)}
-								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ milestoneId: m.id }, close)}>{m.name}</button>
 							{/each}
 						{/snippet}
 					</Popover>
@@ -1023,8 +1038,8 @@
 								<StatusSelect taskId={s.id} statusId={s.statusId} {statuses} canEdit={sEdit} display={statusDisplay} />
 								{@render subPriority(s, sEdit)}
 								{@render subAssignee(s, sEdit)}
-								{@render subMilestone(s, sEdit)}
 								{@render subDue(s, sEdit)}
+								{@render subBlocked(s, sEdit)}
 								{@render subLabels(s, sEdit)}
 							</div>
 							</div>
@@ -1401,6 +1416,39 @@
 		</Popover>
 	{:else if sLabels.length > 0}
 		<span class="pill-labels">{#each sLabels as l (l!.id)}<LabelChip label={l!} />{/each}</span>
+	{/if}
+{/snippet}
+
+{#snippet subBlocked(s: Task, canEdit: boolean)}
+	{@const sDeps = subDepsOf(s)}
+	{#if canEdit}
+		<Popover ariaLabel={$t('Blocked by')} align="right">
+			{#snippet trigger()}
+				<span class="pill-val" class:pill-ph={sDeps.length === 0}>{$t('Blocked by')}{#if sDeps.length > 0}&nbsp;· {sDeps.length}{/if}</span>
+			{/snippet}
+			{#snippet panel()}
+				{#each sDeps as d (d!.id)}
+					<form method="POST" action="?/removeTaskDep" use:enhance={() => async ({ update }) => update()}>
+						<input type="hidden" name="taskId" value={s.id} />
+						<input type="hidden" name="dependsOnId" value={d!.id} />
+						<button class="opt opt--on" type="submit" use:tooltip={$t('Remove dependency')}>{d!.title} ×</button>
+					</form>
+				{/each}
+				<!-- svelte-ignore a11y_autofocus -->
+				<input class="pop-search" placeholder={$t('Add a blocker…')} bind:value={subDepQuery} autofocus />
+				{#each subDepCandidates(s) as opt (opt.id)}
+					<form method="POST" action="?/addTaskDep" use:enhance={() => async ({ update }) => { subDepQuery = ''; update(); }}>
+						<input type="hidden" name="taskId" value={s.id} />
+						<input type="hidden" name="dependsOnId" value={opt.id} />
+						<button class="opt" type="submit">{opt.title}</button>
+					</form>
+				{:else}
+					<span class="opt-empty">{subDepQuery.trim() ? $t('No matches') : $t('No other sub-tasks')}</span>
+				{/each}
+			{/snippet}
+		</Popover>
+	{:else if sDeps.length > 0}
+		<span class="pill-val">{$t('Blocked by')} · {sDeps.length}</span>
 	{/if}
 {/snippet}
 
