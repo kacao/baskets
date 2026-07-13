@@ -31,3 +31,9 @@ jobs:
         run: npm run check
       - name: Unit tests
         run: npm run test:unit
+      # Org-isolation coverage (ADR-062 W5). Server-free per ADR-060: the suite
+      # provisions its OWN isolated sqlite file (data/test-server.db) via
+      # drizzle-kit push in globalSetup, so no service containers or seeded server
+      # are needed. DB_DIALECT/DATABASE_URL are set inside the test:server script.
+      - name: Server isolation tests
+        run: npm run test:server
