@@ -2,8 +2,8 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { setPaneUrl, readPaneParam } from '$lib/paneUrl';
-	import { tick, untrack } from 'svelte';
+	import { createPaneNav } from '$lib/paneNav.svelte';
+	import { tick } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -132,34 +132,8 @@
 	let collapsedLanes = $state<Record<string, boolean>>({}); // lane.key → collapsed
 	let addInput = $state<HTMLInputElement | null>(null);
 	let justDragged = $state(false);
-	// split pane: ?task= deep-links a task open
-	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
-	// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
-	// the top is the "← back" target, reset on any fresh open from outside the pane
-	let backStack = $state<string[]>([]);
-	// keep the pane in sync with browser back/forward to a ?task= link, without
-	// fighting user clicks (effect tracks the URL only, never selectedId)
-	let lastTaskParam = $state(page.url.searchParams.get('task'));
-	$effect(() => {
-		const fromUrl = readPaneParam('task');
-		if (fromUrl !== untrack(() => lastTaskParam)) {
-			lastTaskParam = fromUrl;
-			selectedId = fromUrl;
-			backStack = [];
-		}
-	});
-	// mirror the open task back into the URL so the pane is linkable / restorable in
-	// another window (shallow routing — load() doesn't re-run). lastTaskParam is a
-	// plain sentinel read via untrack() in BOTH effects, so changing it in one never
-	// re-runs the other with a stale page.url (which would clobber the selection).
-	$effect(() => {
-		const id = selectedId;
-		if (id !== untrack(() => lastTaskParam)) {
-			lastTaskParam = id;
-			setPaneUrl({ task: id });
-		}
-	});
-	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
+	// split pane: ?task= deep-links a task open (ADR-055, extracted to paneNav.svelte.ts)
+	const nav = createPaneNav<Task>(() => allTasks);
 
 	const glyph: Record<string, string> = {
 		backlog: '○',
@@ -423,23 +397,6 @@
 		await tick();
 		addInput?.focus();
 	}
-
-	function openDetail(t: Task) {
-		selectedId = selectedId === t.id ? null : t.id;
-		backStack = [];
-	}
-	function navTask(id: string) {
-		if (id === selectedId) return;
-		if (selectedId) backStack = [...backStack, selectedId];
-		selectedId = id;
-	}
-	function navBack() {
-		selectedId = backStack[backStack.length - 1] ?? null;
-		backStack = backStack.slice(0, -1);
-	}
-	const backTask = $derived(
-		backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
-	);
 </script>
 
 <div class="board-wrap">
@@ -506,13 +463,13 @@
 							class:dragging={dragId === t.id}
 							class:grabbable={editable}
 							class:clickable={true}
-							class:selected={selectedId === t.id}
+							class:selected={nav.selectedId === t.id}
 							role="button"
 							tabindex="0"
 							aria-label={t.title}
 							onpointerdown={(e) => cardPointerDown(e, t)}
-							onclick={() => !justDragged && openDetail(t)}
-							onkeydown={(e) => e.key === 'Enter' && openDetail(t)}
+							onclick={() => !justDragged && nav.openDetail(t)}
+							onkeydown={(e) => e.key === 'Enter' && nav.openDetail(t)}
 						>
 							{#if t.coverFileId}
 								<img class="bcard-cover" src={`/api/files/${t.coverFileId}`} alt="" loading="lazy" />
@@ -604,9 +561,9 @@
 	</div>
 {/if}
 
-{#if selected}
+{#if nav.selected}
 	<TaskPanel
-		task={selected}
+		task={nav.selected}
 		tasks={allTasks}
 		{users}
 		{statuses}
@@ -622,13 +579,13 @@
 		{canEditTask}
 		{templates}
 		{statusDisplay}
-		back={backTask}
-		onBack={navBack}
+		back={nav.backTask}
+		onBack={nav.navBack}
 		onClose={() => {
-			selectedId = null;
-			backStack = [];
+			nav.selectedId = null;
+			nav.backStack = [];
 		}}
-		onSelectTask={(id) => navTask(id)}
+		onSelectTask={(id) => nav.navTask(id)}
 	/>
 {/if}
 </div>

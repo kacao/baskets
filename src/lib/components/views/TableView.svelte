@@ -2,8 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { setPaneUrl, readPaneParam } from '$lib/paneUrl';
-	import { untrack } from 'svelte';
+	import { createPaneNav } from '$lib/paneNav.svelte';
 	import { popover } from '$lib/transitions';
 	import StatusSelect from '$lib/components/StatusSelect.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
@@ -89,50 +88,8 @@
 	// Task editing opens the shared right-side pane (ADR-025); the chevron only
 	// expands sub-task rows inline. ?task= deep-links a task open (board card clicks).
 	let expanded = $state<Record<string, boolean>>({});
-	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
-	// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
-	// the top is the "← back" target, reset on any fresh open from outside the pane
-	let backStack = $state<string[]>([]);
-	// keep the pane in sync with browser back/forward to a ?task= link, without
-	// fighting user clicks (effect tracks the URL only, never selectedId)
-	let lastTaskParam = $state(page.url.searchParams.get('task'));
-	$effect(() => {
-		const fromUrl = readPaneParam('task');
-		if (fromUrl !== untrack(() => lastTaskParam)) {
-			lastTaskParam = fromUrl;
-			selectedId = fromUrl;
-			backStack = [];
-		}
-	});
-	// mirror the open task back into the URL so the pane is linkable / restorable in
-	// another window (shallow routing — load() doesn't re-run). lastTaskParam is a
-	// plain sentinel read via untrack() in BOTH effects, so changing it in one never
-	// re-runs the other with a stale page.url (which would clobber the selection).
-	$effect(() => {
-		const id = selectedId;
-		if (id !== untrack(() => lastTaskParam)) {
-			lastTaskParam = id;
-			setPaneUrl({ task: id });
-		}
-	});
-	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
-
-	function openDetail(t: Task) {
-		selectedId = selectedId === t.id ? null : t.id;
-		backStack = [];
-	}
-	function navTask(id: string) {
-		if (id === selectedId) return;
-		if (selectedId) backStack = [...backStack, selectedId];
-		selectedId = id;
-	}
-	function navBack() {
-		selectedId = backStack[backStack.length - 1] ?? null;
-		backStack = backStack.slice(0, -1);
-	}
-	const backTask = $derived(
-		backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
-	);
+	// ADR-055, extracted to paneNav.svelte.ts
+	const nav = createPaneNav<Task>(() => allTasks);
 
 	const show = (key: string) => config[key] !== false; // columns default on
 	const showCount = $derived(config.showCount === true); // group task count — default off
@@ -534,7 +491,7 @@
 					{@const subs = subsOf(t.id)}
 					{@const doneSubs = subs.filter((s) => isDone(s)).length}
 					{@const deps = depsOf(t.id)}
-					<tr class="task-row" class:is-done={isDone(t)} class:selected={selectedId === t.id}>
+					<tr class="task-row" class:is-done={isDone(t)} class:selected={nav.selectedId === t.id}>
 						<td class="col-select" onclick={(e) => e.stopPropagation()}>
 							<input
 								type="checkbox"
@@ -566,8 +523,8 @@
 								{/if}
 								<button
 									class="task-title"
-									class:selected={selectedId === t.id}
-									onclick={() => openDetail(t)}
+									class:selected={nav.selectedId === t.id}
+									onclick={() => nav.openDetail(t)}
 								>
 									{#if t.coverFileId}<img class="row-cover" src={`/api/files/${t.coverFileId}`} alt="" loading="lazy" />{/if}
 									<span class="title-text">{t.title}</span>
@@ -632,7 +589,7 @@
 					</tr>
 
 					{#each expanded[t.id] ? subs : [] as s (s.id)}
-						<tr class="sub-row-tr" class:is-done={isDone(s)} class:selected={selectedId === s.id}>
+						<tr class="sub-row-tr" class:is-done={isDone(s)} class:selected={nav.selectedId === s.id}>
 							<td class="col-select"></td>
 							<td class="col-status">
 								<StatusSelect taskId={s.id} statusId={s.statusId} {statuses} canEdit={canEditTask(s)} display={statusDisplay} />
@@ -640,7 +597,7 @@
 							<td>
 								<div class="title-cell">
 									<span class="chev-spacer" aria-hidden="true"></span>
-									<button class="task-title" class:selected={selectedId === s.id} onclick={() => openDetail(s)}>
+									<button class="task-title" class:selected={nav.selectedId === s.id} onclick={() => nav.openDetail(s)}>
 										<span class="title-text">{s.title}</span>
 									</button>
 								</div>
@@ -691,9 +648,9 @@
 				{/each}
 {/snippet}
 
-{#if selected}
+{#if nav.selected}
 	<TaskPanel
-		task={selected}
+		task={nav.selected}
 		tasks={allTasks}
 		{users}
 		{statuses}
@@ -709,13 +666,13 @@
 		{canEditTask}
 		{templates}
 		{statusDisplay}
-		back={backTask}
-		onBack={navBack}
+		back={nav.backTask}
+		onBack={nav.navBack}
 		onClose={() => {
-			selectedId = null;
-			backStack = [];
+			nav.selectedId = null;
+			nav.backStack = [];
 		}}
-		onSelectTask={(id) => navTask(id)}
+		onSelectTask={(id) => nav.navTask(id)}
 	/>
 {/if}
 </div>

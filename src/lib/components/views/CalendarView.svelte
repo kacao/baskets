@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
-	import { setPaneUrl, readPaneParam } from '$lib/paneUrl';
-	import { untrack } from 'svelte';
+	import { createPaneNav } from '$lib/paneNav.svelte';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
@@ -67,51 +65,8 @@
 		onNewTask?: (prefill?: Record<string, string>) => void;
 	} = $props();
 
-	// split pane: ?task= deep-links a task open
-	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
-	// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
-	// the top is the "← back" target, reset on any fresh open from outside the pane
-	let backStack = $state<string[]>([]);
-	// keep the pane in sync with browser back/forward to a ?task= link, without
-	// fighting user clicks (effect tracks the URL only, never selectedId)
-	let lastTaskParam = $state(page.url.searchParams.get('task'));
-	$effect(() => {
-		const fromUrl = readPaneParam('task');
-		if (fromUrl !== untrack(() => lastTaskParam)) {
-			lastTaskParam = fromUrl;
-			selectedId = fromUrl;
-			backStack = [];
-		}
-	});
-	// mirror the open task back into the URL so the pane is linkable / restorable in
-	// another window (shallow routing — load() doesn't re-run). lastTaskParam is a
-	// plain sentinel read via untrack() in BOTH effects, so changing it in one never
-	// re-runs the other with a stale page.url (which would clobber the selection).
-	$effect(() => {
-		const id = selectedId;
-		if (id !== untrack(() => lastTaskParam)) {
-			lastTaskParam = id;
-			setPaneUrl({ task: id });
-		}
-	});
-	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
-
-	function openDetail(t: Task) {
-		selectedId = selectedId === t.id ? null : t.id;
-		backStack = [];
-	}
-	function navTask(id: string) {
-		if (id === selectedId) return;
-		if (selectedId) backStack = [...backStack, selectedId];
-		selectedId = id;
-	}
-	function navBack() {
-		selectedId = backStack[backStack.length - 1] ?? null;
-		backStack = backStack.slice(0, -1);
-	}
-	const backTask = $derived(
-		backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
-	);
+	// split pane: ?task= deep-links a task open (ADR-055, extracted to paneNav.svelte.ts)
+	const nav = createPaneNav<Task>(() => allTasks);
 
 	const today = new Date();
 	const todayKey = ymd(today);
@@ -242,17 +197,17 @@
 							{#each dayTasks.slice(0, MAX_CHIPS) as t (t.id)}
 								<button
 									class="chip cat-{statusCat(t.statusId)}"
-									class:selected={selectedId === t.id}
+									class:selected={nav.selectedId === t.id}
 									type="button"
 									use:tooltip={t.title}
-									onclick={() => openDetail(t)}
+									onclick={() => nav.openDetail(t)}
 								>
 									<PriorityIcon priority={t.priority} />
 									<span class="chip-title">{t.title}</span>
 								</button>
 							{/each}
 							{#if dayTasks.length > MAX_CHIPS}
-								<button class="chip more" type="button" onclick={() => openDetail(dayTasks[MAX_CHIPS])}>
+								<button class="chip more" type="button" onclick={() => nav.openDetail(dayTasks[MAX_CHIPS])}>
 									{$t('+{n} more', { n: dayTasks.length - MAX_CHIPS })}
 								</button>
 							{/if}
@@ -263,9 +218,9 @@
 		{/each}
 	</div>
 
-	{#if selected}
+	{#if nav.selected}
 		<TaskPanel
-			task={selected}
+			task={nav.selected}
 			tasks={allTasks}
 			{users}
 			{statuses}
@@ -281,13 +236,13 @@
 			{canEditTask}
 			{templates}
 			{statusDisplay}
-			back={backTask}
-			onBack={navBack}
+			back={nav.backTask}
+			onBack={nav.navBack}
 			onClose={() => {
-				selectedId = null;
-				backStack = [];
+				nav.selectedId = null;
+				nav.backStack = [];
 			}}
-			onSelectTask={(id) => navTask(id)}
+			onSelectTask={(id) => nav.navTask(id)}
 		/>
 	{/if}
 </div>
