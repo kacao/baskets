@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { popover } from '$lib/transitions';
 	import { tooltip } from '$lib/tooltip';
 	import { t } from '$lib/i18n';
@@ -12,9 +13,21 @@
 		body: string;
 		projectId: string | null;
 		taskId: string | null;
+		organizationId: string | null;
 		read: boolean;
 		createdAt: string;
 	};
+
+	// notifications may span the user's orgs (D7); tag rows from a non-active org
+	// with its name so a cross-org item reads coherently.
+	const orgs = $derived((page.data.orgs as { id: string; name: string }[] | undefined) ?? []);
+	const currentOrgId = $derived(
+		(page.data.currentOrg as { id: string } | null | undefined)?.id ?? null
+	);
+	function foreignOrgName(id: string | null): string | null {
+		if (!id || id === currentOrgId) return null;
+		return orgs.find((o) => o.id === id)?.name ?? null;
+	}
 
 	let open = $state(false);
 	let loading = $state(false);
@@ -137,7 +150,12 @@
 							onclick={() => onClickNotification(n)}
 						>
 							{#if !n.read}<span class="bell-dot" aria-hidden="true"></span>{/if}
-							<span class="bell-body">{n.body}</span>
+							<span class="bell-body">
+								{n.body}
+								{#if foreignOrgName(n.organizationId)}
+									<span class="bell-org">{foreignOrgName(n.organizationId)}</span>
+								{/if}
+							</span>
 							<span class="bell-time u-small u-muted">{relativeTime(n.createdAt)}</span>
 						</button>
 					{/each}
@@ -235,6 +253,19 @@
 		flex: 1 1 auto;
 		min-width: 0;
 		word-break: break-word;
+	}
+	.bell-org {
+		display: inline-block;
+		margin-left: 4px;
+		padding: 0 5px;
+		border-radius: 999px;
+		background: var(--color-base-300, #e5e7eb);
+		color: var(--color-base-content, #374151);
+		font-size: 10px;
+		font-weight: 600;
+		line-height: 15px;
+		vertical-align: middle;
+		white-space: nowrap;
 	}
 	.bell-time {
 		flex: 0 0 auto;

@@ -48,7 +48,13 @@
 	type FeedItem = ({ kind: 'comment' } & Comment) | ({ kind: 'activity' } & Activity);
 
 	const currentUserId = $derived((page.data.user as { id?: string } | undefined)?.id ?? null);
-	const isAdmin = $derived((page.data.user as { role?: string } | undefined)?.role === 'admin');
+	// moderation override = org owner/admin of the active org (ADR-062 D3), NOT the
+	// instance operator role. The project page auto-aligns the active org, so
+	// page.data.orgRole is the caller's role in this project's org.
+	const canModerate = $derived(
+		(page.data.orgRole as string | undefined) === 'owner' ||
+			(page.data.orgRole as string | undefined) === 'admin'
+	);
 
 	let comments = $state<Comment[]>([]);
 	let activity = $state<Activity[]>([]);
@@ -161,7 +167,7 @@
 	}
 
 	function canManage(authorId: string) {
-		return authorId === currentUserId || isAdmin;
+		return authorId === currentUserId || canModerate;
 	}
 
 	function relTime(iso: string): string {
