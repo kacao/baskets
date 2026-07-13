@@ -5,11 +5,13 @@ import {
 	customFieldOption,
 	file,
 	location,
+	project,
 	projectCustomValue,
 	task,
 	taskCustomValue,
 	user
 } from './db/schema';
+import { projectAccessUserIds } from './permissions';
 import {
 	CUSTOM_FIELD_TYPES,
 	EMAIL_RE,
@@ -90,8 +92,16 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 				.where(eq(customFieldOption.fieldId, field.id));
 			valid = new Set(opts.map((o) => o.id));
 		} else if (type === 'person') {
+			// person ids must be REAL users AND able to access this project — else a task
+			// editor could store an arbitrary user's id and read their name via CSV export
+			// (cross-project disclosure). Mirrors notifyMentions' scoping.
+			const [proj] = await db
+				.select({ workspaceId: project.workspaceId })
+				.from(project)
+				.where(eq(project.id, projectId));
+			const roster = await projectAccessUserIds(projectId, proj?.workspaceId ?? null);
 			const us = await db.select({ id: user.id }).from(user).where(inArray(user.id, ids));
-			valid = new Set(us.map((u) => u.id));
+			valid = new Set(us.map((u) => u.id).filter((id) => roster.has(id)));
 		} else if (type === 'place') {
 			const locs = await db
 				.select({ id: location.id })
