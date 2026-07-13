@@ -6,15 +6,20 @@ import { accessibleWorkspaceIds, grantedProjectIds } from '$lib/server/permissio
 import { resolveActiveOrgContext } from '$lib/server/orgs';
 import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = async ({ locals, cookies }) => {
+export const load: LayoutServerLoad = async ({ locals, cookies, url }) => {
 	if (!locals.user) {
 		redirect(302, '/login');
 	}
 
-	// Active org (ADR-062 D4): everything below is scoped to it. A 0-org user gets
-	// empty data here; W3 adds the /onboarding redirect for that case.
+	// Active org (ADR-062 D4): everything below is scoped to it.
 	const { orgs, org, orgId, role } = await resolveActiveOrgContext(locals.user, cookies);
 	if (!orgId) {
+		// A signed-in user with 0 orgs must onboard first (D8). /onboarding lives
+		// inside (app) and is exempt from this guard so the shell renders its
+		// null-org state (no workspace/project sidebar).
+		if (!url.pathname.startsWith('/onboarding')) {
+			redirect(302, '/onboarding');
+		}
 		return {
 			user: locals.user,
 			orgs,
