@@ -13,6 +13,7 @@
 	import { selection } from '$lib/selection.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { tooltip } from '$lib/tooltip';
+	import { fmtDate } from '$lib/date';
 
 	type Task = {
 		id: string;
@@ -149,11 +150,6 @@
 			.map((l) => labels.find((x) => x.id === l.labelId))
 			.filter(Boolean);
 	const taskLabelIds = (taskId: string) => taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
-
-	function fmtDate(d: Date | string | null) {
-		if (!d) return null;
-		return new Date(d).toISOString().slice(0, 10);
-	}
 
 	// Group by (config.groupBy): one section per group, like the table view.
 	const groupBy = $derived(typeof config.groupBy === 'string' ? (config.groupBy as string) : null);

@@ -12,6 +12,7 @@
 	import { tooltip } from '$lib/tooltip';
 	import { longpress } from '$lib/longpress';
 	import { fieldAggregations } from '$lib/customFields';
+	import { fmtDateShort as fmtDate } from '$lib/date';
 
 	type Task = {
 		id: string;
@@ -249,11 +250,6 @@
 			.filter((l) => l.taskId === taskId)
 			.map((l) => labels.find((x) => x.id === l.labelId))
 			.filter(Boolean);
-
-	function fmtDate(d: Date | string | null) {
-		if (!d) return null;
-		return new Date(d).toISOString().slice(5, 10); // MM-DD, Linear-compact
-	}
 
 	const dragged = $derived(topTasks.find((t) => t.id === dragId) ?? null);
 

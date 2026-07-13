@@ -22,6 +22,7 @@
 	import { describeRecurrence } from '$lib/recurrence';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
+	import { fmtDate } from '$lib/date';
 
 	type Task = {
 		id: string;
@@ -290,11 +291,6 @@
 		return rollupDisplayText(field, task.id, { tasks, taskDeps, fields: customFields, valueOf, hasSubtasks: subs.length > 0 });
 	}
 	const taskFiles = $derived(files.filter((f) => f.taskId === task.id));
-
-	function fmtDate(d: Date | string | null) {
-		if (!d) return null;
-		return new Date(d).toISOString().slice(0, 10);
-	}
 
 	// search queries for the milestone / location / blocker popovers
 	let mQuery = $state('');

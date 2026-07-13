@@ -16,6 +16,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { tooltip } from '$lib/tooltip';
 	import { t as i18n } from '$lib/i18n';
+	import { fmtDate } from '$lib/date';
 
 	type Task = {
 		id: string;
@@ -323,11 +324,6 @@
 	const taskLabelIds = (taskId: string) => labelIdsByTask.get(taskId) ?? [];
 	const depsOf = (taskId: string) =>
 		(depIdsByTask.get(taskId) ?? []).map((id) => taskById.get(id)).filter(Boolean);
-
-	function fmtDate(d: Date | string | null) {
-		if (!d) return null;
-		return new Date(d).toISOString().slice(0, 10);
-	}
 
 	// Group by (config.groupBy): render one table per group with its title above.
 	// null/absent = a single ungrouped table (default).
