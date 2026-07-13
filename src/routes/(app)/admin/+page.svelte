@@ -62,7 +62,11 @@
 {/if}
 
 {#if showCreate}
-	<div class="card" style="margin-bottom: var(--sp-4); max-width: 560px;" transition:slide={{ duration: 150 }}>
+	<div
+		class="card"
+		style="margin-bottom: var(--sp-4); max-width: 560px;"
+		transition:slide={{ duration: 150 }}
+	>
 		<form onsubmit={createUser}>
 			<div class="field">
 				<label class="label" for="n">{$t('Name')}</label>

@@ -88,12 +88,14 @@
 
 <span class="rich {klass}"
 	>{#each segs as s, i (i)}{#if s.type === 'text'}{#each linkify(s.text) as p, j (j)}{#if p.type === 'link'}<a
-					class="rt-link"
-					href={p.href}
-					target="_blank"
-					rel="noopener noreferrer">{p.text}</a
-				>{:else}<span class="rt-text">{p.text}</span>{/if}{/each}{:else}{@const r =
-				resolve(s.kind, s.id)}{@const label = r.label ?? s.label}{@const missing =
+						class="rt-link"
+						href={p.href}
+						target="_blank"
+						rel="noopener noreferrer">{p.text}</a
+					>{:else}<span class="rt-text">{p.text}</span>{/if}{/each}{:else}{@const r = resolve(
+				s.kind,
+				s.id
+			)}{@const label = r.label ?? s.label}{@const missing =
 				r.label == null}{#if s.kind === 'task' && onSelectTask && !missing}<button
 					type="button"
 					class="mention"

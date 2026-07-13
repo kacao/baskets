@@ -26,7 +26,9 @@
 <svelte:head><title>{data.project.name} — {$t('Labels')} — Baskets</title></svelte:head>
 
 <p class="u-tiny" style="margin-bottom: var(--sp-2);">
-	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"><Icon name="arrow-left" size={12} /> {data.project.name}</a>
+	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"
+		><Icon name="arrow-left" size={12} /> {data.project.name}</a
+	>
 </p>
 <h2 style="margin-bottom: var(--sp-4);">{$t('Labels')}</h2>
 
@@ -44,7 +46,9 @@
 				<button class="chip" class:chip--on={on} type="submit">{l.name}</button>
 			</form>
 		{:else}
-			<span class="u-tiny u-muted">{$t('No workspace labels — create them in the workspace settings.')}</span>
+			<span class="u-tiny u-muted"
+				>{$t('No workspace labels — create them in the workspace settings.')}</span
+			>
 		{/each}
 	</div>
 
@@ -58,7 +62,11 @@
 			<span style="flex: 1;"></span>
 			<Popover ariaLabel={$t('Label color')}>
 				{#snippet trigger()}
-					<span class="cp-swatch" style="--c: {l.color ?? 'var(--color-border-subtle)'}" aria-hidden="true"></span>
+					<span
+						class="cp-swatch"
+						style="--c: {l.color ?? 'var(--color-border-subtle)'}"
+						aria-hidden="true"
+					></span>
 				{/snippet}
 				{#snippet panel(close)}
 					<ColorPicker
@@ -76,7 +84,10 @@
 			</Popover>
 			<Popover ariaLabel={$t('Label icon')}>
 				{#snippet trigger()}
-					{#if l.icon}<EntityIcon value={l.icon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
+					{#if l.icon}<EntityIcon value={l.icon} size={16} />{:else}<Icon
+							name="plus"
+							size={14}
+						/>{/if}
 				{/snippet}
 				{#snippet panel(close)}
 					<IconPicker
@@ -101,15 +112,23 @@
 	<form
 		method="POST"
 		action="?/createProjectLabel"
-		use:enhance={() => async ({ update }) => {
-			newProjLabelIcon = '';
-			newProjLabelColor = '#71717a';
-			await update();
-		}}
+		use:enhance={() =>
+			async ({ update }) => {
+				newProjLabelIcon = '';
+				newProjLabelColor = '#71717a';
+				await update();
+			}}
 		class="u-flex label-create"
 		style="flex-wrap: wrap; margin-top: var(--sp-1);"
 	>
-		<input name="name" class="input name-in" style="width: 200px; max-width: 100%;" placeholder={$t('New project label…')} required maxlength="40" />
+		<input
+			name="name"
+			class="input name-in"
+			style="width: 200px; max-width: 100%;"
+			placeholder={$t('New project label…')}
+			required
+			maxlength="40"
+		/>
 		<Popover ariaLabel={$t('Label color')}>
 			{#snippet trigger()}
 				<span class="cp-swatch" style="--c: {newProjLabelColor}" aria-hidden="true"></span>
@@ -127,7 +146,10 @@
 		<input type="hidden" name="color" value={newProjLabelColor} />
 		<Popover ariaLabel={$t('Label icon')}>
 			{#snippet trigger()}
-				{#if newProjLabelIcon}<EntityIcon value={newProjLabelIcon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
+				{#if newProjLabelIcon}<EntityIcon value={newProjLabelIcon} size={16} />{:else}<Icon
+						name="plus"
+						size={14}
+					/>{/if}
 			{/snippet}
 			{#snippet panel(close)}
 				<IconPicker

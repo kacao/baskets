@@ -17,8 +17,30 @@
 	} = $props();
 
 	const EMOJIS = [
-		'📋', '✅', '🚀', '🐛', '🎨', '📦', '🔧', '📈', '💡', '🔥', '🌐', '📝',
-		'🗂️', '⚙️', '🎯', '🧪', '📣', '🔒', '💬', '📅', '🏗️', '🧩', '🌱', '⭐'
+		'📋',
+		'✅',
+		'🚀',
+		'🐛',
+		'🎨',
+		'📦',
+		'🔧',
+		'📈',
+		'💡',
+		'🔥',
+		'🌐',
+		'📝',
+		'🗂️',
+		'⚙️',
+		'🎯',
+		'🧪',
+		'📣',
+		'🔒',
+		'💬',
+		'📅',
+		'🏗️',
+		'🧩',
+		'🌱',
+		'⭐'
 	];
 
 	const CAP = 240;
@@ -35,10 +57,20 @@
 
 <div class="icon-picker">
 	<div class="ip-tabs">
-		<button class="ip-tab" class:active={tab === 'emoji'} type="button" onclick={() => (tab = 'emoji')}>
+		<button
+			class="ip-tab"
+			class:active={tab === 'emoji'}
+			type="button"
+			onclick={() => (tab = 'emoji')}
+		>
 			{$t('Emoji')}
 		</button>
-		<button class="ip-tab" class:active={tab === 'icons'} type="button" onclick={() => (tab = 'icons')}>
+		<button
+			class="ip-tab"
+			class:active={tab === 'icons'}
+			type="button"
+			onclick={() => (tab = 'icons')}
+		>
 			{$t('Icons')}
 		</button>
 	</div>
@@ -77,7 +109,12 @@
 			{/each}
 		</div>
 		{#if matches.total > matches.shown.length}
-			<p class="ip-hint">{$t('Showing {n} of {total} — refine your search.', { n: matches.shown.length, total: matches.total })}</p>
+			<p class="ip-hint">
+				{$t('Showing {n} of {total} — refine your search.', {
+					n: matches.shown.length,
+					total: matches.total
+				})}
+			</p>
 		{/if}
 	{/if}
 
@@ -169,7 +206,9 @@
 		color: var(--color-fg);
 		cursor: pointer;
 		padding: 0;
-		transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease;
+		transition:
+			background var(--dur-fast) ease,
+			border-color var(--dur-fast) ease;
 	}
 
 	.ip-cell:hover {

@@ -20,11 +20,14 @@ export { STATUS_CATEGORIES, type StatusCategory };
 export type Actor = { id: string; role?: string | null } | null | undefined;
 
 export type ServiceResult<T> =
-	| { ok: true; data: T }
-	| { ok: false; status: number; message: string };
+	{ ok: true; data: T } | { ok: false; status: number; message: string };
 
 const ok = <T>(data: T): ServiceResult<T> => ({ ok: true, data });
-const err = (status: number, message: string): ServiceResult<never> => ({ ok: false, status, message });
+const err = (status: number, message: string): ServiceResult<never> => ({
+	ok: false,
+	status,
+	message
+});
 
 /** Accept a #rrggbb hex color, else null. */
 function parseColor(v: unknown): string | null {
@@ -39,11 +42,41 @@ const DEFAULT_STATUSES: {
 	color: string;
 	icon: string;
 }[] = [
-	{ id: 'status-backlog', name: 'Backlog', category: 'backlog', color: '#71717a', icon: 'iconoir:circle' },
-	{ id: 'status-planned', name: 'Planned', category: 'planned', color: '#3b82f6', icon: 'iconoir:clock' },
-	{ id: 'status-in-progress', name: 'In progress', category: 'in-progress', color: '#f59e0b', icon: 'iconoir:half-moon' },
-	{ id: 'status-completed', name: 'Completed', category: 'completed', color: '#16a34a', icon: 'iconoir:check-circle' },
-	{ id: 'status-canceled', name: 'Canceled', category: 'canceled', color: '#a1a1aa', icon: 'iconoir:xmark-circle' }
+	{
+		id: 'status-backlog',
+		name: 'Backlog',
+		category: 'backlog',
+		color: '#71717a',
+		icon: 'iconoir:circle'
+	},
+	{
+		id: 'status-planned',
+		name: 'Planned',
+		category: 'planned',
+		color: '#3b82f6',
+		icon: 'iconoir:clock'
+	},
+	{
+		id: 'status-in-progress',
+		name: 'In progress',
+		category: 'in-progress',
+		color: '#f59e0b',
+		icon: 'iconoir:half-moon'
+	},
+	{
+		id: 'status-completed',
+		name: 'Completed',
+		category: 'completed',
+		color: '#16a34a',
+		icon: 'iconoir:check-circle'
+	},
+	{
+		id: 'status-canceled',
+		name: 'Canceled',
+		category: 'canceled',
+		color: '#a1a1aa',
+		icon: 'iconoir:xmark-circle'
+	}
 ];
 
 let ensured = false;
@@ -193,7 +226,9 @@ export async function createProjectStatus(
 
 	const name = input.name.trim();
 	const description =
-		typeof input.description === 'string' && input.description.trim() ? input.description.trim() : null;
+		typeof input.description === 'string' && input.description.trim()
+			? input.description.trim()
+			: null;
 	const category = input.category ?? 'backlog';
 
 	if (!name) return err(400, 'Status name is required');
@@ -242,7 +277,9 @@ export async function createWorkspaceStatus(
 
 	const name = input.name.trim();
 	const description =
-		typeof input.description === 'string' && input.description.trim() ? input.description.trim() : null;
+		typeof input.description === 'string' && input.description.trim()
+			? input.description.trim()
+			: null;
 	const category = input.category ?? 'backlog';
 
 	if (!name) return err(400, 'Status name is required');
@@ -302,7 +339,10 @@ export async function updateStatusById(
 	const [s] = await db.select().from(status).where(eq(status.id, id));
 	if (!s) {
 		if (opts.owner)
-			return err(400, `Not a status of this ${'projectId' in opts.owner ? 'project' : 'workspace'}`);
+			return err(
+				400,
+				`Not a status of this ${'projectId' in opts.owner ? 'project' : 'workspace'}`
+			);
 		return err(404, 'Status not found');
 	}
 
@@ -358,7 +398,8 @@ export async function updateStatusById(
 	}
 	if (opts.has('category')) {
 		const category = input.category ?? '';
-		if (!STATUS_CATEGORIES.includes(category as StatusCategory)) return err(400, 'Invalid category');
+		if (!STATUS_CATEGORIES.includes(category as StatusCategory))
+			return err(400, 'Invalid category');
 		updates.category = category;
 	}
 	if (opts.has('color')) updates.color = parseColor(input.color);
@@ -383,7 +424,10 @@ export async function deleteStatusById(
 	const [s] = await db.select().from(status).where(eq(status.id, id));
 	if (!s) {
 		if (opts.owner)
-			return err(400, `Not a status of this ${'projectId' in opts.owner ? 'project' : 'workspace'}`);
+			return err(
+				400,
+				`Not a status of this ${'projectId' in opts.owner ? 'project' : 'workspace'}`
+			);
 		return err(404, 'Status not found');
 	}
 
@@ -408,7 +452,10 @@ export async function deleteStatusById(
 			return err(403, 'No edit permission on this workspace');
 	}
 
-	const [{ n }] = await db.select({ n: count(task.id) }).from(task).where(eq(task.statusId, id));
+	const [{ n }] = await db
+		.select({ n: count(task.id) })
+		.from(task)
+		.where(eq(task.statusId, id));
 	if (n > 0) return err(400, `Status is used by ${n} task(s)`);
 
 	await db.delete(status).where(eq(status.id, id));
@@ -442,7 +489,10 @@ export async function reorderProjectStatuses(
 	// keep project customs sorted after defaults + workspace statuses globally
 	const base = Math.max(0, ...inherited.map((s) => s.position)) + 10;
 	for (let i = 0; i < clean.length; i++)
-		await db.update(status).set({ position: base + i * 10 }).where(eq(status.id, clean[i]));
+		await db
+			.update(status)
+			.set({ position: base + i * 10 })
+			.where(eq(status.id, clean[i]));
 
 	if (opts.broadcast) broadcastProjectChange(projectId, actor!.id);
 	return ok(await listProjectStatuses(projectId));
@@ -468,7 +518,10 @@ export async function reorderWorkspaceStatuses(
 	// keep customs sorted after the built-in defaults globally
 	const base = Math.max(0, ...(await listStatuses()).map((d) => d.position)) + 10;
 	for (let i = 0; i < clean.length; i++)
-		await db.update(status).set({ position: base + i * 10 }).where(eq(status.id, clean[i]));
+		await db
+			.update(status)
+			.set({ position: base + i * 10 })
+			.where(eq(status.id, clean[i]));
 
 	return ok(await listWorkspaceStatuses(workspaceId));
 }
@@ -527,6 +580,10 @@ export async function setDefaultStatusIcon(
 		.where(and(eq(status.id, id), isNull(status.projectId), isNull(status.workspaceId)));
 	if (!s) return err(400, 'Not a default status');
 
-	const [updated] = await db.update(status).set({ icon: parsed }).where(eq(status.id, id)).returning();
+	const [updated] = await db
+		.update(status)
+		.set({ icon: parsed })
+		.where(eq(status.id, id))
+		.returning();
 	return ok(updated);
 }

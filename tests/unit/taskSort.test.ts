@@ -83,13 +83,7 @@ describe('sortTasks — priority', () => {
 			task({ id: 'high', priority: 'high' }),
 			task({ id: 'medium', priority: 'medium' })
 		];
-		expect(ids(sortTasks(input, 'priority'))).toEqual([
-			'urgent',
-			'high',
-			'medium',
-			'low',
-			'none'
-		]);
+		expect(ids(sortTasks(input, 'priority'))).toEqual(['urgent', 'high', 'medium', 'low', 'none']);
 	});
 
 	it(':desc flips to none → urgent', () => {
@@ -198,10 +192,7 @@ describe('sortTasks — status', () => {
 	});
 
 	it('treats all statuses equal when no statusRank helper is given', () => {
-		const input = [
-			task({ id: 'a', statusId: 'done' }),
-			task({ id: 'b', statusId: 'backlog' })
-		];
+		const input = [task({ id: 'a', statusId: 'done' }), task({ id: 'b', statusId: 'backlog' })];
 		// every rank is 0 → stable input order
 		expect(ids(sortTasks(input, 'status'))).toEqual(['a', 'b']);
 	});
@@ -209,8 +200,7 @@ describe('sortTasks — status', () => {
 
 describe('sortTasks — assignee', () => {
 	const helpers: SortHelpers = {
-		assigneeName: (id) =>
-			({ u1: 'Alice', u2: 'bob', u3: 'Carol' })[id ?? ''] ?? null
+		assigneeName: (id) => ({ u1: 'Alice', u2: 'bob', u3: 'Carol' })[id ?? ''] ?? null
 	};
 
 	it('orders by assignee display name A→Z, case-insensitive', () => {
@@ -231,10 +221,7 @@ describe('sortTasks — assignee', () => {
 	});
 
 	it('default assigneeName helper falls back to the id', () => {
-		const input = [
-			task({ id: 'z', assigneeId: 'zeta' }),
-			task({ id: 'a', assigneeId: 'alpha' })
-		];
+		const input = [task({ id: 'z', assigneeId: 'zeta' }), task({ id: 'a', assigneeId: 'alpha' })];
 		expect(ids(sortTasks(input, 'assignee'))).toEqual(['a', 'z']);
 	});
 });

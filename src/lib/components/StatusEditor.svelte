@@ -80,9 +80,7 @@
 	// order of that category's custom ids is spliced back into the full `items` list.
 	async function onReorderCat(orderedIds: string[]) {
 		const byId = new Map(items.map((i) => [i.id, i]));
-		const ordered = orderedIds
-			.map((id) => byId.get(id))
-			.filter((s): s is Editable => Boolean(s));
+		const ordered = orderedIds.map((id) => byId.get(id)).filter((s): s is Editable => Boolean(s));
 		const set = new Set(orderedIds);
 		let qi = 0;
 		items = items.map((it) => (set.has(it.id) ? (ordered[qi++] ?? it) : it));
@@ -173,9 +171,25 @@
 					<input type="hidden" name="category" value={c} />
 					{@render colorField(newColor, (v) => (newColor = v))}
 					{@render iconField(newIcon, (v) => (newIcon = v))}
-					<input name="name" class="input name-in" placeholder={$t('Name')} required maxlength="40" autocomplete="off" oninput={() => (createError = '')} />
-					<input name="description" class="input desc-in" placeholder={$t('Description…')} maxlength="200" autocomplete="off" />
-					<button class="btn btn-sm" type="button" onclick={() => (creatingCat = null)}>{$t('Cancel')}</button>
+					<input
+						name="name"
+						class="input name-in"
+						placeholder={$t('Name')}
+						required
+						maxlength="40"
+						autocomplete="off"
+						oninput={() => (createError = '')}
+					/>
+					<input
+						name="description"
+						class="input desc-in"
+						placeholder={$t('Description…')}
+						maxlength="200"
+						autocomplete="off"
+					/>
+					<button class="btn btn-sm" type="button" onclick={() => (creatingCat = null)}
+						>{$t('Cancel')}</button
+					>
 					<button class="btn btn-sm btn-primary" type="submit">{$t('Create')}</button>
 				</form>
 				{#if createError}
@@ -187,7 +201,11 @@
 				<div class="srow srow--readonly">
 					<span class="drag drag--none"></span>
 					<span class="ic">
-						{#if s.icon}<EntityIcon value={s.icon} size={16} />{:else}<span class="status-dot" style="--c: {s.color || 'var(--color-muted)'}" aria-hidden="true"></span>{/if}
+						{#if s.icon}<EntityIcon value={s.icon} size={16} />{:else}<span
+								class="status-dot"
+								style="--c: {s.color || 'var(--color-muted)'}"
+								aria-hidden="true"
+							></span>{/if}
 					</span>
 					<span class="name">{s.name}</span>
 					{#if s.description}<span class="desc">{s.description}</span>{/if}
@@ -212,32 +230,65 @@
 						<input type="hidden" name="id" value={s.id} />
 						{@render colorField(editColor, (v) => (editColor = v))}
 						{@render iconField(editIcon, (v) => (editIcon = v))}
-						<input name="name" class="input name-in" value={s.name} required maxlength="40" autocomplete="off" />
-						<input name="description" class="input desc-in" value={s.description ?? ''} placeholder={$t('Description…')} maxlength="200" autocomplete="off" />
+						<input
+							name="name"
+							class="input name-in"
+							value={s.name}
+							required
+							maxlength="40"
+							autocomplete="off"
+						/>
+						<input
+							name="description"
+							class="input desc-in"
+							value={s.description ?? ''}
+							placeholder={$t('Description…')}
+							maxlength="200"
+							autocomplete="off"
+						/>
 						<select name="category" class="select cat-in" aria-label={$t('Category')}>
 							{#each categories as opt (opt)}
 								<option value={opt} selected={s.category === opt}>{categoryLabel(opt)}</option>
 							{/each}
 						</select>
-						<button class="btn btn-sm" type="button" onclick={() => (editingId = null)}>{$t('Cancel')}</button>
+						<button class="btn btn-sm" type="button" onclick={() => (editingId = null)}
+							>{$t('Cancel')}</button
+						>
 						<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
 					</form>
 				{:else}
 					<div class="srow" data-sortable-id={s.id}>
-						<span class="drag" data-sortable-handle use:tooltip={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
+						<span class="drag" data-sortable-handle use:tooltip={$t('Drag to reorder')}
+							><Icon name="drag" size={14} /></span
+						>
 						<span class="ic">
-							{#if s.icon}<EntityIcon value={s.icon} size={16} />{:else}<span class="status-dot" style="--c: {s.color || 'var(--color-muted)'}" aria-hidden="true"></span>{/if}
+							{#if s.icon}<EntityIcon value={s.icon} size={16} />{:else}<span
+									class="status-dot"
+									style="--c: {s.color || 'var(--color-muted)'}"
+									aria-hidden="true"
+								></span>{/if}
 						</span>
-						<button class="name name-btn" type="button" onclick={() => openEdit(s)}>{s.name}</button>
+						<button class="name name-btn" type="button" onclick={() => openEdit(s)}>{s.name}</button
+						>
 						{#if s.description}<span class="desc">{s.description}</span>{/if}
 						<span class="spacer"></span>
 						<span class="u-tiny u-muted use">{$t('{n} task(s)', { n: s.inUse })}</span>
-						<button class="icon-btn" type="button" aria-label={$t('Edit')} onclick={() => openEdit(s)}>
+						<button
+							class="icon-btn"
+							type="button"
+							aria-label={$t('Edit')}
+							onclick={() => openEdit(s)}
+						>
 							<Icon name="edit-pencil" size={14} />
 						</button>
 						<form method="POST" action="?/deleteStatus" use:enhance>
 							<input type="hidden" name="id" value={s.id} />
-							<button class="icon-btn icon-btn--danger" type="submit" aria-label={$t('Delete')} disabled={s.inUse > 0}>
+							<button
+								class="icon-btn icon-btn--danger"
+								type="submit"
+								aria-label={$t('Delete')}
+								disabled={s.inUse > 0}
+							>
 								<Icon name="trash" size={14} />
 							</button>
 						</form>
@@ -247,7 +298,13 @@
 		</div>
 	{/each}
 
-	<form bind:this={reorderForm} method="POST" action="?/reorderStatus" use:enhance class="reorder-form">
+	<form
+		bind:this={reorderForm}
+		method="POST"
+		action="?/reorderStatus"
+		use:enhance
+		class="reorder-form"
+	>
 		<input type="hidden" name="ids" bind:value={reorderIds} />
 	</form>
 </div>
@@ -305,7 +362,9 @@
 		cursor: pointer;
 		padding: 2px;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.cat-add::before {
@@ -335,7 +394,6 @@
 	.srow--edit {
 		flex-wrap: wrap;
 	}
-
 
 	.drag {
 		display: inline-flex;
@@ -441,7 +499,10 @@
 		padding: 4px;
 		border-radius: var(--radius-field, 0.25rem);
 		opacity: 0;
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease, opacity var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease,
+			opacity var(--dur-fast) ease;
 	}
 
 	.icon-btn::before {

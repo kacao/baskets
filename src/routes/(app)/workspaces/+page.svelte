@@ -25,7 +25,11 @@
 {/if}
 
 {#if showCreate}
-	<div class="card" style="margin-bottom: var(--sp-4); max-width: 480px;" transition:fly={{ y: -8, duration: 150 }}>
+	<div
+		class="card"
+		style="margin-bottom: var(--sp-4); max-width: 480px;"
+		transition:fly={{ y: -8, duration: 150 }}
+	>
 		<form method="POST" action="?/create" use:enhance>
 			<div class="field">
 				<label class="label" for="wname">{$t('Name')}</label>

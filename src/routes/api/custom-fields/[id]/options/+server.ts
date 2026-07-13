@@ -52,10 +52,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	});
 
 	broadcastProjectChange(f.projectId, locals.user.id);
-	const [created] = await db
-		.select()
-		.from(customFieldOption)
-		.where(eq(customFieldOption.id, id));
+	const [created] = await db.select().from(customFieldOption).where(eq(customFieldOption.id, id));
 	return json({ option: created }, { status: 201 });
 };
 

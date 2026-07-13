@@ -10,11 +10,14 @@ import { canAccessProject, canEditProject, canEditTask } from '$lib/server/permi
 export type Actor = { id: string; role?: string | null } | null | undefined;
 
 export type ServiceResult<T> =
-	| { ok: true; data: T }
-	| { ok: false; status: number; message: string };
+	{ ok: true; data: T } | { ok: false; status: number; message: string };
 
 const ok = <T>(data: T): ServiceResult<T> => ({ ok: true, data });
-const err = (status: number, message: string): ServiceResult<never> => ({ ok: false, status, message });
+const err = (status: number, message: string): ServiceResult<never> => ({
+	ok: false,
+	status,
+	message
+});
 
 type MilestoneRow = typeof milestone.$inferSelect;
 
@@ -41,7 +44,8 @@ export async function milestoneProgressByProject(
 		a.total++;
 		if (r.category === 'completed') a.done++;
 	}
-	for (const k in acc) acc[k].pct = acc[k].total ? Math.round((acc[k].done / acc[k].total) * 100) : 0;
+	for (const k in acc)
+		acc[k].pct = acc[k].total ? Math.round((acc[k].done / acc[k].total) * 100) : 0;
 	return acc;
 }
 
@@ -64,7 +68,10 @@ export async function reorderMilestones(projectId: string, ids: string[]): Promi
 	];
 	const now = new Date();
 	for (let i = 0; i < ordered.length; i++) {
-		await db.update(milestone).set({ position: i, updatedAt: now }).where(eq(milestone.id, ordered[i]));
+		await db
+			.update(milestone)
+			.set({ position: i, updatedAt: now })
+			.where(eq(milestone.id, ordered[i]));
 	}
 }
 
@@ -103,13 +110,16 @@ export async function createMilestone(
 	if (opts.maxNameLen && name.length > opts.maxNameLen) return err(400, 'name too long (max 120)');
 
 	const description =
-		typeof input.description === 'string' ? input.description.trim() || null : (input.description ?? null);
+		typeof input.description === 'string'
+			? input.description.trim() || null
+			: (input.description ?? null);
 
 	let startDate: Date | null;
 	let targetDate: Date | null;
 	try {
 		startDate = input.startDate instanceof Date ? input.startDate : parseDateField(input.startDate);
-		targetDate = input.targetDate instanceof Date ? input.targetDate : parseDateField(input.targetDate);
+		targetDate =
+			input.targetDate instanceof Date ? input.targetDate : parseDateField(input.targetDate);
 	} catch (e) {
 		if (e instanceof ApiValidationError) return err(400, e.message);
 		throw e;
@@ -136,7 +146,10 @@ export async function createMilestone(
 	if (input.assignTaskId) {
 		const [t] = await db.select().from(task).where(eq(task.id, input.assignTaskId));
 		if (t && t.projectId === projectId && (await canEditTask(actor, t)))
-			await db.update(task).set({ milestoneId: id, updatedAt: now }).where(eq(task.id, input.assignTaskId));
+			await db
+				.update(task)
+				.set({ milestoneId: id, updatedAt: now })
+				.where(eq(task.id, input.assignTaskId));
 	}
 
 	if (opts.broadcast) broadcastProjectChange(projectId, actor!.id);
@@ -188,7 +201,8 @@ export async function updateMilestoneById(
 	if (opts.has('name')) {
 		const name = (input.name ?? '').trim();
 		if (!name) return err(400, 'Milestone name is required');
-		if (opts.maxNameLen && name.length > opts.maxNameLen) return err(400, 'name too long (max 120)');
+		if (opts.maxNameLen && name.length > opts.maxNameLen)
+			return err(400, 'name too long (max 120)');
 		updates.name = name;
 	}
 	if (opts.has('description')) {
@@ -197,7 +211,8 @@ export async function updateMilestoneById(
 	}
 	try {
 		if (opts.has('startDate'))
-			updates.startDate = input.startDate instanceof Date ? input.startDate : parseDateField(input.startDate);
+			updates.startDate =
+				input.startDate instanceof Date ? input.startDate : parseDateField(input.startDate);
 		if (opts.has('targetDate'))
 			updates.targetDate =
 				input.targetDate instanceof Date ? input.targetDate : parseDateField(input.targetDate);
@@ -231,7 +246,9 @@ export async function deleteMilestoneById(
 	opts: { broadcast?: boolean; owner?: { projectId: string } } = {}
 ): Promise<ServiceResult<null>> {
 	if (opts.owner) {
-		await db.delete(milestone).where(and(eq(milestone.id, id), eq(milestone.projectId, opts.owner.projectId)));
+		await db
+			.delete(milestone)
+			.where(and(eq(milestone.id, id), eq(milestone.projectId, opts.owner.projectId)));
 		if (opts.broadcast) broadcastProjectChange(opts.owner.projectId, actor!.id);
 		return ok(null);
 	}
@@ -260,7 +277,8 @@ async function milestoneEdges(projectId: string) {
 		.innerJoin(milestone, eq(milestoneDependency.milestoneId, milestone.id))
 		.where(eq(milestone.projectId, projectId));
 	const edges = new Map<string, string[]>();
-	for (const e of all) edges.set(e.milestoneId, [...(edges.get(e.milestoneId) ?? []), e.dependsOnId]);
+	for (const e of all)
+		edges.set(e.milestoneId, [...(edges.get(e.milestoneId) ?? []), e.dependsOnId]);
 	return edges;
 }
 
@@ -300,10 +318,7 @@ export async function addMilestoneDep(
 	if (createsCycle(edges, milestoneId, dependsOnId))
 		return err(400, 'That dependency would create a cycle');
 
-	await db
-		.insert(milestoneDependency)
-		.values({ milestoneId, dependsOnId })
-		.onConflictDoNothing();
+	await db.insert(milestoneDependency).values({ milestoneId, dependsOnId }).onConflictDoNothing();
 
 	if (opts.broadcast) broadcastProjectChange(ms.projectId, actor!.id);
 	return ok(null);

@@ -111,7 +111,10 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		return apiError(400, 'order must list every field of this project exactly once');
 
 	for (let i = 0; i < ids.length; i++)
-		await db.update(customField).set({ position: i * 10 }).where(eq(customField.id, ids[i]));
+		await db
+			.update(customField)
+			.set({ position: i * 10 })
+			.where(eq(customField.id, ids[i]));
 
 	broadcastProjectChange(params.id, locals.user.id);
 	return json({ customFields: await listProjectCustomFields(params.id) });

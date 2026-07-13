@@ -12,7 +12,16 @@ import {
 } from './db/schema';
 import { listStatuses, listWorkspaceStatuses } from './statuses';
 
-export const VIEW_TYPES = ['dashboard', 'table', 'board', 'list', 'timeline', 'calendar', 'map', 'flow'] as const;
+export const VIEW_TYPES = [
+	'dashboard',
+	'table',
+	'board',
+	'list',
+	'timeline',
+	'calendar',
+	'map',
+	'flow'
+] as const;
 export type ViewType = (typeof VIEW_TYPES)[number];
 
 /**
@@ -54,14 +63,9 @@ export async function createProjectWithDefaults(opts: {
 		updatedAt: now
 	});
 
-	const statuses = [
-		...(await listStatuses()),
-		...(await listWorkspaceStatuses(opts.workspaceId))
-	];
+	const statuses = [...(await listStatuses()), ...(await listWorkspaceStatuses(opts.workspaceId))];
 	if (statuses.length > 0) {
-		await db
-			.insert(projectStatus)
-			.values(statuses.map((s) => ({ projectId: id, statusId: s.id })));
+		await db.insert(projectStatus).values(statuses.map((s) => ({ projectId: id, statusId: s.id })));
 	}
 
 	if (opts.creator.role !== 'admin') {
@@ -90,7 +94,10 @@ const SAMPLE_PROJECTS: {
 		name: 'Website Redesign',
 		icon: '🎨',
 		description: 'Refresh the marketing site and design system.',
-		milestones: [{ name: 'Design complete', days: 14 }, { name: 'Launch', days: 30, dependsOn: 0 }],
+		milestones: [
+			{ name: 'Design complete', days: 14 },
+			{ name: 'Launch', days: 30, dependsOn: 0 }
+		],
 		tasks: [
 			{ title: 'Audit current pages', milestone: 0, priority: 'medium' },
 			{ title: 'Draft new visual language', milestone: 0, priority: 'high' },
@@ -102,7 +109,10 @@ const SAMPLE_PROJECTS: {
 		name: 'Mobile App',
 		icon: '🚀',
 		description: 'Native companion app — MVP then beta.',
-		milestones: [{ name: 'MVP', days: 21 }, { name: 'Public beta', days: 45, dependsOn: 0 }],
+		milestones: [
+			{ name: 'MVP', days: 21 },
+			{ name: 'Public beta', days: 45, dependsOn: 0 }
+		],
 		tasks: [
 			{ title: 'Set up project scaffold', milestone: 0, priority: 'high' },
 			{ title: 'Implement auth flow', milestone: 0 },

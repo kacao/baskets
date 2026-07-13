@@ -41,7 +41,9 @@
 				</select>
 				{#if data.workspaces.every((w) => !w.creatable)}
 					<p class="u-tiny u-muted" style="margin-top: var(--sp-1);">
-						{$t('You can only create projects in workspaces you own or were granted — create one first.')}
+						{$t(
+							'You can only create projects in workspaces you own or were granted — create one first.'
+						)}
 						<a href="/workspaces">{$t('Workspaces')}</a>
 					</p>
 				{/if}
@@ -61,7 +63,8 @@
 		{#each data.projects as p (p.id)}
 			<a href="/projects/{p.id}" class="project-card">
 				<h4 class="project-name">
-					{#if p.icon}<EntityIcon value={p.icon} size={18} /> {/if}{p.name}
+					{#if p.icon}<EntityIcon value={p.icon} size={18} />
+					{/if}{p.name}
 				</h4>
 				{#if p.description}
 					<p class="u-small u-muted desc">{p.description}</p>

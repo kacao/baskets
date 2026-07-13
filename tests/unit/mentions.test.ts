@@ -37,9 +37,7 @@ describe('parseMentions', () => {
 	});
 
 	it('leaves a half-typed/broken token as plain text', () => {
-		expect(parseMentions('@[label](person:')).toEqual([
-			{ type: 'text', text: '@[label](person:' }
-		]);
+		expect(parseMentions('@[label](person:')).toEqual([{ type: 'text', text: '@[label](person:' }]);
 	});
 });
 
@@ -142,9 +140,7 @@ describe('linkify', () => {
 	});
 
 	it('does NOT link a javascript: scheme (XSS guard)', () => {
-		expect(linkify('javascript:alert(1)')).toEqual([
-			{ type: 'text', text: 'javascript:alert(1)' }
-		]);
+		expect(linkify('javascript:alert(1)')).toEqual([{ type: 'text', text: 'javascript:alert(1)' }]);
 	});
 
 	it('does NOT link a data: URL', () => {
@@ -153,7 +149,12 @@ describe('linkify', () => {
 	});
 
 	it('never emits an href outside http(s)/mailto', () => {
-		const inputs = ['javascript:alert(1)', 'data:text/html,x', 'vbscript:msgbox', 'file:///etc/passwd'];
+		const inputs = [
+			'javascript:alert(1)',
+			'data:text/html,x',
+			'vbscript:msgbox',
+			'file:///etc/passwd'
+		];
 		for (const s of inputs) {
 			for (const piece of linkify(s)) {
 				if (piece.type === 'link') {

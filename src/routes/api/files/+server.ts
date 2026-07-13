@@ -32,7 +32,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	// an attached task must belong to the SAME project as the field (no cross-project link)
 	if (taskId) {
-		const [t] = await db.select({ projectId: task.projectId }).from(task).where(eq(task.id, taskId));
+		const [t] = await db
+			.select({ projectId: task.projectId })
+			.from(task)
+			.where(eq(task.id, taskId));
 		if (!t || t.projectId !== f.projectId) return apiError(400, 'Invalid task');
 	}
 

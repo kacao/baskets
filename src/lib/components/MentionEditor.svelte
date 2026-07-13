@@ -232,7 +232,12 @@
 				list = people.map((x) => ({ kind, id: x.id, label: x.name ?? 'Unknown', sub: x.email }));
 				break;
 			case 'field':
-				list = fields.map((x) => ({ kind, id: x.id, label: x.name, sub: fieldValueText(x.id) || null }));
+				list = fields.map((x) => ({
+					kind,
+					id: x.id,
+					label: x.name,
+					sub: fieldValueText(x.id) || null
+				}));
 				break;
 		}
 		if (q) list = list.filter((c) => matches(c.label, q) || matches(c.sub, q));
@@ -619,7 +624,12 @@
 			}}
 		/>
 		<div class="mmenu-pills">
-			<button type="button" class="pill" class:on={activeKind === null} onclick={() => setKind(null)}>
+			<button
+				type="button"
+				class="pill"
+				class:on={activeKind === null}
+				onclick={() => setKind(null)}
+			>
 				{$t('All')}
 			</button>
 			{#each pickerKinds as k (k)}

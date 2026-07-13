@@ -22,10 +22,36 @@
 		coverFileId?: string | null;
 	};
 	type Status = { id: string; name: string; category: string; color?: string | null };
-	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
-	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; appliesTo?: string; position?: number };
-	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
-	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
+	type Location = {
+		id: string;
+		title: string;
+		address: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	};
+	type CustomFieldDef = {
+		id: string;
+		name: string;
+		type: string;
+		config: Record<string, unknown>;
+		appliesTo?: string;
+		position?: number;
+	};
+	type CustomFieldOption = {
+		id: string;
+		fieldId: string;
+		title: string;
+		color: string | null;
+		icon: string | null;
+	};
+	type FileRef = {
+		id: string;
+		taskId: string | null;
+		fieldId: string | null;
+		filename: string;
+		mimeType: string;
+		size: number;
+	};
 
 	let {
 		tasks,
@@ -107,17 +133,23 @@
 		backStack = backStack.slice(0, -1);
 	}
 	const backTask = $derived(
-		backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
+		backStack.length
+			? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null)
+			: null
 	);
 	// "Statuses shown" (Customize) — graph nodes limited to these statuses; absent = all
-	const graphTasks = $derived(statusIds ? tasks.filter((t) => statusIds.includes(t.statusId)) : tasks);
+	const graphTasks = $derived(
+		statusIds ? tasks.filter((t) => statusIds.includes(t.statusId)) : tasks
+	);
 	// main flow charts only top-level tasks; sub-tasks appear via focus-mode expansion
 	const topTasks = $derived(graphTasks.filter((t) => !t.parentId));
 
 	// double-click a milestone node → drill into a focused flow of only its tasks
 	let focusedMilestone = $state<string | null>(null);
 	const focusedMs = $derived(milestones.find((m) => m.id === focusedMilestone) ?? null);
-	const focusTasks = $derived(focusedMs ? topTasks.filter((t) => t.milestoneId === focusedMs.id) : []);
+	const focusTasks = $derived(
+		focusedMs ? topTasks.filter((t) => t.milestoneId === focusedMs.id) : []
+	);
 
 	// Svelte Flow touches the DOM at import (ResizeObserver etc.), so load the canvas
 	// only in the browser — same client-only convention as MapView/Leaflet.
@@ -131,7 +163,8 @@
 	{#if focusedMs}
 		<div class="flow-focus-bar">
 			<button class="flow-back" type="button" onclick={() => (focusedMilestone = null)}>
-				<Icon name="arrow-left" size={14} /> {$t('Flow')}
+				<Icon name="arrow-left" size={14} />
+				{$t('Flow')}
 			</button>
 			<span class="flow-focus-title">{focusedMs.name}</span>
 			<span class="flow-focus-count">{focusTasks.length}</span>
@@ -148,7 +181,10 @@
 					{taskDeps}
 					milestoneDeps={[]}
 					focusMode
-					onSelect={(id) => { selectedId = id; backStack = []; }}
+					onSelect={(id) => {
+						selectedId = id;
+						backStack = [];
+					}}
 				/>
 			{:else}
 				<Canvas
@@ -159,7 +195,10 @@
 					{taskDeps}
 					{milestoneDeps}
 					{showMilestones}
-					onSelect={(id) => { selectedId = id; backStack = []; }}
+					onSelect={(id) => {
+						selectedId = id;
+						backStack = [];
+					}}
 					onMilestoneOpen={(id) => (focusedMilestone = id)}
 				/>
 			{/if}

@@ -91,9 +91,7 @@ test.describe('project + task lifecycle', () => {
 			await descInput.blur();
 
 			// The edited title should propagate back to the table row.
-			await expect(
-				page.locator('button.task-title', { hasText: TASK_TITLE_EDITED })
-			).toBeVisible();
+			await expect(page.locator('button.task-title', { hasText: TASK_TITLE_EDITED })).toBeVisible();
 
 			// --- Add a sub-task via the header "Add sub-task" popover (default-collapsed
 			// section; the "+" lives in the header). The popover panel portals to <body>,
@@ -116,9 +114,9 @@ test.describe('project + task lifecycle', () => {
 			await confirmModal.getByRole('button', { name: 'Delete', exact: true }).click();
 
 			// Pane closes and the task is gone from the table.
-			await expect(
-				page.locator('button.task-title', { hasText: TASK_TITLE_EDITED })
-			).toHaveCount(0);
+			await expect(page.locator('button.task-title', { hasText: TASK_TITLE_EDITED })).toHaveCount(
+				0
+			);
 		} finally {
 			// --- Clean up: delete the project regardless of assertion outcome ---
 			if (projectUrl) await deleteProject(page, projectUrl);

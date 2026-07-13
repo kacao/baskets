@@ -17,11 +17,20 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { tooltip } from '$lib/tooltip';
-	import { fieldAppliesTo, buildTaskCfSearch, decodeValue, encodeIds, isMulti, rollsUpToParent, rollupDisplayText } from '$lib/customFields';
+	import {
+		fieldAppliesTo,
+		buildTaskCfSearch,
+		decodeValue,
+		encodeIds,
+		isMulti,
+		rollsUpToParent,
+		rollupDisplayText
+	} from '$lib/customFields';
 	import { loadCollapsed, storeCollapsed } from '$lib/cfCollapse';
 	import { describeRecurrence } from '$lib/recurrence';
 	import { confirmDialog } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
+	import { fmtDate } from '$lib/date';
 
 	type Task = {
 		id: string;
@@ -41,7 +50,13 @@
 		coverFileId?: string | null;
 	};
 	type Status = { id: string; name: string; category: string };
-	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
+	type Location = {
+		id: string;
+		title: string;
+		address: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	};
 
 	let {
 		task,
@@ -74,10 +89,29 @@
 		labels: { id: string; name: string; color?: string | null; icon?: string | null }[];
 		taskLabels: { taskId: string; labelId: string }[];
 		taskDeps: { taskId: string; dependsOnId: string }[];
-		customFields?: { id: string; name: string; type: string; config: Record<string, unknown>; appliesTo?: string }[];
-		customFieldOptions?: { id: string; fieldId: string; title: string; color: string | null; icon: string | null }[];
+		customFields?: {
+			id: string;
+			name: string;
+			type: string;
+			config: Record<string, unknown>;
+			appliesTo?: string;
+		}[];
+		customFieldOptions?: {
+			id: string;
+			fieldId: string;
+			title: string;
+			color: string | null;
+			icon: string | null;
+		}[];
 		taskCustomValues?: { taskId: string; fieldId: string; value: string }[];
-		files?: { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number }[];
+		files?: {
+			id: string;
+			taskId: string | null;
+			fieldId: string | null;
+			filename: string;
+			mimeType: string;
+			size: number;
+		}[];
 		canEditTask: (t: { id: string; parentId: string | null }) => boolean;
 		onClose: () => void;
 		onSelectTask?: (id: string) => void;
@@ -90,7 +124,9 @@
 		templates?: { id: string; name: string }[];
 	} = $props();
 
-	const parent = $derived(task.parentId ? (tasks.find((t) => t.id === task.parentId) ?? null) : null);
+	const parent = $derived(
+		task.parentId ? (tasks.find((t) => t.id === task.parentId) ?? null) : null
+	);
 	const backCrumb = $derived(back ?? parent);
 	function crumbClick() {
 		if (back) onBack?.();
@@ -193,13 +229,18 @@
 	);
 
 	// per-task cf search text so the `task`-cf link picker searches by cf values too
+	const optionTitleById = $derived(new Map(customFieldOptions.map((o) => [o.id, o.title])));
+	const userNameById = $derived(new Map(users.map((u) => [u.id, u.name])));
+	const locationTitleById = $derived(new Map(locations.map((l) => [l.id, l.title])));
+	const taskTitleById = $derived(new Map(tasks.map((t) => [t.id, t.title])));
+	const fileNameById = $derived(new Map(files.map((f) => [f.id, f.filename])));
 	const cfSearchByTask = $derived(
 		buildTaskCfSearch(customFields, taskCustomValues, {
-			option: (id) => customFieldOptions.find((o) => o.id === id)?.title ?? '',
-			user: (id) => users.find((u) => u.id === id)?.name ?? '',
-			location: (id) => locations.find((l) => l.id === id)?.title ?? '',
-			task: (id) => tasks.find((t) => t.id === id)?.title ?? '',
-			file: (id) => files.find((f) => f.id === id)?.filename ?? ''
+			option: (id) => optionTitleById.get(id) ?? '',
+			user: (id) => userNameById.get(id) ?? '',
+			location: (id) => locationTitleById.get(id) ?? '',
+			task: (id) => taskTitleById.get(id) ?? '',
+			file: (id) => fileNameById.get(id) ?? ''
 		})
 	);
 	const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';
@@ -276,26 +317,39 @@
 	// Computed rollup text: the rollup *type* (aggregate a target field over related
 	// tasks), or a number rollup-to-parent field on a parent task (aggregate the
 	// field over this task's direct sub-tasks). Null = render the field normally.
-	function rollupText(field: { id: string; type: string; config: Record<string, unknown>; appliesTo?: string }): string | null {
+	function rollupText(field: {
+		id: string;
+		type: string;
+		config: Record<string, unknown>;
+		appliesTo?: string;
+	}): string | null {
 		const valueOf = (tid: string, fid: string) => {
 			const raw = taskCustomValues.find((x) => x.taskId === tid && x.fieldId === fid)?.value;
 			const n = raw == null ? null : Number(raw);
 			return n != null && Number.isFinite(n) ? n : null;
 		};
-		return rollupDisplayText(field, task.id, { tasks, taskDeps, fields: customFields, valueOf, hasSubtasks: subs.length > 0 });
+		return rollupDisplayText(field, task.id, {
+			tasks,
+			taskDeps,
+			fields: customFields,
+			valueOf,
+			hasSubtasks: subs.length > 0
+		});
 	}
 	const taskFiles = $derived(files.filter((f) => f.taskId === task.id));
-
-	function fmtDate(d: Date | string | null) {
-		if (!d) return null;
-		return new Date(d).toISOString().slice(0, 10);
-	}
 
 	// search queries for the milestone / location / blocker popovers
 	let mQuery = $state('');
 	let locQuery = $state('');
 	let depQuery = $state('');
 	const matches = (hay: string, q: string) => hay.toLowerCase().includes(q.trim().toLowerCase());
+	// A search+create popover shows "Create" when the query is non-empty AND no found
+	// entity's name EXACTLY equals it — so "Brown Coat" still offers Create even when
+	// "Plaster Brown Coat"/"Other Brown Coat" partially match.
+	const noExactMatch = (query: string, names: string[]) => {
+		const q = query.trim().toLowerCase();
+		return q !== '' && !names.some((n) => n.trim().toLowerCase() === q);
+	};
 	const mFiltered = $derived(milestones.filter((m) => matches(m.name, mQuery)));
 	const locFiltered = $derived(
 		locations.filter((l) => matches(`${l.title} ${l.address ?? ''}`, locQuery))
@@ -309,6 +363,22 @@
 				matches(x.title, depQuery)
 		)
 	);
+	// Sub-task "Blocked by": deps of a given sub-task + its candidate blockers, which
+	// (per the server's sibling rule) are only OTHER sub-tasks under the same parent.
+	let subDepQuery = $state('');
+	const subDepsOf = (s: Task) =>
+		taskDeps
+			.filter((d) => d.taskId === s.id)
+			.map((d) => tasks.find((t) => t.id === d.dependsOnId))
+			.filter(Boolean);
+	const subDepCandidates = (s: Task) =>
+		tasks.filter(
+			(x) =>
+				x.parentId === s.parentId &&
+				x.id !== s.id &&
+				!taskDeps.some((d) => d.taskId === s.id && d.dependsOnId === x.id) &&
+				matches(x.title, subDepQuery)
+		);
 	// candidates that can BECOME a sub-task of this task: top-level, not self, and
 	// childless (depth-1 — a task with its own sub-tasks can't be nested)
 	let subQuery = $state('');
@@ -326,7 +396,8 @@
 	let parentQuery = $state('');
 	const parentChoices = $derived(
 		tasks.filter(
-			(x) => !x.parentId && x.id !== task.id && x.id !== task.parentId && matches(x.title, parentQuery)
+			(x) =>
+				!x.parentId && x.id !== task.id && x.id !== task.parentId && matches(x.title, parentQuery)
 		)
 	);
 
@@ -374,7 +445,12 @@
 	}
 	async function bulkSubDelete() {
 		if (!subSel.length) return;
-		if (!(await confirmDialog($t('Delete the selected sub-tasks?'), { confirmLabel: $t('Delete'), danger: true })))
+		if (
+			!(await confirmDialog($t('Delete the selected sub-tasks?'), {
+				confirmLabel: $t('Delete'),
+				danger: true
+			}))
+		)
 			return;
 		subBusy = true;
 		const fd = new FormData();
@@ -432,7 +508,14 @@
 			<!-- Editable title IS the pane header — full width, borderless, auto-save on
 			     blur. reset:false: value is set as a property (value={task.title}), so a
 			     default form.reset() would wipe it to its empty defaultValue. -->
-			<form method="POST" action="?/patchTask" use:enhance={() => async ({ update }) => update({ reset: false })} class="title-head">
+			<form
+				method="POST"
+				action="?/patchTask"
+				use:enhance={() =>
+					async ({ update }) =>
+						update({ reset: false })}
+				class="title-head"
+			>
 				<input type="hidden" name="id" value={task.id} />
 				<input
 					name="title"
@@ -451,14 +534,21 @@
 
 	{#if backCrumb}
 		<button class="parent-link" type="button" onclick={crumbClick}>
-			<Icon name="nav-arrow-left" size={12} /> {backCrumb.title}
+			<Icon name="nav-arrow-left" size={12} />
+			{backCrumb.title}
 		</button>
 	{/if}
 	{#if editable}
 		<!-- Pills -->
 		<div class="pills-row">
 			<!-- Status -->
-			<StatusSelect taskId={task.id} statusId={task.statusId} {statuses} canEdit={editable} display={statusDisplay} />
+			<StatusSelect
+				taskId={task.id}
+				statusId={task.statusId}
+				{statuses}
+				canEdit={editable}
+				display={statusDisplay}
+			/>
 
 			<!-- Parent (sub-tasks only): move to another task or make top-level -->
 			{#if task.parentId}
@@ -468,7 +558,12 @@
 					{/snippet}
 					{#snippet panel(close)}
 						<!-- svelte-ignore a11y_autofocus -->
-						<input class="pop-search" placeholder={$t('Move to task…')} bind:value={parentQuery} autofocus />
+						<input
+							class="pop-search"
+							placeholder={$t('Move to task…')}
+							bind:value={parentQuery}
+							autofocus
+						/>
 						<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 							<input type="hidden" name="id" value={task.id} />
 							<input type="hidden" name="parentId" value="" />
@@ -497,7 +592,8 @@
 							<input type="hidden" name="id" value={task.id} />
 							<input type="hidden" name="priority" value={p} />
 							<button class="opt" class:opt--on={task.priority === p} type="submit">
-								<PriorityIcon priority={p} /> {$t(p)}
+								<PriorityIcon priority={p} />
+								{$t(p)}
 							</button>
 						</form>
 					{/each}
@@ -515,57 +611,75 @@
 					<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 						<input type="hidden" name="id" value={task.id} />
 						<input type="hidden" name="assigneeId" value="" />
-						<button class="opt" class:opt--on={!task.assigneeId} type="submit">{$t('Unassigned')}</button>
+						<button class="opt" class:opt--on={!task.assigneeId} type="submit"
+							>{$t('Unassigned')}</button
+						>
 					</form>
 					{#each users as u (u.id)}
 						<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 							<input type="hidden" name="id" value={task.id} />
 							<input type="hidden" name="assigneeId" value={u.id} />
-							<button class="opt" class:opt--on={task.assigneeId === u.id} type="submit">{u.name}</button>
+							<button class="opt" class:opt--on={task.assigneeId === u.id} type="submit"
+								>{u.name}</button
+							>
 						</form>
 					{/each}
 				{/snippet}
 			</Popover>
 
-			<!-- Milestone (search + create) -->
-			<Popover ariaLabel={$t('Milestone')}>
-				{#snippet trigger()}
-					<span class="pill-val" class:pill-ph={!task.milestoneId}
-						>{milestoneName(task.milestoneId) ?? $t('Milestone')}</span
-					>
-				{/snippet}
-				{#snippet panel(close)}
-					<!-- svelte-ignore a11y_autofocus -->
-					<input class="pop-search" placeholder={$t('Search or create…')} bind:value={mQuery} autofocus />
-					<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
-						<input type="hidden" name="id" value={task.id} />
-						<input type="hidden" name="milestoneId" value="" />
-						<button class="opt" class:opt--on={!task.milestoneId} type="submit">{$t('No milestone')}</button>
-					</form>
-					{#each mFiltered as m (m.id)}
+			<!-- Milestone (search + create) — hidden on sub-tasks (they follow the parent's milestone) -->
+			{#if !task.parentId}
+				<Popover ariaLabel={$t('Milestone')}>
+					{#snippet trigger()}
+						<span class="pill-val" class:pill-ph={!task.milestoneId}
+							>{milestoneName(task.milestoneId) ?? $t('Milestone')}</span
+						>
+					{/snippet}
+					{#snippet panel(close)}
+						<!-- svelte-ignore a11y_autofocus -->
+						<input
+							class="pop-search"
+							placeholder={$t('Search or create…')}
+							bind:value={mQuery}
+							autofocus
+						/>
 						<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 							<input type="hidden" name="id" value={task.id} />
-							<input type="hidden" name="milestoneId" value={m.id} />
-							<button class="opt" class:opt--on={task.milestoneId === m.id} type="submit">{m.name}</button>
+							<input type="hidden" name="milestoneId" value="" />
+							<button class="opt" class:opt--on={!task.milestoneId} type="submit"
+								>{$t('No milestone')}</button
+							>
 						</form>
-					{/each}
-					{#if mQuery.trim() && mFiltered.length === 0}
-						<form
-							method="POST"
-							action="?/createMilestone"
-							use:enhance={() => async ({ update }) => {
-								close();
-								mQuery = '';
-								update();
-							}}
-						>
-							<input type="hidden" name="taskId" value={task.id} />
-							<input type="hidden" name="name" value={mQuery.trim()} />
-							<button class="opt opt--create" type="submit">{$t('Create')} “{mQuery.trim()}”</button>
-						</form>
-					{/if}
-				{/snippet}
-			</Popover>
+						{#each mFiltered as m (m.id)}
+							<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
+								<input type="hidden" name="id" value={task.id} />
+								<input type="hidden" name="milestoneId" value={m.id} />
+								<button class="opt" class:opt--on={task.milestoneId === m.id} type="submit"
+									>{m.name}</button
+								>
+							</form>
+						{/each}
+						{#if noExactMatch( mQuery, mFiltered.map((m) => m.name) )}
+							<form
+								method="POST"
+								action="?/createMilestone"
+								use:enhance={() =>
+									async ({ update }) => {
+										close();
+										mQuery = '';
+										update();
+									}}
+							>
+								<input type="hidden" name="taskId" value={task.id} />
+								<input type="hidden" name="name" value={mQuery.trim()} />
+								<button class="opt opt--create" type="submit"
+									>{$t('Create')} “{mQuery.trim()}”</button
+								>
+							</form>
+						{/if}
+					{/snippet}
+				</Popover>
+			{/if}
 
 			<!-- Order -->
 			<Popover ariaLabel={$t('Order')}>
@@ -581,7 +695,12 @@
 						<input type="hidden" name="id" value={task.id} />
 						<span class="pop-label">{$t('Order')}</span>
 						<div class="stepper">
-							<button type="button" class="step-btn" aria-label={$t('Decrease')} onclick={() => bumpOrder(-1)}>−</button>
+							<button
+								type="button"
+								class="step-btn"
+								aria-label={$t('Decrease')}
+								onclick={() => bumpOrder(-1)}>−</button
+							>
 							<input
 								bind:this={orderInput}
 								name="order"
@@ -592,10 +711,19 @@
 								placeholder="—"
 								value={task.order ?? ''}
 							/>
-							<button type="button" class="step-btn" aria-label={$t('Increase')} onclick={() => bumpOrder(1)}>+</button>
+							<button
+								type="button"
+								class="step-btn"
+								aria-label={$t('Increase')}
+								onclick={() => bumpOrder(1)}>+</button
+							>
 						</div>
 						<div class="pop-actions">
-							<button type="submit" class="btn btn-sm btn-ghost" onclick={() => orderInput && (orderInput.value = '')}>
+							<button
+								type="submit"
+								class="btn btn-sm btn-ghost"
+								onclick={() => orderInput && (orderInput.value = '')}
+							>
 								{$t('Clear')}
 							</button>
 							<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
@@ -613,11 +741,18 @@
 				{/snippet}
 				{#snippet panel(close)}
 					<!-- svelte-ignore a11y_autofocus -->
-					<input class="pop-search" placeholder={$t('Search or create…')} bind:value={locQuery} autofocus />
+					<input
+						class="pop-search"
+						placeholder={$t('Search or create…')}
+						bind:value={locQuery}
+						autofocus
+					/>
 					<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 						<input type="hidden" name="id" value={task.id} />
 						<input type="hidden" name="locationId" value="" />
-						<button class="opt" class:opt--on={!task.locationId} type="submit">{$t('No location')}</button>
+						<button class="opt" class:opt--on={!task.locationId} type="submit"
+							>{$t('No location')}</button
+						>
 					</form>
 					{#each locFiltered as l (l.id)}
 						<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
@@ -629,19 +764,22 @@
 							</button>
 						</form>
 					{/each}
-					{#if locQuery.trim() && locFiltered.length === 0}
+					{#if noExactMatch( locQuery, locFiltered.map((l) => l.title) )}
 						<form
 							method="POST"
 							action="?/createLocation"
-							use:enhance={() => async ({ update }) => {
-								close();
-								locQuery = '';
-								update();
-							}}
+							use:enhance={() =>
+								async ({ update }) => {
+									close();
+									locQuery = '';
+									update();
+								}}
 						>
 							<input type="hidden" name="taskId" value={task.id} />
 							<input type="hidden" name="title" value={locQuery.trim()} />
-							<button class="opt opt--create" type="submit">{$t('Create')} “{locQuery.trim()}”</button>
+							<button class="opt opt--create" type="submit"
+								>{$t('Create')} “{locQuery.trim()}”</button
+							>
 						</form>
 					{/if}
 				{/snippet}
@@ -656,24 +794,38 @@
 				{/snippet}
 				{#snippet panel()}
 					{#each deps as d (d!.id)}
-						<form method="POST" action="?/removeTaskDep" use:enhance={() => async ({ update }) => update()}>
+						<form
+							method="POST"
+							action="?/removeTaskDep"
+							use:enhance={() =>
+								async ({ update }) =>
+									update()}
+						>
 							<input type="hidden" name="taskId" value={task.id} />
 							<input type="hidden" name="dependsOnId" value={d!.id} />
-							<button class="opt opt--on" type="submit" use:tooltip={$t('Remove dependency')}>{d!.title} ×</button>
+							<button class="opt opt--on" type="submit" use:tooltip={$t('Remove dependency')}
+								>{d!.title} ×</button
+							>
 						</form>
 					{:else}
 						<span class="opt-empty">{$t('none')}</span>
 					{/each}
 					<!-- svelte-ignore a11y_autofocus -->
-					<input class="pop-search" placeholder={$t('Add a blocker…')} bind:value={depQuery} autofocus />
+					<input
+						class="pop-search"
+						placeholder={$t('Add a blocker…')}
+						bind:value={depQuery}
+						autofocus
+					/>
 					{#each depFiltered as opt (opt.id)}
 						<form
 							method="POST"
 							action="?/addTaskDep"
-							use:enhance={() => async ({ update }) => {
-								depQuery = '';
-								update();
-							}}
+							use:enhance={() =>
+								async ({ update }) => {
+									depQuery = '';
+									update();
+								}}
 						>
 							<input type="hidden" name="taskId" value={task.id} />
 							<input type="hidden" name="dependsOnId" value={opt.id} />
@@ -686,13 +838,21 @@
 			<!-- Start date -->
 			<Popover ariaLabel={$t('Start date')} align="right">
 				{#snippet trigger()}
-					<span class="pill-val mono" class:pill-ph={!task.startDate}>{fmtDate(task.startDate ?? null) ?? $t('Start date')}</span>
+					<span class="pill-val mono" class:pill-ph={!task.startDate}
+						>{fmtDate(task.startDate ?? null) ?? $t('Start date')}</span
+					>
 				{/snippet}
 				{#snippet panel(close)}
 					<DatePicker
 						value={fmtDate(task.startDate ?? null)}
-						onSelect={(d) => { setDate(task.id, 'startDate', d); close(); }}
-						onClear={() => { setDate(task.id, 'startDate', ''); close(); }}
+						onSelect={(d) => {
+							setDate(task.id, 'startDate', d);
+							close();
+						}}
+						onClear={() => {
+							setDate(task.id, 'startDate', '');
+							close();
+						}}
 					/>
 				{/snippet}
 			</Popover>
@@ -700,13 +860,21 @@
 			<!-- Due date -->
 			<Popover ariaLabel={$t('Due date')} align="right">
 				{#snippet trigger()}
-					<span class="pill-val mono" class:pill-ph={!task.dueDate}>{fmtDate(task.dueDate) ?? $t('Due date')}</span>
+					<span class="pill-val mono" class:pill-ph={!task.dueDate}
+						>{fmtDate(task.dueDate) ?? $t('Due date')}</span
+					>
 				{/snippet}
 				{#snippet panel(close)}
 					<DatePicker
 						value={fmtDate(task.dueDate)}
-						onSelect={(d) => { setDate(task.id, 'dueDate', d); close(); }}
-						onClear={() => { setDate(task.id, 'dueDate', ''); close(); }}
+						onSelect={(d) => {
+							setDate(task.id, 'dueDate', d);
+							close();
+						}}
+						onClear={() => {
+							setDate(task.id, 'dueDate', '');
+							close();
+						}}
 					/>
 				{/snippet}
 			</Popover>
@@ -738,15 +906,20 @@
 				{/snippet}
 			</Popover>
 		</div>
-
 	{:else}
 		<div class="chips-row">
-			<StatusSelect taskId={task.id} statusId={task.statusId} {statuses} canEdit={false} display={statusDisplay} />
+			<StatusSelect
+				taskId={task.id}
+				statusId={task.statusId}
+				{statuses}
+				canEdit={false}
+				display={statusDisplay}
+			/>
 			<PriorityBadge priority={task.priority} />
 			{#if userName(task.assigneeId)}
 				<span class="badge badge-neutral">{userName(task.assigneeId)}</span>
 			{/if}
-			{#if milestoneName(task.milestoneId)}
+			{#if !task.parentId && milestoneName(task.milestoneId)}
 				<span class="badge">{milestoneName(task.milestoneId)}</span>
 			{/if}
 			{#if locationTitle(task.locationId)}
@@ -784,7 +957,12 @@
 	{#if editable || task.description}
 		{@const descOpen = !cfCollapsed[DESC_KEY]}
 		<div class="section">
-			<button class="sub-toggle" type="button" aria-expanded={descOpen} onclick={() => toggleCfCollapsed(DESC_KEY)}>
+			<button
+				class="sub-toggle"
+				type="button"
+				aria-expanded={descOpen}
+				onclick={() => toggleCfCollapsed(DESC_KEY)}
+			>
 				<Icon name={descOpen ? 'nav-arrow-down' : 'nav-arrow-right'} size={14} />
 				<span class="label">{$t('Description')}</span>
 			</button>
@@ -793,7 +971,9 @@
 					<form
 						method="POST"
 						action="?/patchTask"
-						use:enhance={() => async ({ update }) => update({ reset: false })}
+						use:enhance={() =>
+							async ({ update }) =>
+								update({ reset: false })}
 						class="field"
 					>
 						<input type="hidden" name="id" value={task.id} />
@@ -843,7 +1023,12 @@
 		{@const subsOpen = !cfCollapsed[SUBTASKS_KEY]}
 		<div class="section">
 			<div class="sub-header">
-				<button class="sub-toggle" type="button" aria-expanded={subsOpen} onclick={() => toggleCfCollapsed(SUBTASKS_KEY)}>
+				<button
+					class="sub-toggle"
+					type="button"
+					aria-expanded={subsOpen}
+					onclick={() => toggleCfCollapsed(SUBTASKS_KEY)}
+				>
 					<Icon name={subsOpen ? 'nav-arrow-down' : 'nav-arrow-right'} size={14} />
 					<span class="label">{$t('Sub-tasks')}</span>
 					<span class="cf-task-count">{subs.length}</span>
@@ -855,7 +1040,12 @@
 						{/snippet}
 						{#snippet panel(close)}
 							<!-- svelte-ignore a11y_autofocus -->
-							<input class="pop-search" placeholder={$t('Search or create…')} bind:value={subQuery} autofocus />
+							<input
+								class="pop-search"
+								placeholder={$t('Search or create…')}
+								bind:value={subQuery}
+								autofocus
+							/>
 							{#each subCandidates as c (c.id)}
 								<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 									<input type="hidden" name="id" value={c.id} />
@@ -863,19 +1053,22 @@
 									<button class="opt" type="submit">{c.title}</button>
 								</form>
 							{/each}
-							{#if subQuery.trim() && subCandidates.length === 0}
+							{#if noExactMatch( subQuery, subCandidates.map((c) => c.title) )}
 								<form
 									method="POST"
 									action="?/createTask"
-									use:enhance={() => async ({ update }) => {
-										close();
-										subQuery = '';
-										update();
-									}}
+									use:enhance={() =>
+										async ({ update }) => {
+											close();
+											subQuery = '';
+											update();
+										}}
 								>
 									<input type="hidden" name="parentId" value={task.id} />
 									<input type="hidden" name="title" value={subQuery.trim()} />
-									<button class="opt opt--create" type="submit">{$t('Create task')} “{subQuery.trim()}”</button>
+									<button class="opt opt--create" type="submit"
+										>{$t('Create task')} “{subQuery.trim()}”</button
+									>
 								</form>
 							{:else if subCandidates.length === 0}
 								<span class="opt-empty">{$t('Type to search or create a task')}</span>
@@ -885,156 +1078,232 @@
 				{/if}
 			</div>
 			{#if subsOpen}
-			{#if subSel.length > 0 && editable}
-				<div class="sub-bulk">
-					<span class="sub-bulk-count">{$t('{n} selected', { n: subSel.length })}</span>
-					<!-- Move: re-parent under an existing task, or create one -->
-					<Popover ariaLabel={$t('Move')}>
-						{#snippet trigger()}
-							<span class="pill-val"><Icon name="data-transfer-both" size={12} /> {$t('Move')}</span>
-						{/snippet}
-						{#snippet panel(close)}
-							<!-- svelte-ignore a11y_autofocus -->
-							<input class="pop-search" placeholder={$t('Search or create…')} bind:value={moveQuery} autofocus />
-							<button class="opt opt--create" type="button" disabled={subBusy} onclick={() => bulkSub({ parentId: '' }, close)}>
-								<Icon name="arrow-up-right-square" size={12} /> {$t('Make into tasks (no parent)')}
-							</button>
-							{#each moveTargets as m (m.id)}
-								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ parentId: m.id }, close)}>{m.title}</button>
-							{/each}
-							{#if moveQuery.trim()}
-								<button class="opt opt--create" type="button" disabled={subBusy} onclick={() => bulkSubMoveNew(moveQuery, close)}>{$t('Create task')} “{moveQuery.trim()}”</button>
-							{:else if moveTargets.length === 0}
-								<span class="opt-empty">{$t('Type to search or create a task')}</span>
-							{/if}
-						{/snippet}
-					</Popover>
-					<!-- Status -->
-					<Popover ariaLabel={$t('Set status')}>
-						{#snippet trigger()}<span class="pill-val"><Icon name="circle" size={12} /> {$t('Status')}</span>{/snippet}
-						{#snippet panel(close)}
-							{#each statuses as s (s.id)}
-								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ statusId: s.id }, close)}>{s.name}</button>
-							{/each}
-						{/snippet}
-					</Popover>
-					<!-- Assignee -->
-					<Popover ariaLabel={$t('Set assignee')}>
-						{#snippet trigger()}<span class="pill-val"><Icon name="user" size={12} /> {$t('Assignee')}</span>{/snippet}
-						{#snippet panel(close)}
-							<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ assigneeId: '' }, close)}>{$t('Unassigned')}</button>
-							{#each users as u (u.id)}
-								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ assigneeId: u.id }, close)}>{u.name}</button>
-							{/each}
-						{/snippet}
-					</Popover>
-					<!-- Milestone -->
-					<Popover ariaLabel={$t('Set milestone')}>
-						{#snippet trigger()}<span class="pill-val"><Icon name="bookmark" size={12} /> {$t('Milestone')}</span>{/snippet}
-						{#snippet panel(close)}
-							<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ milestoneId: '' }, close)}>{$t('No milestone')}</button>
-							{#each milestones as m (m.id)}
-								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ milestoneId: m.id }, close)}>{m.name}</button>
-							{/each}
-						{/snippet}
-					</Popover>
-					<!-- Priority -->
-					<Popover ariaLabel={$t('Set priority')}>
-						{#snippet trigger()}<span class="pill-val"><Icon name="priority-high" size={12} /> {$t('Priority')}</span>{/snippet}
-						{#snippet panel(close)}
-							{#each PRIORITIES as p (p)}
-								<button class="opt" type="button" disabled={subBusy} onclick={() => bulkSub({ priority: p }, close)}><PriorityIcon priority={p} /> {$t(p)}</button>
-							{/each}
-						{/snippet}
-					</Popover>
-					<!-- Labels (multi-value: each row toggles that label across the whole selection) -->
-					{#if labels.length > 0}
-						<Popover ariaLabel={$t('Set labels')}>
-							{#snippet trigger()}<span class="pill-val"><Icon name="label" size={12} /> {$t('Labels')}</span>{/snippet}
-							{#snippet panel()}
-								{#each labels as l (l.id)}
-									{@const allHave = subAllHaveLabel(l.id)}
-									<button class="opt" class:opt--on={allHave} aria-pressed={allHave} type="button" disabled={subBusy} onclick={() => bulkSubLabel(l.id, !allHave)}>
-										<LabelChip label={l} />
-									</button>
+				{#if subSel.length > 0 && editable}
+					<div class="sub-bulk">
+						<span class="sub-bulk-count">{$t('{n} selected', { n: subSel.length })}</span>
+						<!-- Move: re-parent under an existing task, or create one -->
+						<Popover ariaLabel={$t('Move')}>
+							{#snippet trigger()}
+								<span class="pill-val"
+									><Icon name="data-transfer-both" size={12} /> {$t('Move')}</span
+								>
+							{/snippet}
+							{#snippet panel(close)}
+								<!-- svelte-ignore a11y_autofocus -->
+								<input
+									class="pop-search"
+									placeholder={$t('Search or create…')}
+									bind:value={moveQuery}
+									autofocus
+								/>
+								<button
+									class="opt opt--create"
+									type="button"
+									disabled={subBusy}
+									onclick={() => bulkSub({ parentId: '' }, close)}
+								>
+									<Icon name="arrow-up-right-square" size={12} />
+									{$t('Make into tasks (no parent)')}
+								</button>
+								{#each moveTargets as m (m.id)}
+									<button
+										class="opt"
+										type="button"
+										disabled={subBusy}
+										onclick={() => bulkSub({ parentId: m.id }, close)}>{m.title}</button
+									>
+								{/each}
+								{#if moveQuery.trim()}
+									<button
+										class="opt opt--create"
+										type="button"
+										disabled={subBusy}
+										onclick={() => bulkSubMoveNew(moveQuery, close)}
+										>{$t('Create task')} “{moveQuery.trim()}”</button
+									>
+								{:else if moveTargets.length === 0}
+									<span class="opt-empty">{$t('Type to search or create a task')}</span>
+								{/if}
+							{/snippet}
+						</Popover>
+						<!-- Status -->
+						<Popover ariaLabel={$t('Set status')}>
+							{#snippet trigger()}<span class="pill-val"
+									><Icon name="circle" size={12} /> {$t('Status')}</span
+								>{/snippet}
+							{#snippet panel(close)}
+								{#each statuses as s (s.id)}
+									<button
+										class="opt"
+										type="button"
+										disabled={subBusy}
+										onclick={() => bulkSub({ statusId: s.id }, close)}>{s.name}</button
+									>
 								{/each}
 							{/snippet}
 						</Popover>
-					{/if}
-					<button class="sub-bulk-del" type="button" disabled={subBusy} onclick={bulkSubDelete}><Icon name="trash" size={12} /> {$t('Delete')}</button>
-					<button class="sub-bulk-clear" type="button" aria-label={$t('Clear selection')} onclick={() => (subSel = [])}><Icon name="xmark" size={12} /></button>
-				</div>
-			{/if}
-			{#if subs.length > 0}
-				<div class="sub-list">
-					{#each subs as s (s.id)}
-						{@const sEdit = canEditTask(s)}
-						<div class="sub-item" class:is-done={cat(s.statusId) === 'completed'} class:sub-item--sel={subChecked(s.id)}>
-							<div class="sub-row">
-								{#if sEdit}
-									<input
-										class="sub-check"
-										type="checkbox"
-										aria-label={$t('Select sub-task')}
-										checked={subChecked(s.id)}
-										onclick={() => toggleSub(s.id)}
-									/>
-								{/if}
-								<div class="sub-body">
-								<div class="sub-head">
-								<button class="sub-title-btn" type="button" onclick={() => onSelectTask?.(s.id)}>{s.title}</button>
-								<span class="spacer"></span>
-								{#if sEdit}
-									<div class="sub-actions">
-										<!-- promote: detach from this parent → becomes a top-level task -->
-										<form method="POST" action="?/patchTask" use:enhance>
-											<input type="hidden" name="id" value={s.id} />
-											<input type="hidden" name="parentId" value="" />
+						<!-- Assignee -->
+						<Popover ariaLabel={$t('Set assignee')}>
+							{#snippet trigger()}<span class="pill-val"
+									><Icon name="user" size={12} /> {$t('Assignee')}</span
+								>{/snippet}
+							{#snippet panel(close)}
+								<button
+									class="opt"
+									type="button"
+									disabled={subBusy}
+									onclick={() => bulkSub({ assigneeId: '' }, close)}>{$t('Unassigned')}</button
+								>
+								{#each users as u (u.id)}
+									<button
+										class="opt"
+										type="button"
+										disabled={subBusy}
+										onclick={() => bulkSub({ assigneeId: u.id }, close)}>{u.name}</button
+									>
+								{/each}
+							{/snippet}
+						</Popover>
+						<!-- Priority -->
+						<Popover ariaLabel={$t('Set priority')}>
+							{#snippet trigger()}<span class="pill-val"
+									><Icon name="priority-high" size={12} /> {$t('Priority')}</span
+								>{/snippet}
+							{#snippet panel(close)}
+								{#each PRIORITIES as p (p)}
+									<button
+										class="opt"
+										type="button"
+										disabled={subBusy}
+										onclick={() => bulkSub({ priority: p }, close)}
+										><PriorityIcon priority={p} /> {$t(p)}</button
+									>
+								{/each}
+							{/snippet}
+						</Popover>
+						<!-- Labels (multi-value: each row toggles that label across the whole selection) -->
+						{#if labels.length > 0}
+							<Popover ariaLabel={$t('Set labels')}>
+								{#snippet trigger()}<span class="pill-val"
+										><Icon name="label" size={12} /> {$t('Labels')}</span
+									>{/snippet}
+								{#snippet panel()}
+									{#each labels as l (l.id)}
+										{@const allHave = subAllHaveLabel(l.id)}
+										<button
+											class="opt"
+											class:opt--on={allHave}
+											aria-pressed={allHave}
+											type="button"
+											disabled={subBusy}
+											onclick={() => bulkSubLabel(l.id, !allHave)}
+										>
+											<LabelChip label={l} />
+										</button>
+									{/each}
+								{/snippet}
+							</Popover>
+						{/if}
+						<button class="sub-bulk-del" type="button" disabled={subBusy} onclick={bulkSubDelete}
+							><Icon name="trash" size={12} /> {$t('Delete')}</button
+						>
+						<button
+							class="sub-bulk-clear"
+							type="button"
+							aria-label={$t('Clear selection')}
+							onclick={() => (subSel = [])}><Icon name="xmark" size={12} /></button
+						>
+					</div>
+				{/if}
+				{#if subs.length > 0}
+					<div class="sub-list">
+						{#each subs as s (s.id)}
+							{@const sEdit = canEditTask(s)}
+							<div
+								class="sub-item"
+								class:is-done={cat(s.statusId) === 'completed'}
+								class:sub-item--sel={subChecked(s.id)}
+							>
+								<div class="sub-row">
+									{#if sEdit}
+										<input
+											class="sub-check"
+											type="checkbox"
+											aria-label={$t('Select sub-task')}
+											checked={subChecked(s.id)}
+											onclick={() => toggleSub(s.id)}
+										/>
+									{/if}
+									<div class="sub-body">
+										<div class="sub-head">
 											<button
-												class="sub-act"
-												type="submit"
-												aria-label={$t('Make into task')}
-												use:tooltip={$t('Make into task')}
-											>
-												<Icon name="arrow-up-right-square" size={14} />
-											</button>
-										</form>
-										<!-- delete -->
-										<form method="POST" action="?/deleteTask" use:enhance>
-											<input type="hidden" name="id" value={s.id} />
-											<button
-												class="sub-act sub-act--del"
+												class="sub-title-btn"
 												type="button"
-												aria-label={$t('Delete sub-task')}
-												use:tooltip={$t('Delete sub-task')}
-												onclick={async (e) => {
-													const form = e.currentTarget.form;
-													if (await confirmDialog($t('Delete this sub-task?'), { confirmLabel: $t('Delete'), danger: true }))
-														form?.requestSubmit();
-												}}
+												onclick={() => onSelectTask?.(s.id)}>{s.title}</button
 											>
-												<Icon name="trash" size={14} />
-											</button>
-										</form>
+											<span class="spacer"></span>
+											{#if sEdit}
+												<div class="sub-actions">
+													<!-- promote: detach from this parent → becomes a top-level task -->
+													<form method="POST" action="?/patchTask" use:enhance>
+														<input type="hidden" name="id" value={s.id} />
+														<input type="hidden" name="parentId" value="" />
+														<button
+															class="sub-act"
+															type="submit"
+															aria-label={$t('Make into task')}
+															use:tooltip={$t('Make into task')}
+														>
+															<Icon name="arrow-up-right-square" size={14} />
+														</button>
+													</form>
+													<!-- delete -->
+													<form method="POST" action="?/deleteTask" use:enhance>
+														<input type="hidden" name="id" value={s.id} />
+														<button
+															class="sub-act sub-act--del"
+															type="button"
+															aria-label={$t('Delete sub-task')}
+															use:tooltip={$t('Delete sub-task')}
+															onclick={async (e) => {
+																const form = e.currentTarget.form;
+																if (
+																	await confirmDialog($t('Delete this sub-task?'), {
+																		confirmLabel: $t('Delete'),
+																		danger: true
+																	})
+																)
+																	form?.requestSubmit();
+															}}
+														>
+															<Icon name="trash" size={14} />
+														</button>
+													</form>
+												</div>
+											{/if}
+										</div>
+										<div class="sub-pills">
+											<StatusSelect
+												taskId={s.id}
+												statusId={s.statusId}
+												{statuses}
+												canEdit={sEdit}
+												display={statusDisplay}
+											/>
+											{@render subPriority(s, sEdit)}
+											{@render subAssignee(s, sEdit)}
+											{@render subDue(s, sEdit)}
+											{@render subBlocked(s, sEdit)}
+											{@render subLabels(s, sEdit)}
+										</div>
 									</div>
-								{/if}
+								</div>
 							</div>
-							<div class="sub-pills">
-								<StatusSelect taskId={s.id} statusId={s.statusId} {statuses} canEdit={sEdit} display={statusDisplay} />
-								{@render subPriority(s, sEdit)}
-								{@render subAssignee(s, sEdit)}
-								{@render subMilestone(s, sEdit)}
-								{@render subDue(s, sEdit)}
-								{@render subLabels(s, sEdit)}
-							</div>
-							</div>
-							</div>
-						</div>
-					{/each}
-				</div>
-			{:else}
-				<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">{$t('none')}</p>
-			{/if}
+						{/each}
+					</div>
+				{:else}
+					<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">{$t('none')}</p>
+				{/if}
 			{/if}
 		</div>
 	{/if}
@@ -1068,7 +1337,12 @@
 	{/if}
 
 	<div class="section">
-		<TaskAttachments taskId={task.id} {files} coverFileId={task.coverFileId ?? null} canEdit={editable} />
+		<TaskAttachments
+			taskId={task.id}
+			{files}
+			coverFileId={task.coverFileId ?? null}
+			canEdit={editable}
+		/>
 	</div>
 
 	{#if editable && labels.length > 0}
@@ -1103,10 +1377,11 @@
 			<form
 				method="POST"
 				action="?/deleteTask"
-				use:enhance={() => async ({ update }) => {
-					onClose();
-					await update();
-				}}
+				use:enhance={() =>
+					async ({ update }) => {
+						onClose();
+						await update();
+					}}
 			>
 				<input type="hidden" name="id" value={task.id} />
 				<button
@@ -1114,8 +1389,10 @@
 					type="button"
 					onclick={async (e) => {
 						const form = e.currentTarget.form;
-						const msg = subs.length > 0 ? $t('Delete this task and its sub-tasks?') : $t('Delete this task?');
-						if (await confirmDialog(msg, { confirmLabel: $t('Delete'), danger: true })) form?.requestSubmit();
+						const msg =
+							subs.length > 0 ? $t('Delete this task and its sub-tasks?') : $t('Delete this task?');
+						if (await confirmDialog(msg, { confirmLabel: $t('Delete'), danger: true }))
+							form?.requestSubmit();
 					}}>{$t('Delete task')}</button
 				>
 			</form>
@@ -1181,14 +1458,15 @@
 				method="POST"
 				action="?/saveTaskAsTemplate"
 				class="hidden-form"
-				use:enhance={() => async ({ update, result }) => {
-					await update({ reset: false });
-					if (result.type === 'success') {
-						savingTpl = false;
-						tplQuery = '';
-						tplTargetId = '';
-					}
-				}}
+				use:enhance={() =>
+					async ({ update, result }) => {
+						await update({ reset: false });
+						if (result.type === 'success') {
+							savingTpl = false;
+							tplQuery = '';
+							tplTargetId = '';
+						}
+					}}
 			>
 				<input type="hidden" name="taskId" value={task.id} />
 				<input type="hidden" name="templateId" value={tplTargetId} />
@@ -1199,7 +1477,12 @@
 </SidePane>
 
 <!-- A `task`-type custom field as a collapsible sub-task-style list of linked tasks -->
-{#snippet taskCfList(field: { id: string; name: string; type: string; config: Record<string, unknown> })}
+{#snippet taskCfList(field: {
+	id: string;
+	name: string;
+	type: string;
+	config: Record<string, unknown>;
+})}
 	{@const ids = cfIds(field)}
 	{@const linked = cfLinked(field)}
 	{@const fmulti = field.config?.multi === true}
@@ -1217,13 +1500,19 @@
 						{@const ltEdit = canEditTask(lt)}
 						<div class="sub-item" class:is-done={cat(lt.statusId) === 'completed'}>
 							<div class="sub-head">
-								<button class="sub-title-btn" type="button" onclick={() => onSelectTask?.(lt.id)}>{lt.title}</button>
+								<button class="sub-title-btn" type="button" onclick={() => onSelectTask?.(lt.id)}
+									>{lt.title}</button
+								>
 								<span class="spacer"></span>
 								{#if editable}
 									<div class="sub-actions">
 										<form method="POST" action="?/patchTask" use:enhance>
 											<input type="hidden" name="id" value={task.id} />
-											<input type="hidden" name={`cf_${field.id}`} value={cfRemoveVal(ids, lt.id)} />
+											<input
+												type="hidden"
+												name={`cf_${field.id}`}
+												value={cfRemoveVal(ids, lt.id)}
+											/>
 											<button
 												class="sub-act sub-act--del"
 												type="submit"
@@ -1237,7 +1526,13 @@
 								{/if}
 							</div>
 							<div class="sub-pills">
-								<StatusSelect taskId={lt.id} statusId={lt.statusId} {statuses} canEdit={ltEdit} display={statusDisplay} />
+								<StatusSelect
+									taskId={lt.id}
+									statusId={lt.statusId}
+									{statuses}
+									canEdit={ltEdit}
+									display={statusDisplay}
+								/>
 								{@render subPriority(lt, ltEdit)}
 								{@render subAssignee(lt, ltEdit)}
 								{@render subMilestone(lt, ltEdit)}
@@ -1257,11 +1552,20 @@
 						{/snippet}
 						{#snippet panel(close)}
 							<!-- svelte-ignore a11y_autofocus -->
-							<input class="pop-search" placeholder={$t('Search tasks…')} bind:value={cfAddQuery} autofocus />
+							<input
+								class="pop-search"
+								placeholder={$t('Search tasks…')}
+								bind:value={cfAddQuery}
+								autofocus
+							/>
 							{#each cfAddCandidates(ids) as c (c.id)}
 								<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 									<input type="hidden" name="id" value={task.id} />
-									<input type="hidden" name={`cf_${field.id}`} value={cfAddVal(ids, c.id, fmulti)} />
+									<input
+										type="hidden"
+										name={`cf_${field.id}`}
+										value={cfAddVal(ids, c.id, fmulti)}
+									/>
 									<button class="opt" type="submit">{c.title}</button>
 								</form>
 							{:else}
@@ -1280,14 +1584,18 @@
 	{#if canEdit}
 		<Popover ariaLabel={$t('Priority')} align="right">
 			{#snippet trigger()}
-				{#if s.priority !== 'none'}<PriorityBadge priority={s.priority} />{:else}<span class="pill-val pill-ph">{$t('Priority')}</span>{/if}
+				{#if s.priority !== 'none'}<PriorityBadge priority={s.priority} />{:else}<span
+						class="pill-val pill-ph">{$t('Priority')}</span
+					>{/if}
 			{/snippet}
 			{#snippet panel(close)}
 				{#each PRIORITIES as p (p)}
 					<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 						<input type="hidden" name="id" value={s.id} />
 						<input type="hidden" name="priority" value={p} />
-						<button class="opt" class:opt--on={s.priority === p} type="submit"><PriorityIcon priority={p} /> {$t(p)}</button>
+						<button class="opt" class:opt--on={s.priority === p} type="submit"
+							><PriorityIcon priority={p} /> {$t(p)}</button
+						>
 					</form>
 				{/each}
 			{/snippet}
@@ -1301,19 +1609,23 @@
 	{#if canEdit}
 		<Popover ariaLabel={$t('Assignee')} align="right">
 			{#snippet trigger()}
-				<span class="pill-val" class:pill-ph={!s.assigneeId}>{userName(s.assigneeId) ?? $t('Assignee')}</span>
+				<span class="pill-val" class:pill-ph={!s.assigneeId}
+					>{userName(s.assigneeId) ?? $t('Assignee')}</span
+				>
 			{/snippet}
 			{#snippet panel(close)}
 				<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 					<input type="hidden" name="id" value={s.id} />
 					<input type="hidden" name="assigneeId" value="" />
-					<button class="opt" class:opt--on={!s.assigneeId} type="submit">{$t('Unassigned')}</button>
+					<button class="opt" class:opt--on={!s.assigneeId} type="submit">{$t('Unassigned')}</button
+					>
 				</form>
 				{#each users as u (u.id)}
 					<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 						<input type="hidden" name="id" value={s.id} />
 						<input type="hidden" name="assigneeId" value={u.id} />
-						<button class="opt" class:opt--on={s.assigneeId === u.id} type="submit">{u.name}</button>
+						<button class="opt" class:opt--on={s.assigneeId === u.id} type="submit">{u.name}</button
+						>
 					</form>
 				{/each}
 			{/snippet}
@@ -1327,25 +1639,45 @@
 	{#if canEdit}
 		<Popover ariaLabel={$t('Milestone')} align="right">
 			{#snippet trigger()}
-				<span class="pill-val" class:pill-ph={!s.milestoneId}>{milestoneName(s.milestoneId) ?? $t('Milestone')}</span>
+				<span class="pill-val" class:pill-ph={!s.milestoneId}
+					>{milestoneName(s.milestoneId) ?? $t('Milestone')}</span
+				>
 			{/snippet}
 			{#snippet panel(close)}
 				<!-- svelte-ignore a11y_autofocus -->
-				<input class="pop-search" placeholder={$t('Search or create…')} bind:value={mQuery} autofocus />
+				<input
+					class="pop-search"
+					placeholder={$t('Search or create…')}
+					bind:value={mQuery}
+					autofocus
+				/>
 				<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 					<input type="hidden" name="id" value={s.id} />
 					<input type="hidden" name="milestoneId" value="" />
-					<button class="opt" class:opt--on={!s.milestoneId} type="submit">{$t('No milestone')}</button>
+					<button class="opt" class:opt--on={!s.milestoneId} type="submit"
+						>{$t('No milestone')}</button
+					>
 				</form>
 				{#each mFiltered as m (m.id)}
 					<form method="POST" action="?/patchTask" use:enhance={pick(close)}>
 						<input type="hidden" name="id" value={s.id} />
 						<input type="hidden" name="milestoneId" value={m.id} />
-						<button class="opt" class:opt--on={s.milestoneId === m.id} type="submit">{m.name}</button>
+						<button class="opt" class:opt--on={s.milestoneId === m.id} type="submit"
+							>{m.name}</button
+						>
 					</form>
 				{/each}
 				{#if mQuery.trim() && mFiltered.length === 0}
-					<form method="POST" action="?/createMilestone" use:enhance={() => async ({ update }) => { close(); mQuery = ''; update(); }}>
+					<form
+						method="POST"
+						action="?/createMilestone"
+						use:enhance={() =>
+							async ({ update }) => {
+								close();
+								mQuery = '';
+								update();
+							}}
+					>
 						<input type="hidden" name="taskId" value={s.id} />
 						<input type="hidden" name="name" value={mQuery.trim()} />
 						<button class="opt opt--create" type="submit">{$t('Create')} “{mQuery.trim()}”</button>
@@ -1362,13 +1694,21 @@
 	{#if canEdit}
 		<Popover ariaLabel={$t('Due date')} align="right">
 			{#snippet trigger()}
-				<span class="pill-val mono" class:pill-ph={!s.dueDate}>{fmtDate(s.dueDate) ?? $t('Due')}</span>
+				<span class="pill-val mono" class:pill-ph={!s.dueDate}
+					>{fmtDate(s.dueDate) ?? $t('Due')}</span
+				>
 			{/snippet}
 			{#snippet panel(close)}
 				<DatePicker
 					value={fmtDate(s.dueDate)}
-					onSelect={(d) => { setDate(s.id, 'dueDate', d); close(); }}
-					onClear={() => { setDate(s.id, 'dueDate', ''); close(); }}
+					onSelect={(d) => {
+						setDate(s.id, 'dueDate', d);
+						close();
+					}}
+					onClear={() => {
+						setDate(s.id, 'dueDate', '');
+						close();
+					}}
 				/>
 			{/snippet}
 		</Popover>
@@ -1383,7 +1723,9 @@
 		<Popover ariaLabel={$t('Labels')} align="right">
 			{#snippet trigger()}
 				{#if sLabels.length > 0}
-					<span class="pill-labels">{#each sLabels as l (l!.id)}<LabelChip label={l!} />{/each}</span>
+					<span class="pill-labels"
+						>{#each sLabels as l (l!.id)}<LabelChip label={l!} />{/each}</span
+					>
 				{:else}
 					<span class="pill-val pill-ph"><Icon name="label" size={12} /> {$t('Labels')}</span>
 				{/if}
@@ -1394,13 +1736,74 @@
 					<form method="POST" action="?/toggleTaskLabel" use:enhance>
 						<input type="hidden" name="taskId" value={s.id} />
 						<input type="hidden" name="labelId" value={l.id} />
-						<button class="opt" class:opt--on={active} type="submit"><LabelChip label={l} /></button>
+						<button class="opt" class:opt--on={active} type="submit"><LabelChip label={l} /></button
+						>
 					</form>
 				{/each}
 			{/snippet}
 		</Popover>
 	{:else if sLabels.length > 0}
-		<span class="pill-labels">{#each sLabels as l (l!.id)}<LabelChip label={l!} />{/each}</span>
+		<span class="pill-labels"
+			>{#each sLabels as l (l!.id)}<LabelChip label={l!} />{/each}</span
+		>
+	{/if}
+{/snippet}
+
+{#snippet subBlocked(s: Task, canEdit: boolean)}
+	{@const sDeps = subDepsOf(s)}
+	{#if canEdit}
+		<Popover ariaLabel={$t('Blocked by')} align="right">
+			{#snippet trigger()}
+				<span class="pill-val" class:pill-ph={sDeps.length === 0}
+					>{$t('Blocked by')}{#if sDeps.length > 0}&nbsp;· {sDeps.length}{/if}</span
+				>
+			{/snippet}
+			{#snippet panel()}
+				{#each sDeps as d (d!.id)}
+					<form
+						method="POST"
+						action="?/removeTaskDep"
+						use:enhance={() =>
+							async ({ update }) =>
+								update()}
+					>
+						<input type="hidden" name="taskId" value={s.id} />
+						<input type="hidden" name="dependsOnId" value={d!.id} />
+						<button class="opt opt--on" type="submit" use:tooltip={$t('Remove dependency')}
+							>{d!.title} ×</button
+						>
+					</form>
+				{/each}
+				<!-- svelte-ignore a11y_autofocus -->
+				<input
+					class="pop-search"
+					placeholder={$t('Add a blocker…')}
+					bind:value={subDepQuery}
+					autofocus
+				/>
+				{#each subDepCandidates(s) as opt (opt.id)}
+					<form
+						method="POST"
+						action="?/addTaskDep"
+						use:enhance={() =>
+							async ({ update }) => {
+								subDepQuery = '';
+								update();
+							}}
+					>
+						<input type="hidden" name="taskId" value={s.id} />
+						<input type="hidden" name="dependsOnId" value={opt.id} />
+						<button class="opt" type="submit">{opt.title}</button>
+					</form>
+				{:else}
+					<span class="opt-empty"
+						>{subDepQuery.trim() ? $t('No matches') : $t('No other sub-tasks')}</span
+					>
+				{/each}
+			{/snippet}
+		</Popover>
+	{:else if sDeps.length > 0}
+		<span class="pill-val">{$t('Blocked by')} · {sDeps.length}</span>
 	{/if}
 {/snippet}
 
@@ -1938,7 +2341,6 @@
 		color: var(--color-error);
 	}
 
-
 	/* Save-as-template footer control (morphs button ↔ search field) */
 	.save-tpl-slot {
 		margin-left: auto;
@@ -1965,7 +2367,9 @@
 		cursor: pointer;
 		padding: 4px;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.icon-btn:hover {

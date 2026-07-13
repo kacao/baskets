@@ -1,6 +1,15 @@
 import { and, count, eq, inArray, isNull, asc } from 'drizzle-orm';
-import { db } from '$lib/server/db';
-import { file, label, location, milestone, project, task, taskLabel, user } from '$lib/server/db/schema';
+import { db, withTransaction, type DB } from '$lib/server/db';
+import {
+	file,
+	label,
+	location,
+	milestone,
+	project,
+	task,
+	taskLabel,
+	user
+} from '$lib/server/db/schema';
 import { PRIORITIES } from '$lib/server/api';
 import { dispatchEvent } from '$lib/server/integrations';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
@@ -11,15 +20,19 @@ import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
 import { listProjectStatuses } from '$lib/server/statuses';
 import { canAccessProject, canEditTask } from '$lib/server/permissions';
 import { writeTaskCustomValues } from '$lib/server/customFields';
+import { deleteFilesForTasks } from '$lib/server/uploads';
 
 export type Actor = { id: string; name?: string | null };
 
 export type ServiceResult<T> =
-	| { ok: true; data: T }
-	| { ok: false; status: number; message: string };
+	{ ok: true; data: T } | { ok: false; status: number; message: string };
 
 const ok = <T>(data: T): ServiceResult<T> => ({ ok: true, data });
-const err = (status: number, message: string): ServiceResult<never> => ({ ok: false, status, message });
+const err = (status: number, message: string): ServiceResult<never> => ({
+	ok: false,
+	status,
+	message
+});
 
 /** Custom-field entries (`{ fieldId, raw }`) passed straight to writeTaskCustomValues. */
 type CfEntry = { fieldId: string; raw: string | null };
@@ -31,6 +44,45 @@ async function getTask(id: string) {
 
 function isPriority(p: string): boolean {
 	return PRIORITIES.includes(p as (typeof PRIORITIES)[number]);
+}
+
+/**
+ * When a task transitions INTO a completed status (and wasn't already
+ * completed) and has a recurrence rule, spawn the next occurrence as a fresh
+ * backlog task with due date advanced. No-op otherwise.
+ */
+async function spawnRecurrenceIfCompleting(
+	existing: typeof task.$inferSelect,
+	eligible: Awaited<ReturnType<typeof listProjectStatuses>>,
+	targetCategory: string,
+	wasCompleted: boolean,
+	actor: Actor,
+	exec: DB = db
+): Promise<void> {
+	if (targetCategory !== 'completed' || wasCompleted || !existing.recurrence) return;
+	const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
+	const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
+	if (!backlog) return;
+	const spawnNow = new Date();
+	await exec.insert(task).values({
+		id: crypto.randomUUID(),
+		projectId: existing.projectId,
+		parentId: existing.parentId,
+		title: existing.title,
+		description: existing.description,
+		priority: existing.priority,
+		statusId: backlog.id,
+		assigneeId: existing.assigneeId,
+		milestoneId: existing.milestoneId,
+		locationId: existing.locationId,
+		startDate: existing.startDate,
+		dueDate: nextDue,
+		recurrence: existing.recurrence,
+		createdBy: actor.id,
+		position: spawnNow.getTime(),
+		createdAt: spawnNow,
+		updatedAt: spawnNow
+	});
 }
 
 /* --------------------------------- create --------------------------------- */
@@ -65,8 +117,7 @@ export async function createTaskService(
 	actor: Actor
 ): Promise<ServiceResult<typeof task.$inferSelect>> {
 	const { projectId } = input;
-	if (!(await canAccessProject(actor, projectId)))
-		return err(403, 'No access to this project');
+	if (!(await canAccessProject(actor, projectId))) return err(403, 'No access to this project');
 
 	const title = input.title.trim();
 	const parentId = input.parentId ?? null;
@@ -76,8 +127,9 @@ export async function createTaskService(
 	if (title.length > 240) return err(400, 'Title too long (max 240)');
 	if (!isPriority(priority)) return err(400, 'Invalid priority');
 
+	let parent: Awaited<ReturnType<typeof getTask>> | null = null;
 	if (parentId) {
-		const parent = await getTask(parentId);
+		parent = await getTask(parentId);
 		if (!parent || parent.projectId !== projectId) return err(400, 'Invalid parent task');
 		if (parent.parentId) return err(400, 'Sub-tasks cannot have their own sub-tasks');
 	}
@@ -103,10 +155,17 @@ export async function createTaskService(
 		const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
 		if (!u) return err(400, 'Unknown assignee');
 	}
-	const milestoneId = input.milestoneId ?? null;
-	if (milestoneId) {
-		const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-		if (!m || m.projectId !== projectId) return err(400, 'Milestone must belong to this project');
+	// Sub-tasks inherit the parent's milestone (the milestone UI is hidden on sub-tasks
+	// and always follows the parent); top-level tasks validate the supplied milestone.
+	let milestoneId: string | null;
+	if (parent) {
+		milestoneId = parent.milestoneId;
+	} else {
+		milestoneId = input.milestoneId ?? null;
+		if (milestoneId) {
+			const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
+			if (!m || m.projectId !== projectId) return err(400, 'Milestone must belong to this project');
+		}
 	}
 	const locationId = input.locationId ?? null;
 	if (locationId) {
@@ -194,34 +253,8 @@ export async function setTaskStatusService(
 
 	// Recurring task: when it moves into a completed status, spawn the next
 	// occurrence with its due date advanced by the recurrence rule (BASDEV-8).
-	const wasCompleted =
-		eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-	if (target.category === 'completed' && !wasCompleted && existing.recurrence) {
-		const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
-		const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-		if (backlog) {
-			const spawnNow = new Date();
-			await db.insert(task).values({
-				id: crypto.randomUUID(),
-				projectId: existing.projectId,
-				parentId: existing.parentId,
-				title: existing.title,
-				description: existing.description,
-				priority: existing.priority,
-				statusId: backlog.id,
-				assigneeId: existing.assigneeId,
-				milestoneId: existing.milestoneId,
-				locationId: existing.locationId,
-				startDate: existing.startDate,
-				dueDate: nextDue,
-				recurrence: existing.recurrence,
-				createdBy: actor.id,
-				position: spawnNow.getTime(),
-				createdAt: spawnNow,
-				updatedAt: spawnNow
-			});
-		}
-	}
+	const wasCompleted = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	await spawnRecurrenceIfCompleting(existing, eligible, target.category, wasCompleted, actor);
 
 	// Completing a parent completes its sub-tasks
 	if (target.category === 'completed') {
@@ -300,6 +333,7 @@ export async function moveTaskService(
 		.where(eq(task.id, taskId));
 
 	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	await spawnRecurrenceIfCompleting(existing, eligible, target.category, wasDone, actor);
 	if (target.category === 'completed') {
 		await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.parentId, taskId));
 	}
@@ -418,8 +452,7 @@ export async function updateTaskService(
 		const milestoneId = input.milestoneId ?? null;
 		if (milestoneId) {
 			const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-			if (!m || m.projectId !== projectId)
-				return err(400, 'Milestone must belong to this project');
+			if (!m || m.projectId !== projectId) return err(400, 'Milestone must belong to this project');
 		}
 		set.milestoneId = milestoneId;
 	}
@@ -427,8 +460,7 @@ export async function updateTaskService(
 		const locationId = input.locationId ?? null;
 		if (locationId) {
 			const [l] = await db.select().from(location).where(eq(location.id, locationId));
-			if (!l || l.projectId !== projectId)
-				return err(400, 'Location must belong to this project');
+			if (!l || l.projectId !== projectId) return err(400, 'Location must belong to this project');
 		}
 		set.locationId = locationId;
 	}
@@ -468,6 +500,8 @@ export async function updateTaskService(
 				.from(task)
 				.where(eq(task.parentId, taskId));
 			if (n > 0) return err(400, 'Move or remove this task’s sub-tasks first');
+			// becoming a sub-task → inherit the parent's milestone (sub-tasks follow it)
+			set.milestoneId = parent.milestoneId;
 		}
 		set.parentId = parentId;
 	}
@@ -475,63 +509,66 @@ export async function updateTaskService(
 	const cf = input.cf ?? [];
 	if (Object.keys(set).length === 0 && cf.length === 0) return err(400, 'No fields to update');
 
-	// Write custom values FIRST so a CF validation error doesn't leave the task
-	// row partially updated with no rollback (no surrounding transaction).
-	if (cf.length > 0) {
-		const res = await writeTaskCustomValues(taskId, projectId, cf);
-		if (res.error) return err(400, res.error);
-	}
-
-	const [updated] = await db
-		.update(task)
-		.set({ ...set, updatedAt: new Date() })
-		.where(eq(task.id, taskId))
-		.returning();
-
 	// Completing a parent completes its sub-tasks + recurrence spawn (REST PATCH).
-	if (opts.completeCascade) {
-		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-		if (targetStatus?.category === 'completed' && !wasDone) {
-			if (existing.recurrence) {
-				const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
-				const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-				if (backlog) {
-					const spawnNow = new Date();
-					await db.insert(task).values({
-						id: crypto.randomUUID(),
-						projectId: existing.projectId,
-						parentId: existing.parentId,
-						title: existing.title,
-						description: existing.description,
-						priority: existing.priority,
-						statusId: backlog.id,
-						assigneeId: existing.assigneeId,
-						milestoneId: existing.milestoneId,
-						locationId: existing.locationId,
-						startDate: existing.startDate,
-						dueDate: nextDue,
-						recurrence: existing.recurrence,
-						createdBy: actor.id,
-						position: spawnNow.getTime(),
-						createdAt: spawnNow,
-						updatedAt: spawnNow
-					});
+	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	const didCascade = Boolean(
+		opts.completeCascade && targetStatus?.category === 'completed' && !wasDone
+	);
+
+	// CF write, task update, and (on a completing transition) the recurrence spawn
+	// + sub-task cascade all happen atomically (ADR-057) — a CF validation error
+	// or any mid-sequence throw rolls back the whole patch, not just part of it.
+	// Fire-and-forget side effects (dispatchEvent, logActivity, notifyMentions,
+	// createNotification, broadcastProjectChange) stay OUTSIDE the transaction.
+	let updated: typeof task.$inferSelect;
+	let cfError: string | null = null;
+	try {
+		updated = await withTransaction(async (tx) => {
+			if (cf.length > 0) {
+				const res = await writeTaskCustomValues(taskId, projectId, cf, tx);
+				if (res.error) {
+					cfError = res.error;
+					throw new Error('cf-validation');
 				}
 			}
 
-			await db
+			const [row] = await tx
 				.update(task)
-				.set({ statusId: targetStatus.id, updatedAt: new Date() })
-				.where(eq(task.parentId, taskId));
+				.set({ ...set, updatedAt: new Date() })
+				.where(eq(task.id, taskId))
+				.returning();
 
-			const [proj] = await db.select().from(project).where(eq(project.id, projectId));
-			void dispatchEvent({
-				type: 'task.completed',
-				actor: actor.name ?? 'Unknown',
-				projectName: proj?.name ?? 'Unknown project',
-				taskTitle: updated.title
-			});
-		}
+			if (didCascade && targetStatus) {
+				await spawnRecurrenceIfCompleting(
+					existing,
+					eligible,
+					targetStatus.category,
+					wasDone,
+					actor,
+					tx
+				);
+
+				await tx
+					.update(task)
+					.set({ statusId: targetStatus.id, updatedAt: new Date() })
+					.where(eq(task.parentId, taskId));
+			}
+
+			return row;
+		});
+	} catch (e) {
+		if (cfError) return err(400, cfError);
+		throw e;
+	}
+
+	if (didCascade) {
+		const [proj] = await db.select().from(project).where(eq(project.id, projectId));
+		void dispatchEvent({
+			type: 'task.completed',
+			actor: actor.name ?? 'Unknown',
+			projectName: proj?.name ?? 'Unknown project',
+			taskTitle: updated.title
+		});
 	}
 
 	if (opts.logActivity) {
@@ -601,6 +638,8 @@ export async function deleteTaskService(
 	if (!existing || existing.projectId !== projectId) return err(400, 'Invalid task');
 	if (!(await canEditTask(actor, existing))) return err(403, 'No edit permission on this task');
 
+	const subs = await db.select({ id: task.id }).from(task).where(eq(task.parentId, taskId));
+	await deleteFilesForTasks([taskId, ...subs.map((s) => s.id)]);
 	await db.delete(task).where(eq(task.parentId, taskId)); // sub-tasks first
 	await db.delete(task).where(eq(task.id, taskId));
 	broadcastProjectChange(projectId, actor.id);
@@ -612,15 +651,18 @@ export async function deleteTaskService(
 /**
  * Resolve the editable subset of `ids` scoped to `projectId`: only rows in this
  * project the actor can edit. Mirrors the form actions (project from params).
+ *
+ * Task-edit permission == project access (ADR-019, canEditTask is defined as
+ * canAccessProject(user, t.projectId)) — resolve it once, not once per row.
  */
 async function bulkAllowed(ids: string[], projectId: string, actor: Actor): Promise<string[]> {
-	const rows = await db.select().from(task).where(inArray(task.id, ids));
-	const allowed: string[] = [];
-	for (const t of rows) {
-		if (t.projectId !== projectId) continue;
-		if (await canEditTask(actor, t)) allowed.push(t.id);
-	}
-	return allowed;
+	if (ids.length === 0) return [];
+	if (!(await canAccessProject(actor, projectId))) return [];
+	const rows = await db
+		.select({ id: task.id, projectId: task.projectId })
+		.from(task)
+		.where(inArray(task.id, ids));
+	return rows.filter((t) => t.projectId === projectId).map((t) => t.id);
 }
 
 export type BulkSet = {
@@ -632,7 +674,9 @@ export type BulkSet = {
 	parentId?: string | null;
 	addLabelIds?: string[];
 	removeLabelIds?: string[];
-	has: (key: 'statusId' | 'statusName' | 'assigneeId' | 'milestoneId' | 'priority' | 'parentId') => boolean;
+	has: (
+		key: 'statusId' | 'statusName' | 'assigneeId' | 'milestoneId' | 'priority' | 'parentId'
+	) => boolean;
 };
 
 export async function bulkUpdateTasks(
@@ -654,9 +698,7 @@ export async function bulkUpdateTasks(
 			if (!set.statusId) return err(400, 'Invalid status');
 			target = eligible.find((s) => s.id === set.statusId);
 		} else {
-			target = eligible.find(
-				(s) => s.name.toLowerCase() === (set.statusName ?? '').toLowerCase()
-			);
+			target = eligible.find((s) => s.name.toLowerCase() === (set.statusName ?? '').toLowerCase());
 		}
 		if (!target) return err(400, 'Status not eligible for this project');
 		updates.statusId = target.id;
@@ -674,8 +716,7 @@ export async function bulkUpdateTasks(
 		const milestoneId = set.milestoneId ?? null;
 		if (milestoneId) {
 			const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-			if (!m || m.projectId !== projectId)
-				return err(400, 'Milestone must belong to this project');
+			if (!m || m.projectId !== projectId) return err(400, 'Milestone must belong to this project');
 		}
 		updates.milestoneId = milestoneId;
 	}
@@ -810,6 +851,8 @@ export async function bulkDeleteTasks(
 	const allowed = await bulkAllowed(ids, projectId, actor);
 	if (allowed.length === 0) return err(403, 'No deletable tasks selected');
 
+	const subs = await db.select({ id: task.id }).from(task).where(inArray(task.parentId, allowed));
+	await deleteFilesForTasks([...allowed, ...subs.map((s) => s.id)]);
 	await db.delete(task).where(inArray(task.parentId, allowed)); // sub-tasks first
 	await db.delete(task).where(inArray(task.id, allowed));
 

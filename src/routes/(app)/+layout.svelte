@@ -34,7 +34,6 @@
 			: 'contrast=; path=/; max-age=0; samesite=lax';
 	}
 
-
 	const currentWorkspace = $derived(
 		data.workspaces.find((w) => w.id === data.currentWorkspaceId) ?? data.workspaces[0]
 	);
@@ -62,10 +61,18 @@
 	const projectNav = [
 		{ label: 'Overview', icon: 'text-box', to: (id: string) => `/projects/${id}/overview` },
 		{ label: 'Tasks', icon: 'task-list', to: (id: string) => `/projects/${id}` },
-		{ label: 'Milestones', icon: 'triangle-flag', to: (id: string) => `/projects/${id}/milestones` },
+		{
+			label: 'Milestones',
+			icon: 'triangle-flag',
+			to: (id: string) => `/projects/${id}/milestones`
+		},
 		{ label: 'Statuses', icon: 'circle', to: (id: string) => `/projects/${id}/statuses` },
 		{ label: 'Labels', icon: 'label', to: (id: string) => `/projects/${id}/labels` },
-		{ label: 'Custom fields', icon: 'input-field', to: (id: string) => `/projects/${id}/custom-fields` },
+		{
+			label: 'Custom fields',
+			icon: 'input-field',
+			to: (id: string) => `/projects/${id}/custom-fields`
+		},
 		{ label: 'Locations', icon: 'map-pin', to: (id: string) => `/projects/${id}/locations` },
 		{ label: 'Files', icon: 'multiple-pages', to: (id: string) => `/projects/${id}/files` },
 		{ label: 'Settings', icon: 'settings', to: (id: string) => `/projects/${id}/settings` }
@@ -104,7 +111,9 @@
 				onclick={() => (wsMenuOpen = !wsMenuOpen)}
 			>
 				<span class="ws-name">{currentWorkspace?.name ?? 'Baskets'}</span>
-				<span class="ws-chevron" class:open={wsMenuOpen} aria-hidden="true"><Icon name="nav-arrow-down" size={12} /></span>
+				<span class="ws-chevron" class:open={wsMenuOpen} aria-hidden="true"
+					><Icon name="nav-arrow-down" size={12} /></span
+				>
 			</button>
 			{#if wsMenuOpen}
 				<div class="ws-menu" transition:fade={{ duration: 100 }}>
@@ -152,14 +161,15 @@
 								aria-label={$t('Toggle project menu')}
 								onclick={() => (expanded[p.id] = !expanded[p.id])}
 							>
-								<span class="proj-chevron" class:open={expanded[p.id]} aria-hidden="true"><Icon name="nav-arrow-right" size={12} /></span>
+								<span class="proj-chevron" class:open={expanded[p.id]} aria-hidden="true"
+									><Icon name="nav-arrow-right" size={12} /></span
+								>
 							</button>
-							<a
-								href="/projects/{p.id}"
-								class="proj-name"
-								onclick={() => (menuOpen = false)}
-							>
-								{#if p.icon}<span class="nav-icon"><EntityIcon value={p.icon} size={14} /></span>{:else if p.pinned}<span class="nav-icon" aria-hidden="true"><Icon name="star" size={12} /></span>{/if}{p.name}
+							<a href="/projects/{p.id}" class="proj-name" onclick={() => (menuOpen = false)}>
+								{#if p.icon}<span class="nav-icon"><EntityIcon value={p.icon} size={14} /></span
+									>{:else if p.pinned}<span class="nav-icon" aria-hidden="true"
+										><Icon name="star" size={12} /></span
+									>{/if}{p.name}
 							</a>
 						</div>
 						{#if expanded[p.id]}
@@ -172,7 +182,9 @@
 										{href}
 										onclick={() => (menuOpen = false)}
 									>
-										<span class="sub-ic" aria-hidden="true"><Icon name={item.icon} size={13} /></span>{$t(item.label)}
+										<span class="sub-ic" aria-hidden="true"
+											><Icon name={item.icon} size={13} /></span
+										>{$t(item.label)}
 									</a>
 								{/each}
 							</div>
@@ -259,13 +271,27 @@
 					</button>
 					{#if apprMenuOpen}
 						<div class="appr-menu" role="menu" transition:slide={{ duration: 120 }}>
-							<button class="appr-item" role="menuitemcheckbox" aria-checked={theme === 'dark'} onclick={toggleTheme}>
-								<span class="appr-check">{#if theme === 'dark'}<Icon name="check" size={14} />{/if}</span>
+							<button
+								class="appr-item"
+								role="menuitemcheckbox"
+								aria-checked={theme === 'dark'}
+								onclick={toggleTheme}
+							>
+								<span class="appr-check"
+									>{#if theme === 'dark'}<Icon name="check" size={14} />{/if}</span
+								>
 								<Icon name={theme === 'dark' ? 'sun-light' : 'half-moon'} size={14} />
 								<span class="appr-label">{$t('Dark mode')}</span>
 							</button>
-							<button class="appr-item" role="menuitemcheckbox" aria-checked={highContrast} onclick={toggleContrast}>
-								<span class="appr-check">{#if highContrast}<Icon name="check" size={14} />{/if}</span>
+							<button
+								class="appr-item"
+								role="menuitemcheckbox"
+								aria-checked={highContrast}
+								onclick={toggleContrast}
+							>
+								<span class="appr-check"
+									>{#if highContrast}<Icon name="check" size={14} />{/if}</span
+								>
 								<Icon name="color-filter" size={14} />
 								<span class="appr-label">{$t('High contrast')}</span>
 							</button>

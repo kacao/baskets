@@ -11,13 +11,9 @@ import {
 	PRIORITIES
 } from '$lib/server/api';
 import { isValidRecurrence } from '$lib/recurrence';
-import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject, canEditTask } from '$lib/server/permissions';
-import {
-	apiCustomFieldEntries,
-	customValuesByTask
-} from '$lib/server/customFields';
-import { updateTaskService, type UpdateTaskInput } from '$lib/server/tasks';
+import { apiCustomFieldEntries, customValuesByTask } from '$lib/server/customFields';
+import { deleteTaskService, updateTaskService, type UpdateTaskInput } from '$lib/server/tasks';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals }) => {
@@ -90,7 +86,8 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	}
 
 	if (body.assigneeId !== undefined) {
-		input.assigneeId = typeof body.assigneeId === 'string' && body.assigneeId ? body.assigneeId : null;
+		input.assigneeId =
+			typeof body.assigneeId === 'string' && body.assigneeId ? body.assigneeId : null;
 		has.add('assigneeId');
 	}
 
@@ -232,11 +229,8 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 	// ADR-019: don't confirm existence to users who can't access — 404, not 403
 	if (!(await canAccessProject(locals.user, existing.projectId)))
 		return apiError(404, 'Task not found');
-	if (!(await canEditTask(locals.user, existing)))
-		return apiError(403, 'No edit permission on this task');
 
-	await db.delete(task).where(eq(task.parentId, params.id));
-	await db.delete(task).where(eq(task.id, params.id));
-	broadcastProjectChange(existing.projectId, locals.user.id);
+	const res = await deleteTaskService(params.id, existing.projectId, locals.user);
+	if (!res.ok) return apiError(res.status, res.message);
 	return new Response(null, { status: 204 });
 };

@@ -2,7 +2,11 @@ import { fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { integration } from '$lib/server/db/schema';
-import { SLACK_WEBHOOK_HOST, sendSlackMessage, type SlackConfig } from '$lib/server/integrations/slack';
+import {
+	SLACK_WEBHOOK_HOST,
+	sendSlackMessage,
+	type SlackConfig
+} from '$lib/server/integrations/slack';
 import { isAdmin } from '$lib/server/permissions';
 import type { Actions, PageServerLoad } from './$types';
 

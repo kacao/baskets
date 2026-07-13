@@ -27,10 +27,7 @@ export function optionalString(value: unknown, field: string): string | null {
  * Returns `null` for empty input; a non-string non-null value throws
  * ApiValidationError. `allowEmpty` (default true) governs '' → null.
  */
-export function parseDateField(
-	value: unknown,
-	opts: { allowEmpty?: boolean } = {}
-): Date | null {
+export function parseDateField(value: unknown, opts: { allowEmpty?: boolean } = {}): Date | null {
 	const { allowEmpty = true } = opts;
 	if (value === null || value === undefined) return null;
 	if (value === '' && allowEmpty) return null;

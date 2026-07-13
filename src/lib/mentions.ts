@@ -28,7 +28,11 @@ const TOKEN_RE = /@\[([^\]]*)\]\((task|location|file|project|person|field):([^)]
 
 /** Serialize a mention to its inline token form. Strips characters that would break the token. */
 export function buildToken(m: Mention): string {
-	const label = (m.label ?? '').replace(/\]/g, '').replace(/[\r\n]+/g, ' ').trim() || m.kind;
+	const label =
+		(m.label ?? '')
+			.replace(/\]/g, '')
+			.replace(/[\r\n]+/g, ' ')
+			.trim() || m.kind;
 	const id = String(m.id).replace(/\)/g, '');
 	return `@[${label}](${m.kind}:${id})`;
 }
@@ -61,7 +65,8 @@ export function extractRefs(text: string | null | undefined): Mention[] {
 	return refs;
 }
 
-export type TextPiece = { type: 'text'; text: string } | { type: 'link'; text: string; href: string };
+export type TextPiece =
+	{ type: 'text'; text: string } | { type: 'link'; text: string; href: string };
 
 // http(s):// URLs, bare www.… hosts, and email addresses. Deliberately limited to
 // these so a rendered href can only ever be http(s)/mailto — never javascript: etc.

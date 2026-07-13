@@ -3,9 +3,27 @@
 	// the built-in status defaults already speak (#71717a/#a1a1aa/#3b82f6/#f59e0b/
 	// #16a34a all live here), so existing values highlight as a preset, not "custom".
 	export const COLOR_PRESETS = [
-		'#71717a', '#a1a1aa', '#64748b', '#ef4444', '#f97316', '#f59e0b', '#eab308',
-		'#84cc16', '#22c55e', '#16a34a', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9',
-		'#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e'
+		'#71717a',
+		'#a1a1aa',
+		'#64748b',
+		'#ef4444',
+		'#f97316',
+		'#f59e0b',
+		'#eab308',
+		'#84cc16',
+		'#22c55e',
+		'#16a34a',
+		'#10b981',
+		'#14b8a6',
+		'#06b6d4',
+		'#0ea5e9',
+		'#3b82f6',
+		'#6366f1',
+		'#8b5cf6',
+		'#a855f7',
+		'#d946ef',
+		'#ec4899',
+		'#f43f5e'
 	];
 
 	// Canonical lowercase #rrggbb, or null. Accepts #rgb / #rrggbb (with or without
@@ -15,7 +33,11 @@
 		if (!input) return null;
 		let s = input.trim().toLowerCase();
 		if (s.startsWith('#')) s = s.slice(1);
-		if (/^[0-9a-f]{3}$/.test(s)) s = s.split('').map((c) => c + c).join('');
+		if (/^[0-9a-f]{3}$/.test(s))
+			s = s
+				.split('')
+				.map((c) => c + c)
+				.join('');
 		return /^[0-9a-f]{6}$/.test(s) ? `#${s}` : null;
 	}
 </script>
@@ -63,12 +85,24 @@
 		const n = COLOR_PRESETS.length;
 		let next = focusIdx;
 		switch (e.key) {
-			case 'ArrowRight': next = Math.min(n - 1, focusIdx + 1); break;
-			case 'ArrowLeft': next = Math.max(0, focusIdx - 1); break;
-			case 'ArrowDown': next = Math.min(n - 1, focusIdx + COLS); break;
-			case 'ArrowUp': next = Math.max(0, focusIdx - COLS); break;
-			case 'Home': next = 0; break;
-			case 'End': next = n - 1; break;
+			case 'ArrowRight':
+				next = Math.min(n - 1, focusIdx + 1);
+				break;
+			case 'ArrowLeft':
+				next = Math.max(0, focusIdx - 1);
+				break;
+			case 'ArrowDown':
+				next = Math.min(n - 1, focusIdx + COLS);
+				break;
+			case 'ArrowUp':
+				next = Math.max(0, focusIdx - COLS);
+				break;
+			case 'Home':
+				next = 0;
+				break;
+			case 'End':
+				next = n - 1;
+				break;
 			case 'Enter':
 			case ' ':
 				e.preventDefault();
@@ -155,7 +189,9 @@
 		background: var(--c);
 		cursor: pointer;
 		padding: 0;
-		transition: box-shadow var(--dur-fast) ease, border-color var(--dur-fast) ease;
+		transition:
+			box-shadow var(--dur-fast) ease,
+			border-color var(--dur-fast) ease;
 	}
 
 	.cp-cell.on {
@@ -166,7 +202,9 @@
 	/* :focus outline is suppressed app-wide — make keyboard focus self-evident
 	   with an offset ring (base-100 gap, then --color-fg). */
 	.cp-cell:focus-visible {
-		box-shadow: 0 0 0 2px var(--color-base-100, #fff), 0 0 0 4px var(--color-fg);
+		box-shadow:
+			0 0 0 2px var(--color-base-100, #fff),
+			0 0 0 4px var(--color-fg);
 		z-index: 1;
 	}
 

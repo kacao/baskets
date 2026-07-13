@@ -25,8 +25,24 @@
 		type FieldConfig
 	} from '$lib/customFields';
 
-	type Field = { id: string; name: string; type: string; config: FieldConfig; appliesTo: string; entity?: string; position: number; inUse: number };
-	type Option = { id: string; fieldId: string; title: string; color: string | null; icon: string | null; position: number };
+	type Field = {
+		id: string;
+		name: string;
+		type: string;
+		config: FieldConfig;
+		appliesTo: string;
+		entity?: string;
+		position: number;
+		inUse: number;
+	};
+	type Option = {
+		id: string;
+		fieldId: string;
+		title: string;
+		color: string | null;
+		icon: string | null;
+		position: number;
+	};
 
 	let {
 		fields,
@@ -49,8 +65,16 @@
 		ymd: 'Year/Month/Day',
 		relative: 'Relative'
 	};
-	const TIME_FORMAT_LABELS: Record<string, string> = { hidden: 'Hidden', '12h': '12 hour', '24h': '24 hour' };
-	const DISPLAY_LABELS: Record<string, string> = { text: 'Text only', icon: 'Icon only', 'text-icon': 'Text and icon' };
+	const TIME_FORMAT_LABELS: Record<string, string> = {
+		hidden: 'Hidden',
+		'12h': '12 hour',
+		'24h': '24 hour'
+	};
+	const DISPLAY_LABELS: Record<string, string> = {
+		text: 'Text only',
+		icon: 'Icon only',
+		'text-icon': 'Text and icon'
+	};
 
 	// [Task | Project] tabs — task fields describe tasks, project fields describe
 	// the project itself (entity column). The list + create form follow the tab.
@@ -100,9 +124,11 @@
 
 	function typeHint(f: Field): string {
 		const c = f.config ?? {};
-		if (f.type === 'number') return $t(NUMBER_FORMAT_LABELS[(c.numberFormat as string) ?? 'number']);
+		if (f.type === 'number')
+			return $t(NUMBER_FORMAT_LABELS[(c.numberFormat as string) ?? 'number']);
 		if (f.type === 'date') return $t(DATE_FORMAT_LABELS[(c.dateFormat as string) ?? 'full']);
-		if (['select', 'person', 'place', 'files', 'task'].includes(f.type) && c.multi) return $t('multiple');
+		if (['select', 'person', 'place', 'files', 'task'].includes(f.type) && c.multi)
+			return $t('multiple');
 		return '';
 	}
 
@@ -170,24 +196,47 @@
 	<input type="hidden" name="color" {value} />
 {/snippet}
 
-{#snippet configFields(type: string, cfg: Record<string, any>, appliesTo: string = 'all', isTaskEntity: boolean = true)}
+{#snippet configFields(
+	type: string,
+	cfg: Record<string, any>,
+	appliesTo: string = 'all',
+	isTaskEntity: boolean = true
+)}
 	{#if type === 'number'}
 		<select class="select cfg-in" bind:value={cfg.numberFormat} aria-label={$t('Number format')}>
 			{#each NUMBER_FORMATS as f (f)}<option value={f}>{$t(NUMBER_FORMAT_LABELS[f])}</option>{/each}
 		</select>
 		{#if cfg.numberFormat === 'currency' || cfg.numberFormat === 'accounting' || cfg.numberFormat === 'financial'}
-			<input class="input cfg-in" bind:value={cfg.currencyCode} placeholder={$t('Currency (e.g. USD)')} maxlength="3" />
+			<input
+				class="input cfg-in"
+				bind:value={cfg.currencyCode}
+				placeholder={$t('Currency (e.g. USD)')}
+				maxlength="3"
+			/>
 		{/if}
 		{#if cfg.numberFormat === 'custom'}
-			<input class="input cfg-in" bind:value={cfg.formatString} placeholder={$t('Google Sheets number format')} maxlength="80" />
+			<input
+				class="input cfg-in"
+				bind:value={cfg.formatString}
+				placeholder={$t('Google Sheets number format')}
+				maxlength="80"
+			/>
 		{/if}
 		{#if isTaskEntity && appliesTo !== 'tasks'}
 			<!-- Roll up sub-task values onto the parent task's same field (computed). -->
-			<label class="cfg-check"><input type="checkbox" bind:checked={cfg.rollupToParent} /> {$t('Roll up to parent task')}</label>
+			<label class="cfg-check"
+				><input type="checkbox" bind:checked={cfg.rollupToParent} />
+				{$t('Roll up to parent task')}</label
+			>
 			{#if cfg.rollupToParent}
 				<Popover ariaLabel={$t('Rollup formula')}>
 					{#snippet trigger()}
-						<span class="cfg-pop">{$t(rollupFormulaLabel(cfg.rollupFormula ?? 'sum'))}<Icon name="nav-arrow-down" size={12} /></span>
+						<span class="cfg-pop"
+							>{$t(rollupFormulaLabel(cfg.rollupFormula ?? 'sum'))}<Icon
+								name="nav-arrow-down"
+								size={12}
+							/></span
+						>
 					{/snippet}
 					{#snippet panel(close)}
 						<div class="cfg-formula">
@@ -196,8 +245,11 @@
 									type="button"
 									class="cfg-formula-opt"
 									class:on={(cfg.rollupFormula ?? 'sum') === val}
-									onclick={() => { cfg.rollupFormula = val; close(); }}
-								>{$t(lbl)}</button>
+									onclick={() => {
+										cfg.rollupFormula = val;
+										close();
+									}}>{$t(lbl)}</button
+								>
 							{/each}
 						</div>
 					{/snippet}
@@ -212,12 +264,16 @@
 			{#each TIME_FORMATS as f (f)}<option value={f}>{$t(TIME_FORMAT_LABELS[f])}</option>{/each}
 		</select>
 	{:else if type === 'select'}
-		<label class="cfg-check"><input type="checkbox" bind:checked={cfg.multi} /> {$t('Allow multiple')}</label>
+		<label class="cfg-check"
+			><input type="checkbox" bind:checked={cfg.multi} /> {$t('Allow multiple')}</label
+		>
 		<select class="select cfg-in" bind:value={cfg.displayOption} aria-label={$t('Display')}>
 			{#each SELECT_DISPLAYS as d (d)}<option value={d}>{$t(DISPLAY_LABELS[d])}</option>{/each}
 		</select>
 	{:else if type === 'person' || type === 'place' || type === 'files' || type === 'task'}
-		<label class="cfg-check"><input type="checkbox" bind:checked={cfg.multi} /> {$t('Allow multiple')}</label>
+		<label class="cfg-check"
+			><input type="checkbox" bind:checked={cfg.multi} /> {$t('Allow multiple')}</label
+		>
 	{:else if type === 'rollup'}
 		<select class="select cfg-in" bind:value={cfg.relation} aria-label={$t('Relation')}>
 			{#each ROLLUP_RELATIONS as [val, lbl] (val)}
@@ -241,8 +297,24 @@
 {/snippet}
 
 <div class="cf-tabs">
-	<button class="cf-tab" class:cf-tab--on={entityTab === 'task'} type="button" onclick={() => { entityTab = 'task'; creating = false; }}>{$t('Task')}</button>
-	<button class="cf-tab" class:cf-tab--on={entityTab === 'project'} type="button" onclick={() => { entityTab = 'project'; creating = false; }}>{$t('Project')}</button>
+	<button
+		class="cf-tab"
+		class:cf-tab--on={entityTab === 'task'}
+		type="button"
+		onclick={() => {
+			entityTab = 'task';
+			creating = false;
+		}}>{$t('Task')}</button
+	>
+	<button
+		class="cf-tab"
+		class:cf-tab--on={entityTab === 'project'}
+		type="button"
+		onclick={() => {
+			entityTab = 'project';
+			creating = false;
+		}}>{$t('Project')}</button
+	>
 </div>
 
 <div class="cf-editor" use:sortable={{ onReorder, handle: '[data-sortable-handle]' }}>
@@ -264,29 +336,49 @@
 					<input name="name" class="input name-in" bind:value={editName} required maxlength="60" />
 					<span class="badge">{$t(fieldTypeLabel(f.type))}</span>
 					{@render configFields(f.type, editConfig, editAppliesTo, (f.entity ?? 'task') === 'task')}
-					<select class="select cfg-in" name="appliesTo" bind:value={editAppliesTo} aria-label={$t('Applies to')}>
+					<select
+						class="select cfg-in"
+						name="appliesTo"
+						bind:value={editAppliesTo}
+						aria-label={$t('Applies to')}
+					>
 						{#each APPLIES_TO as a (a)}<option value={a}>{$t(appliesToLabel(a))}</option>{/each}
 					</select>
 					<span class="spacer"></span>
-					<button class="btn btn-sm" type="button" onclick={() => (editingId = null)}>{$t('Cancel')}</button>
+					<button class="btn btn-sm" type="button" onclick={() => (editingId = null)}
+						>{$t('Cancel')}</button
+					>
 					<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
 				</form>
 			{:else}
 				<div class="cf-row" data-sortable-id={f.id}>
-					<span class="drag" data-sortable-handle use:tooltip={$t('Drag to reorder')}><Icon name="drag" size={14} /></span>
+					<span class="drag" data-sortable-handle use:tooltip={$t('Drag to reorder')}
+						><Icon name="drag" size={14} /></span
+					>
 					<button class="name name-btn" type="button" onclick={() => openEdit(f)}>{f.name}</button>
 					<span class="badge">{$t(fieldTypeLabel(f.type))}</span>
 					{#if typeHint(f)}<span class="u-tiny u-muted">{typeHint(f)}</span>{/if}
-					{#if (f.appliesTo ?? 'all') !== 'all'}<span class="badge">{$t(appliesToLabel(f.appliesTo))}</span>{/if}
+					{#if (f.appliesTo ?? 'all') !== 'all'}<span class="badge"
+							>{$t(appliesToLabel(f.appliesTo))}</span
+						>{/if}
 					<span class="spacer"></span>
-					{#if (f.entity ?? 'task') === 'task'}<span class="u-tiny u-muted in-use">{$t('{n} task(s)', { n: f.inUse })}</span>{/if}
-					<button class="icon-btn" type="button" aria-label={$t('Edit')} onclick={() => openEdit(f)}>
+					{#if (f.entity ?? 'task') === 'task'}<span class="u-tiny u-muted in-use"
+							>{$t('{n} task(s)', { n: f.inUse })}</span
+						>{/if}
+					<button
+						class="icon-btn"
+						type="button"
+						aria-label={$t('Edit')}
+						onclick={() => openEdit(f)}
+					>
 						<Icon name="edit-pencil" size={14} />
 					</button>
 					<form
 						method="POST"
 						action="?/deleteCustomField"
-						use:enhance={() => async ({ update }) => update()}
+						use:enhance={() =>
+							async ({ update }) =>
+								update()}
 					>
 						<input type="hidden" name="id" value={f.id} />
 						<button
@@ -326,16 +418,37 @@
 								<input type="hidden" name="id" value={o.id} />
 								{@render colorField(editOptColor, (v) => (editOptColor = v))}
 								{@render iconField(editOptIcon, (v) => (editOptIcon = v))}
-								<input name="title" class="input" value={o.title} required maxlength="60" style="flex:1; min-width:100px;" />
-								<button class="btn btn-sm" type="button" onclick={() => (editingOptId = null)}>{$t('Cancel')}</button>
+								<input
+									name="title"
+									class="input"
+									value={o.title}
+									required
+									maxlength="60"
+									style="flex:1; min-width:100px;"
+								/>
+								<button class="btn btn-sm" type="button" onclick={() => (editingOptId = null)}
+									>{$t('Cancel')}</button
+								>
 								<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
 							</form>
 						{:else}
 							<div class="opt">
-								{#if o.icon}<EntityIcon value={o.icon} size={14} />{:else}<span class="dot" style="--c: {o.color || 'var(--color-muted)'}"></span>{/if}
+								{#if o.icon}<EntityIcon value={o.icon} size={14} />{:else}<span
+										class="dot"
+										style="--c: {o.color || 'var(--color-muted)'}"
+									></span>{/if}
 								<span class="opt-title">{o.title}</span>
 								<span class="spacer"></span>
-								<button class="icon-btn" type="button" aria-label={$t('Edit')} onclick={() => { editingOptId = o.id; editOptIcon = o.icon ?? ''; editOptColor = o.color ?? '#71717a'; }}>
+								<button
+									class="icon-btn"
+									type="button"
+									aria-label={$t('Edit')}
+									onclick={() => {
+										editingOptId = o.id;
+										editOptIcon = o.icon ?? '';
+										editOptColor = o.color ?? '#71717a';
+									}}
+								>
 									<Icon name="edit-pencil" size={12} />
 								</button>
 								<form method="POST" action="?/deleteCustomFieldOption" use:enhance>
@@ -351,15 +464,26 @@
 						class="opt opt--edit"
 						method="POST"
 						action="?/createCustomFieldOption"
-						use:enhance={() => async ({ result, update }) => {
-							if (result.type === 'success') { newOptIcon[f.id] = ''; newOptColor[f.id] = '#71717a'; }
-							await update();
-						}}
+						use:enhance={() =>
+							async ({ result, update }) => {
+								if (result.type === 'success') {
+									newOptIcon[f.id] = '';
+									newOptColor[f.id] = '#71717a';
+								}
+								await update();
+							}}
 					>
 						<input type="hidden" name="fieldId" value={f.id} />
 						{@render colorField(newOptColor[f.id] ?? '#71717a', (v) => (newOptColor[f.id] = v))}
 						{@render iconField(newOptIcon[f.id] ?? '', (v) => (newOptIcon[f.id] = v))}
-						<input name="title" class="input" placeholder={$t('New option…')} required maxlength="60" style="flex:1; min-width:100px;" />
+						<input
+							name="title"
+							class="input"
+							placeholder={$t('New option…')}
+							required
+							maxlength="60"
+							style="flex:1; min-width:100px;"
+						/>
 						<button class="btn btn-sm" type="submit">{$t('Add option')}</button>
 					</form>
 				</div>
@@ -372,12 +496,21 @@
 			class="cf-row cf-row--edit cf-create"
 			method="POST"
 			action="?/createCustomField"
-			use:enhance={() => async ({ result, update }) => {
-				if (result.type === 'success') creating = false;
-				await update();
-			}}
+			use:enhance={() =>
+				async ({ result, update }) => {
+					if (result.type === 'success') creating = false;
+					await update();
+				}}
 		>
-			<input name="name" class="input name-in" bind:value={newName} placeholder={$t('Field name')} required maxlength="60" autocomplete="off" />
+			<input
+				name="name"
+				class="input name-in"
+				bind:value={newName}
+				placeholder={$t('Field name')}
+				required
+				maxlength="60"
+				autocomplete="off"
+			/>
 			<select name="type" class="select cfg-in" bind:value={newType} aria-label={$t('Field type')}>
 				{#each fieldTypes as ty (ty)}<option value={ty}>{$t(fieldTypeLabel(ty))}</option>{/each}
 			</select>
@@ -385,21 +518,35 @@
 			<input type="hidden" name="entity" value={entityTab} />
 			{@render configFields(newType, newConfig, newAppliesTo, entityTab === 'task')}
 			{#if entityTab === 'task'}
-				<select name="appliesTo" class="select cfg-in" bind:value={newAppliesTo} aria-label={$t('Applies to')}>
+				<select
+					name="appliesTo"
+					class="select cfg-in"
+					bind:value={newAppliesTo}
+					aria-label={$t('Applies to')}
+				>
 					{#each APPLIES_TO as a (a)}<option value={a}>{$t(appliesToLabel(a))}</option>{/each}
 				</select>
 			{/if}
 			<span class="spacer"></span>
-			<button class="btn btn-sm" type="button" onclick={() => (creating = false)}>{$t('Cancel')}</button>
+			<button class="btn btn-sm" type="button" onclick={() => (creating = false)}
+				>{$t('Cancel')}</button
+			>
 			<button class="btn btn-sm btn-primary" type="submit">{$t('Create')}</button>
 		</form>
 	{:else}
 		<button class="add-field" type="button" onclick={openCreate}>
-			<Icon name="plus" size={14} /> {$t('Add field')}
+			<Icon name="plus" size={14} />
+			{$t('Add field')}
 		</button>
 	{/if}
 
-	<form bind:this={reorderForm} method="POST" action="?/reorderCustomField" use:enhance class="reorder-form">
+	<form
+		bind:this={reorderForm}
+		method="POST"
+		action="?/reorderCustomField"
+		use:enhance
+		class="reorder-form"
+	>
 		<input type="hidden" name="ids" bind:value={reorderIds} />
 	</form>
 </div>
@@ -421,7 +568,9 @@
 		font-size: 12px;
 		padding: 3px 14px;
 		cursor: pointer;
-		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
 	}
 
 	.cf-tab + .cf-tab {
@@ -468,7 +617,6 @@
 	.cf-row--edit {
 		flex-wrap: wrap;
 	}
-
 
 	.drag {
 		display: inline-flex;
@@ -615,7 +763,10 @@
 		padding: 4px;
 		border-radius: var(--radius-field, 0.25rem);
 		opacity: 0;
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease, opacity var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease,
+			opacity var(--dur-fast) ease;
 	}
 
 	.cf-row:hover .icon-btn,
@@ -645,7 +796,9 @@
 		font-size: 13px;
 		padding: var(--sp-2) 10px;
 		cursor: pointer;
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.add-field:hover {

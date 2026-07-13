@@ -12,8 +12,7 @@ vi.mock('$app/state', () => ({
 import { pushState, replaceState } from '$app/navigation';
 import { readPaneParam, setPaneUrl } from '$lib/paneUrl';
 
-const setLocation = (pathAndQuery: string) =>
-	window.history.replaceState(null, '', pathAndQuery);
+const setLocation = (pathAndQuery: string) => window.history.replaceState(null, '', pathAndQuery);
 
 beforeEach(() => {
 	setLocation('/projects/p1?view=v1');

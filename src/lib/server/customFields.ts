@@ -1,15 +1,17 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { db } from './db';
+import { db, type DB } from './db';
 import {
 	customField,
 	customFieldOption,
 	file,
 	location,
+	project,
 	projectCustomValue,
 	task,
 	taskCustomValue,
 	user
 } from './db/schema';
+import { projectAccessUserIds } from './permissions';
 import {
 	CUSTOM_FIELD_TYPES,
 	EMAIL_RE,
@@ -60,7 +62,12 @@ type Loaded = { id: string; type: string; config: Record<string, unknown> };
 type EncodeResult = { value: string | null } | { error: string };
 
 /** Validate + canonicalize one raw form value against its field definition. */
-async function encodeAndValidate(field: Loaded, raw: string | null, projectId: string): Promise<EncodeResult> {
+async function encodeAndValidate(
+	field: Loaded,
+	raw: string | null,
+	projectId: string,
+	exec: DB = db
+): Promise<EncodeResult> {
 	const type = field.type;
 	const s = raw == null ? '' : String(raw);
 
@@ -70,7 +77,8 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 			try {
 				const v = JSON.parse(s);
 				if (Array.isArray(v)) ids = v.map(String);
-				else if (type === 'task') ids = [s.trim()]; // legacy scalar task id
+				else if (type === 'task')
+					ids = [s.trim()]; // legacy scalar task id
 				else return { error: 'Invalid value' };
 			} catch {
 				// a bare (non-JSON) id is only valid for the formerly-scalar `task` type
@@ -84,29 +92,37 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 
 		let valid: Set<string>;
 		if (type === 'select') {
-			const opts = await db
+			const opts = await exec
 				.select({ id: customFieldOption.id })
 				.from(customFieldOption)
 				.where(eq(customFieldOption.fieldId, field.id));
 			valid = new Set(opts.map((o) => o.id));
 		} else if (type === 'person') {
-			const us = await db.select({ id: user.id }).from(user).where(inArray(user.id, ids));
-			valid = new Set(us.map((u) => u.id));
+			// person ids must be REAL users AND able to access this project — else a task
+			// editor could store an arbitrary user's id and read their name via CSV export
+			// (cross-project disclosure). Mirrors notifyMentions' scoping.
+			const [proj] = await exec
+				.select({ workspaceId: project.workspaceId })
+				.from(project)
+				.where(eq(project.id, projectId));
+			const roster = await projectAccessUserIds(projectId, proj?.workspaceId ?? null);
+			const us = await exec.select({ id: user.id }).from(user).where(inArray(user.id, ids));
+			valid = new Set(us.map((u) => u.id).filter((id) => roster.has(id)));
 		} else if (type === 'place') {
-			const locs = await db
+			const locs = await exec
 				.select({ id: location.id })
 				.from(location)
 				.where(and(eq(location.projectId, projectId), inArray(location.id, ids)));
 			valid = new Set(locs.map((l) => l.id));
 		} else if (type === 'task') {
-			const ts = await db
+			const ts = await exec
 				.select({ id: task.id })
 				.from(task)
 				.where(and(eq(task.projectId, projectId), inArray(task.id, ids)));
 			valid = new Set(ts.map((t) => t.id));
 		} else {
 			// files
-			const fs = await db
+			const fs = await exec
 				.select({ id: file.id })
 				.from(file)
 				.where(and(eq(file.projectId, projectId), inArray(file.id, ids)));
@@ -170,18 +186,25 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 export async function writeTaskCustomValues(
 	taskId: string,
 	projectId: string,
-	entries: { fieldId: string; raw: string | null }[]
+	entries: { fieldId: string; raw: string | null }[],
+	exec: DB = db
 ): Promise<{ error?: string }> {
 	if (entries.length === 0) return {};
-	const fields = await db.select().from(customField).where(eq(customField.projectId, projectId));
+	const fields = await exec.select().from(customField).where(eq(customField.projectId, projectId));
 	const byId = new Map(
 		fields.map((f) => [
 			f.id,
-			{ id: f.id, type: f.type, appliesTo: f.appliesTo, entity: f.entity, config: parseConfig(f.config) }
+			{
+				id: f.id,
+				type: f.type,
+				appliesTo: f.appliesTo,
+				entity: f.entity,
+				config: parseConfig(f.config)
+			}
 		])
 	);
 	// the field must apply to this task's level (top-level vs sub-task)
-	const [tk] = await db.select({ parentId: task.parentId }).from(task).where(eq(task.id, taskId));
+	const [tk] = await exec.select({ parentId: task.parentId }).from(task).where(eq(task.id, taskId));
 	const isSubtask = !!tk?.parentId;
 
 	const writes: { fieldId: string; value: string }[] = [];
@@ -191,19 +214,24 @@ export async function writeTaskCustomValues(
 		if (!field) return { error: 'Unknown custom field' };
 		if (field.entity === 'project') return { error: 'Field is a project field, not a task field' };
 		if (!fieldAppliesTo(field, isSubtask)) return { error: 'Field not available for this task' };
-		const res = await encodeAndValidate(field, raw, projectId);
+		const res = await encodeAndValidate(field, raw, projectId, exec);
 		if ('error' in res) return { error: res.error };
 		if (res.value === null) clears.push(fieldId);
 		else writes.push({ fieldId, value: res.value });
 	}
 
 	for (const fieldId of clears)
-		await db.delete(taskCustomValue).where(and(eq(taskCustomValue.taskId, taskId), eq(taskCustomValue.fieldId, fieldId)));
+		await exec
+			.delete(taskCustomValue)
+			.where(and(eq(taskCustomValue.taskId, taskId), eq(taskCustomValue.fieldId, fieldId)));
 	for (const w of writes)
-		await db
+		await exec
 			.insert(taskCustomValue)
 			.values({ taskId, fieldId: w.fieldId, value: w.value })
-			.onConflictDoUpdate({ target: [taskCustomValue.taskId, taskCustomValue.fieldId], set: { value: w.value } });
+			.onConflictDoUpdate({
+				target: [taskCustomValue.taskId, taskCustomValue.fieldId],
+				set: { value: w.value }
+			});
 	return {};
 }
 
@@ -220,7 +248,10 @@ export async function writeProjectCustomValues(
 	if (entries.length === 0) return {};
 	const fields = await db.select().from(customField).where(eq(customField.projectId, projectId));
 	const byId = new Map(
-		fields.map((f) => [f.id, { id: f.id, type: f.type, entity: f.entity, config: parseConfig(f.config) }])
+		fields.map((f) => [
+			f.id,
+			{ id: f.id, type: f.type, entity: f.entity, config: parseConfig(f.config) }
+		])
 	);
 	const writes: { fieldId: string; value: string }[] = [];
 	const clears: string[] = [];
@@ -236,7 +267,9 @@ export async function writeProjectCustomValues(
 	for (const fieldId of clears)
 		await db
 			.delete(projectCustomValue)
-			.where(and(eq(projectCustomValue.projectId, projectId), eq(projectCustomValue.fieldId, fieldId)));
+			.where(
+				and(eq(projectCustomValue.projectId, projectId), eq(projectCustomValue.fieldId, fieldId))
+			);
 	for (const w of writes)
 		await db
 			.insert(projectCustomValue)
@@ -264,7 +297,10 @@ export async function customValuesByTask(
 	if (taskIds.length === 0) return {};
 	const fields = await listProjectCustomFields(projectId);
 	const fieldById = new Map(fields.map((f) => [f.id, f]));
-	const rows = await db.select().from(taskCustomValue).where(inArray(taskCustomValue.taskId, taskIds));
+	const rows = await db
+		.select()
+		.from(taskCustomValue)
+		.where(inArray(taskCustomValue.taskId, taskIds));
 	const out: Record<string, Record<string, unknown>> = {};
 	for (const r of rows) {
 		const f = fieldById.get(r.fieldId);

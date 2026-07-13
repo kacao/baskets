@@ -13,7 +13,7 @@
 	let nameEl = $state<HTMLInputElement | null>(null);
 </script>
 
-<SidePane title={$t('New milestone')} onClose={onClose} ariaLabel={$t('New milestone')}>
+<SidePane title={$t('New milestone')} {onClose} ariaLabel={$t('New milestone')}>
 	<form
 		method="POST"
 		action="?/createMilestone"

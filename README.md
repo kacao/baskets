@@ -14,10 +14,10 @@ npm run dev                 # http://localhost:5173
 
 Seeded accounts (change after first login):
 
-| Account | Email | Password |
-| --- | --- | --- |
-| Admin | admin@baskets.local | admin-baskets-2026 |
-| Demo | demo@baskets.local | demo-baskets-2026 |
+| Account | Email               | Password           |
+| ------- | ------------------- | ------------------ |
+| Admin   | admin@baskets.local | admin-baskets-2026 |
+| Demo    | demo@baskets.local  | demo-baskets-2026  |
 
 Without seeding, register at `/register`, then promote the first user to admin:
 
@@ -47,6 +47,14 @@ DATABASE_URL=postgres://user:pass@localhost:5432/baskets
 npm run build
 ORIGIN=https://your-domain npm run start
 ```
+
+## Testing
+
+```bash
+npm run verify        # fast gate: svelte-check + unit tests (no server needed)
+```
+
+`npm run test:integration` and `npm run test:e2e` need a running seeded dev server (`npm run dev` + `npm run db:seed`); integration additionally requires `RUN_INTEGRATION=1`.
 
 ## Features
 

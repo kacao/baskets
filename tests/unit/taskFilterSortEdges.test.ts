@@ -1,10 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-	filterTasks,
-	matchTask,
-	type FilterableTask,
-	type FilterHelpers
-} from '$lib/taskFilter';
+import { filterTasks, matchTask, type FilterableTask, type FilterHelpers } from '$lib/taskFilter';
 import { sortTasks, type SortableTask, type SortHelpers } from '$lib/taskSort';
 
 // Pin "today" so any due-date-derived behavior stays deterministic.

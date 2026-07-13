@@ -79,7 +79,11 @@
 		// close the pane. (Popover-contained controls stop Escape before it reaches
 		// here.) Guards against the "picking a date closes the pane" bug.
 		const t = e.target as HTMLElement | null;
-		if (t?.matches?.('input[type="date"], input[type="datetime-local"], input[type="time"], input[type="month"], input[type="week"]'))
+		if (
+			t?.matches?.(
+				'input[type="date"], input[type="datetime-local"], input[type="time"], input[type="month"], input[type="week"]'
+			)
+		)
 			return;
 		onClose();
 	}
@@ -127,7 +131,9 @@
 	<div class="pane-head">
 		{#if header}{@render header()}{:else}<h3 class="pane-title">{title}</h3>{/if}
 		<span class="pane-spacer"></span>
-		<button class="pane-x" type="button" onclick={onClose} aria-label={$t('Close panel')}><Icon name="xmark" size={18} /></button>
+		<button class="pane-x" type="button" onclick={onClose} aria-label={$t('Close panel')}
+			><Icon name="xmark" size={18} /></button
+		>
 	</div>
 	<div class="pane-body">
 		{@render children()}
@@ -210,7 +216,9 @@
 		cursor: pointer;
 		color: var(--color-muted);
 		border-radius: var(--radius);
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.pane-x:hover {

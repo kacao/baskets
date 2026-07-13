@@ -125,9 +125,7 @@ export async function listProjectGrants(projectId: string) {
 		await db.select({ id: task.id }).from(task).where(eq(task.projectId, projectId))
 	).map((r) => r.id);
 
-	const conds = [
-		and(eq(permission.resourceType, 'project'), eq(permission.resourceId, projectId))
-	];
+	const conds = [and(eq(permission.resourceType, 'project'), eq(permission.resourceId, projectId))];
 	if (viewIds.length > 0)
 		conds.push(and(eq(permission.resourceType, 'view'), inArray(permission.resourceId, viewIds)));
 	if (taskIds.length > 0)
@@ -181,7 +179,5 @@ export async function listWorkspaceGrants(workspaceId: string) {
 	return db
 		.select()
 		.from(permission)
-		.where(
-			and(eq(permission.resourceType, 'workspace'), eq(permission.resourceId, workspaceId))
-		);
+		.where(and(eq(permission.resourceType, 'workspace'), eq(permission.resourceId, workspaceId)));
 }

@@ -13,7 +13,10 @@
 	import type { ProjectSettingsData } from '../settings/+page.server';
 
 	// Project-entity rollup: aggregate a target field over all the project's tasks.
-	function projectRollupText(field: { type: string; config: Record<string, unknown> }): string | null {
+	function projectRollupText(field: {
+		type: string;
+		config: Record<string, unknown>;
+	}): string | null {
 		if (field.type !== 'rollup') return null;
 		const cfg = { ...(field.config as unknown as RollupConfig), relation: 'task' };
 		const valueOf = (tid: string, fid: string) => {
@@ -65,7 +68,9 @@
 		shown = order ? order.filter((id) => ids.includes(id)) : ids;
 	});
 	const shownFields = $derived(
-		shown.map((id) => chipCandidates.find((f) => f.id === id)).filter((f): f is PField => Boolean(f))
+		shown
+			.map((id) => chipCandidates.find((f) => f.id === id))
+			.filter((f): f is PField => Boolean(f))
 	);
 	const availFields = $derived(chipCandidates.filter((f) => !shown.includes(f.id)));
 
@@ -85,7 +90,9 @@
 <svelte:head><title>{data.project.name} — {$t('Custom fields')} — Baskets</title></svelte:head>
 
 <p class="u-tiny" style="margin-bottom: var(--sp-2);">
-	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"><Icon name="arrow-left" size={12} /> {data.project.name}</a>
+	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"
+		><Icon name="arrow-left" size={12} /> {data.project.name}</a
+	>
 </p>
 <h2 style="margin-bottom: var(--sp-4);">{$t('Custom fields')}</h2>
 
@@ -97,7 +104,11 @@
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
 		{$t('Project-specific fields shown on every task. Type is fixed once a field is created.')}
 	</p>
-	<CustomFieldEditor fields={data.customFields} options={data.customFieldOptions} fieldTypes={data.fieldTypes} />
+	<CustomFieldEditor
+		fields={data.customFields}
+		options={data.customFieldOptions}
+		fieldTypes={data.fieldTypes}
+	/>
 </div>
 
 {#if chipCandidates.length > 0}
@@ -130,14 +141,33 @@
 			<hr class="rule" />
 			<span class="label">{$t('Show on project page')}</span>
 			<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">
-				{$t('Tap a field to show or hide it on the project page; drag the handle to reorder. A field shows only when it has a value.')}
+				{$t(
+					'Tap a field to show or hide it on the project page; drag the handle to reorder. A field shows only when it has a value.'
+				)}
 			</p>
-			<div class="dropzone show-bar" role="list" aria-label={$t('Shown fields')} use:sortable={{ onReorder: persist, axis: 'x', handle: '[data-sortable-handle]' }}>
+			<div
+				class="dropzone show-bar"
+				role="list"
+				aria-label={$t('Shown fields')}
+				use:sortable={{ onReorder: persist, axis: 'x', handle: '[data-sortable-handle]' }}
+			>
 				{#each shownFields as f (f.id)}
-					<span class="chip-drag" role="listitem" data-sortable-id={f.id} animate:flip={{ duration: 150 }}>
-						<span class="drag-handle" data-sortable-handle use:tooltip={$t('Drag to reorder')}><Icon name="drag" size={12} /></span>
+					<span
+						class="chip-drag"
+						role="listitem"
+						data-sortable-id={f.id}
+						animate:flip={{ duration: 150 }}
+					>
+						<span class="drag-handle" data-sortable-handle use:tooltip={$t('Drag to reorder')}
+							><Icon name="drag" size={12} /></span
+						>
 						<span class="chip-name">{f.name}</span>
-						<button class="chip-x" type="button" aria-label={$t('Hide {name}', { name: f.name })} onclick={() => removeField(f.id)}><Icon name="xmark" size={12} /></button>
+						<button
+							class="chip-x"
+							type="button"
+							aria-label={$t('Hide {name}', { name: f.name })}
+							onclick={() => removeField(f.id)}><Icon name="xmark" size={12} /></button
+						>
 					</span>
 				{:else}
 					<span class="zone-empty">{$t('Nothing shown — tap a field below')}</span>
@@ -147,7 +177,12 @@
 			<span class="label" style="margin-top: var(--sp-3);">{$t('Available')}</span>
 			<div class="dropzone avail" role="group" aria-label={$t('Hidden fields')}>
 				{#each availFields as f (f.id)}
-					<button class="chip-add" type="button" animate:flip={{ duration: 150 }} onclick={() => addField(f.id)}>
+					<button
+						class="chip-add"
+						type="button"
+						animate:flip={{ duration: 150 }}
+						onclick={() => addField(f.id)}
+					>
 						<Icon name="plus" size={12} />{f.name}
 					</button>
 				{:else}

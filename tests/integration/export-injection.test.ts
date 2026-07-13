@@ -25,15 +25,17 @@ const ADMIN_PASSWORD = 'admin-baskets-2026';
 // evaluate it unless neutralized with a leading single-quote.
 const EVIL_TITLE = '=HYPERLINK("http://evil","x")';
 
+// Explicit opt-in: integration tests need a live, seeded dev server. When
+// RUN_INTEGRATION is unset the whole suite is SKIPPED (see describe.skipIf
+// below). When it IS set, a broken/unseeded env must FAIL loudly, not skip.
+const RUN_INTEGRATION = !!process.env.RUN_INTEGRATION;
+
 let cookie = '';
 let skipReason = '';
 const createdProjectIds = new Set<string>();
 
 /** fetch wrapper that attaches the session cookie + JSON content-type. */
-async function api(
-	path: string,
-	init: RequestInit & { json?: unknown } = {}
-): Promise<Response> {
+async function api(path: string, init: RequestInit & { json?: unknown } = {}): Promise<Response> {
 	const { json: body, headers, ...rest } = init;
 	return fetch(`${BASE}${path}`, {
 		...rest,
@@ -57,6 +59,7 @@ beforeAll(async () => {
 	}
 	if (!reachable) {
 		skipReason = `dev server not reachable at ${BASE} — start it with \`npm run dev\``;
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 
@@ -70,16 +73,19 @@ beforeAll(async () => {
 		});
 	} catch (err) {
 		skipReason = `sign-in request failed: ${(err as Error).message}`;
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 	if (!res.ok) {
 		skipReason = `sign-in returned ${res.status} — is the DB seeded (npm run db:seed)?`;
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 	// BetterAuth sets the session via Set-Cookie; reuse the raw cookie pairs.
 	const setCookie = res.headers.get('set-cookie');
 	if (!setCookie) {
 		skipReason = 'sign-in succeeded but no session cookie was returned';
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 	cookie = setCookie
@@ -92,6 +98,7 @@ beforeAll(async () => {
 	if (!me.ok) {
 		skipReason = `session cookie did not authenticate (/api/me → ${me.status})`;
 		cookie = '';
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 	}
 });
 
@@ -163,50 +170,53 @@ function parseCsv(text: string): string[][] {
 	return rows;
 }
 
-describe('CSV export: formula-injection neutralization (integration)', () => {
-	it('prefixes a leading single-quote to a task title starting with =', async () => {
-		if (!ensureAuth()) return;
+describe.skipIf(!RUN_INTEGRATION)(
+	'CSV export: formula-injection neutralization (integration)',
+	() => {
+		it('prefixes a leading single-quote to a task title starting with =', async () => {
+			if (!ensureAuth()) return;
 
-		// Create a project + a task whose title is a formula-injection payload.
-		const projRes = await api('/api/projects', {
-			method: 'POST',
-			json: { name: `itest-export-${rid()}` }
+			// Create a project + a task whose title is a formula-injection payload.
+			const projRes = await api('/api/projects', {
+				method: 'POST',
+				json: { name: `itest-export-${rid()}` }
+			});
+			expect(projRes.status).toBe(201);
+			const projectId = (await projRes.json())?.project?.id as string;
+			expect(projectId).toBeTruthy();
+			createdProjectIds.add(projectId);
+
+			const taskRes = await api('/api/tasks', {
+				method: 'POST',
+				json: { projectId, title: EVIL_TITLE }
+			});
+			expect(taskRes.status).toBe(201);
+
+			// Export and parse the CSV.
+			const exportRes = await api(`/api/projects/${projectId}/export`);
+			expect(exportRes.status).toBe(200);
+			expect(exportRes.headers.get('content-type')).toContain('text/csv');
+
+			let body = await exportRes.text();
+			// Strip a leading UTF-8 BOM if present.
+			if (body.charCodeAt(0) === 0xfeff) body = body.slice(1);
+
+			const rows = parseCsv(body);
+			expect(rows.length).toBeGreaterThan(1); // header + at least one task
+
+			const header = rows[0];
+			const titleCol = header.indexOf('Title');
+			expect(titleCol).toBeGreaterThanOrEqual(0);
+
+			const titles = rows.slice(1).map((r) => r[titleCol]);
+			// The neutralized cell keeps the original payload but with a leading '.
+			const neutralized = `'${EVIL_TITLE}`;
+			const cell = titles.find((t) => t === neutralized);
+			expect(cell, 'expected a neutralized title cell in the export').toBeTruthy();
+			// Leading single-quote sits before the = so spreadsheets treat it as text.
+			expect(cell!.startsWith("'=")).toBe(true);
+			// And the un-neutralized raw payload must NOT appear.
+			expect(titles).not.toContain(EVIL_TITLE);
 		});
-		expect(projRes.status).toBe(201);
-		const projectId = (await projRes.json())?.project?.id as string;
-		expect(projectId).toBeTruthy();
-		createdProjectIds.add(projectId);
-
-		const taskRes = await api('/api/tasks', {
-			method: 'POST',
-			json: { projectId, title: EVIL_TITLE }
-		});
-		expect(taskRes.status).toBe(201);
-
-		// Export and parse the CSV.
-		const exportRes = await api(`/api/projects/${projectId}/export`);
-		expect(exportRes.status).toBe(200);
-		expect(exportRes.headers.get('content-type')).toContain('text/csv');
-
-		let body = await exportRes.text();
-		// Strip a leading UTF-8 BOM if present.
-		if (body.charCodeAt(0) === 0xfeff) body = body.slice(1);
-
-		const rows = parseCsv(body);
-		expect(rows.length).toBeGreaterThan(1); // header + at least one task
-
-		const header = rows[0];
-		const titleCol = header.indexOf('Title');
-		expect(titleCol).toBeGreaterThanOrEqual(0);
-
-		const titles = rows.slice(1).map((r) => r[titleCol]);
-		// The neutralized cell keeps the original payload but with a leading '.
-		const neutralized = `'${EVIL_TITLE}`;
-		const cell = titles.find((t) => t === neutralized);
-		expect(cell, 'expected a neutralized title cell in the export').toBeTruthy();
-		// Leading single-quote sits before the = so spreadsheets treat it as text.
-		expect(cell!.startsWith("'=")).toBe(true);
-		// And the un-neutralized raw payload must NOT appear.
-		expect(titles).not.toContain(EVIL_TITLE);
-	});
-});
+	}
+);

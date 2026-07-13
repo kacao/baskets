@@ -37,7 +37,9 @@
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let cameraInput = $state<HTMLInputElement | null>(null);
 
-	const lightbox = $derived(lightboxId ? attachments.find((f) => f.id === lightboxId) ?? null : null);
+	const lightbox = $derived(
+		lightboxId ? (attachments.find((f) => f.id === lightboxId) ?? null) : null
+	);
 
 	async function uploadFiles(list: FileList | File[]) {
 		const arr = Array.from(list);
@@ -75,7 +77,13 @@
 	}
 
 	async function remove(f: FileRef) {
-		if (!(await confirmDialog($t('Remove this attachment?'), { confirmLabel: $t('Remove'), danger: true }))) return;
+		if (
+			!(await confirmDialog($t('Remove this attachment?'), {
+				confirmLabel: $t('Remove'),
+				danger: true
+			}))
+		)
+			return;
 		const res = await fetch(`/api/files/${f.id}`, { method: 'DELETE' });
 		if (res.ok) {
 			if (lightboxId === f.id) lightboxId = null;
@@ -104,11 +112,19 @@
 			role="button"
 			tabindex="0"
 			aria-label={$t('Add attachments')}
-			ondragover={(e) => { e.preventDefault(); dragOver = true; }}
+			ondragover={(e) => {
+				e.preventDefault();
+				dragOver = true;
+			}}
 			ondragleave={() => (dragOver = false)}
 			ondrop={onDrop}
 			onclick={() => fileInput?.click()}
-			onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput?.click(); } }}
+			onkeydown={(e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					fileInput?.click();
+				}
+			}}
 		>
 			<Icon name="cloud-upload" size={18} />
 			<span>{uploading ? $t('Uploading…') : $t('Drag files here or click to upload')}</span>
@@ -116,18 +132,33 @@
 
 		<div class="actions">
 			<button class="act" type="button" onclick={() => fileInput?.click()} disabled={uploading}>
-				<Icon name="upload" size={14} /> {$t('Upload')}
+				<Icon name="upload" size={14} />
+				{$t('Upload')}
 			</button>
 			<button class="act" type="button" onclick={() => cameraInput?.click()} disabled={uploading}>
-				<Icon name="camera" size={14} /> {$t('Take photo')}
+				<Icon name="camera" size={14} />
+				{$t('Take photo')}
 			</button>
 		</div>
 
 		<input bind:this={fileInput} type="file" multiple onchange={onPick} hidden />
 		<!-- camera-capture: opens the device camera on mobile -->
-		<input bind:this={cameraInput} type="file" accept="image/*" capture="environment" onchange={onPick} hidden />
+		<input
+			bind:this={cameraInput}
+			type="file"
+			accept="image/*"
+			capture="environment"
+			onchange={onPick}
+			hidden
+		/>
 
-		<form bind:this={coverForm} method="POST" action="?/setTaskCover" use:enhance class="hidden-form">
+		<form
+			bind:this={coverForm}
+			method="POST"
+			action="?/setTaskCover"
+			use:enhance
+			class="hidden-form"
+		>
 			<input type="hidden" name="id" value={taskId} />
 			<input type="hidden" name="coverFileId" value={coverValue} />
 		</form>
@@ -138,11 +169,22 @@
 			{#each attachments as f (f.id)}
 				<div class="thumb" class:is-cover={coverFileId === f.id}>
 					{#if isImage(f)}
-						<button class="thumb-img" type="button" onclick={() => (lightboxId = f.id)} aria-label={f.filename}>
+						<button
+							class="thumb-img"
+							type="button"
+							onclick={() => (lightboxId = f.id)}
+							aria-label={f.filename}
+						>
 							<img src={`/api/files/${f.id}`} alt={f.filename} loading="lazy" />
 						</button>
 					{:else}
-						<a class="thumb-doc" href={`/api/files/${f.id}`} target="_blank" rel="noreferrer noopener" use:tooltip={f.filename}>
+						<a
+							class="thumb-doc"
+							href={`/api/files/${f.id}`}
+							target="_blank"
+							rel="noreferrer noopener"
+							use:tooltip={f.filename}
+						>
 							<Icon name="page" size={22} />
 							<span class="doc-name">{f.filename}</span>
 						</a>
@@ -161,7 +203,12 @@
 							</button>
 						{/if}
 						{#if canEdit}
-							<button class="tb-btn danger" type="button" aria-label={$t('Remove')} onclick={() => remove(f)}>
+							<button
+								class="tb-btn danger"
+								type="button"
+								aria-label={$t('Remove')}
+								onclick={() => remove(f)}
+							>
 								<Icon name="trash" size={12} />
 							</button>
 						{/if}
@@ -179,9 +226,16 @@
 		tabindex="0"
 		aria-label={$t('Close')}
 		onclick={() => (lightboxId = null)}
-		onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') lightboxId = null; }}
+		onkeydown={(e) => {
+			if (e.key === 'Escape' || e.key === 'Enter') lightboxId = null;
+		}}
 	>
-		<button class="lb-close" type="button" aria-label={$t('Close')} onclick={() => (lightboxId = null)}>
+		<button
+			class="lb-close"
+			type="button"
+			aria-label={$t('Close')}
+			onclick={() => (lightboxId = null)}
+		>
 			<Icon name="xmark" size={20} />
 		</button>
 		<img class="lb-img" src={`/api/files/${lightbox.id}`} alt={lightbox.filename} />
@@ -233,7 +287,10 @@
 		font-size: 13px;
 		cursor: pointer;
 		text-align: center;
-		transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
+		transition:
+			border-color var(--dur-fast),
+			color var(--dur-fast),
+			background var(--dur-fast);
 	}
 
 	.dropzone:hover,
@@ -369,7 +426,9 @@
 		background: color-mix(in oklab, var(--color-bg, #000) 60%, transparent);
 		color: #fff;
 		cursor: pointer;
-		transition: background var(--dur-fast), color var(--dur-fast);
+		transition:
+			background var(--dur-fast),
+			color var(--dur-fast);
 	}
 
 	.tb-btn:hover {

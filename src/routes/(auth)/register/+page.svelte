@@ -47,14 +47,7 @@
 	</div>
 	<div class="field">
 		<label class="label" for="email">{$t('Email')}</label>
-		<input
-			id="email"
-			class="input"
-			type="email"
-			autocomplete="email"
-			required
-			bind:value={email}
-		/>
+		<input id="email" class="input" type="email" autocomplete="email" required bind:value={email} />
 	</div>
 	<div class="field">
 		<label class="label" for="password">{$t('Password')}</label>

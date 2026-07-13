@@ -41,7 +41,9 @@
 		if (s) view = new Date(s.getFullYear(), s.getMonth(), 1);
 	});
 
-	const monthLabel = $derived(view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }));
+	const monthLabel = $derived(
+		view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+	);
 
 	// 6 weeks × 7 days covering the visible month (leading/trailing days greyed)
 	const days = $derived.by(() => {
@@ -60,7 +62,12 @@
 
 <div class="cal">
 	<div class="cal-head">
-		<button type="button" class="cal-nav" aria-label={$t('Previous month')} onclick={() => step(-1)}>
+		<button
+			type="button"
+			class="cal-nav"
+			aria-label={$t('Previous month')}
+			onclick={() => step(-1)}
+		>
 			<Icon name="nav-arrow-left" size={16} />
 		</button>
 		<span class="cal-month">{monthLabel}</span>
@@ -79,14 +86,18 @@
 				class:out={!d.inMonth}
 				class:today={d.k === todayKey}
 				class:sel={d.k === value}
-				onclick={() => onSelect(d.k)}
-			>{d.n}</button>
+				onclick={() => onSelect(d.k)}>{d.n}</button
+			>
 		{/each}
 	</div>
 	<div class="cal-foot">
-		<button type="button" class="cal-foot-btn" onclick={() => onSelect(todayKey)}>{$t('Today')}</button>
+		<button type="button" class="cal-foot-btn" onclick={() => onSelect(todayKey)}
+			>{$t('Today')}</button
+		>
 		{#if onClear}
-			<button type="button" class="cal-foot-btn cal-clear" onclick={() => onClear?.()}>{$t('Clear')}</button>
+			<button type="button" class="cal-foot-btn cal-clear" onclick={() => onClear?.()}
+				>{$t('Clear')}</button
+			>
 		{/if}
 	</div>
 </div>
@@ -120,7 +131,9 @@
 		border-radius: var(--radius);
 		color: var(--color-muted);
 		cursor: pointer;
-		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
 	}
 
 	.cal-nav:hover {
@@ -154,7 +167,9 @@
 		font-size: 12px;
 		color: var(--color-fg);
 		cursor: pointer;
-		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
 	}
 
 	.cal-day:hover {

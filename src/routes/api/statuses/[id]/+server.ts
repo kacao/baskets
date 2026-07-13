@@ -1,10 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { apiError, readJson } from '$lib/server/api';
-import {
-	deleteStatusById,
-	updateStatusById,
-	type UpdateStatusInput
-} from '$lib/server/statuses';
+import { deleteStatusById, updateStatusById, type UpdateStatusInput } from '$lib/server/statuses';
 import type { RequestHandler } from './$types';
 
 export const PATCH: RequestHandler = async ({ request, params, locals }) => {

@@ -12,9 +12,7 @@ const resolvers = {
 describe('buildTaskCfSearch', () => {
 	it('returns an empty map when there are no fields or values', () => {
 		expect(buildTaskCfSearch([], [], resolvers).size).toBe(0);
-		expect(
-			buildTaskCfSearch([{ id: 'f1', type: 'text' }], [], resolvers).size
-		).toBe(0);
+		expect(buildTaskCfSearch([{ id: 'f1', type: 'text' }], [], resolvers).size).toBe(0);
 	});
 
 	it('excludes rollup-type field values', () => {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '$lib/i18n';
+	import { fmtDate } from '$lib/date';
 
 	type Task = {
 		id: string;
@@ -39,11 +40,6 @@
 			return { milestone: m, total: mt.length, done };
 		})
 	);
-
-	function fmtDate(d: Date | string | null) {
-		if (!d) return null;
-		return new Date(d).toISOString().slice(0, 10);
-	}
 </script>
 
 <div class="stats">

@@ -6,7 +6,8 @@ import {
 	timestamp,
 	doublePrecision,
 	primaryKey,
-	unique
+	unique,
+	index
 } from 'drizzle-orm/pg-core';
 
 // Postgres mirror of schema.sqlite.ts (ADR-050). Table + column NAMES must stay
@@ -207,19 +208,23 @@ export const permission = pgTable(
 	(t) => [unique().on(t.userId, t.resourceType, t.resourceId)]
 );
 
-export const milestone = pgTable('milestone', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	name: text('name').notNull(),
-	description: text('description'),
-	startDate: timestamp('start_date', { mode: 'date' }),
-	targetDate: timestamp('target_date', { mode: 'date' }),
-	position: integer('position').notNull().default(0),
-	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
-	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+export const milestone = pgTable(
+	'milestone',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		description: text('description'),
+		startDate: timestamp('start_date', { mode: 'date' }),
+		targetDate: timestamp('target_date', { mode: 'date' }),
+		position: integer('position').notNull().default(0),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
+		updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
+	},
+	(t) => [index('idx_milestone_project').on(t.projectId)]
+);
 
 export const milestoneDependency = pgTable(
 	'milestone_dependency',
@@ -234,19 +239,23 @@ export const milestoneDependency = pgTable(
 	(t) => [primaryKey({ columns: [t.milestoneId, t.dependsOnId] })]
 );
 
-export const location = pgTable('location', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	title: text('title').notNull(),
-	address: text('address'),
-	latitude: doublePrecision('latitude'),
-	longitude: doublePrecision('longitude'),
-	position: integer('position').notNull().default(0),
-	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
-	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+export const location = pgTable(
+	'location',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		title: text('title').notNull(),
+		address: text('address'),
+		latitude: doublePrecision('latitude'),
+		longitude: doublePrecision('longitude'),
+		position: integer('position').notNull().default(0),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
+		updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
+	},
+	(t) => [index('idx_location_project').on(t.projectId)]
+);
 
 export const labelGroup = pgTable('label_group', {
 	id: text('id').primaryKey(),
@@ -320,34 +329,38 @@ export const taskDependency = pgTable(
 	(t) => [primaryKey({ columns: [t.taskId, t.dependsOnId] })]
 );
 
-export const task = pgTable('task', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	parentId: text('parent_id'),
-	title: text('title').notNull(),
-	description: text('description'),
-	statusId: text('status_id')
-		.notNull()
-		.references(() => status.id),
-	priority: text('priority').notNull().default('none'),
-	assigneeId: text('assignee_id').references(() => user.id),
-	milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
-	locationId: text('location_id').references(() => location.id, { onDelete: 'set null' }),
-	location: text('location'),
-	order: integer('task_order'),
-	position: integer('position').notNull().default(0),
-	startDate: timestamp('start_date', { mode: 'date' }),
-	dueDate: timestamp('due_date', { mode: 'date' }),
-	recurrence: text('recurrence'),
-	coverFileId: text('cover_file_id'),
-	createdBy: text('created_by')
-		.notNull()
-		.references(() => user.id),
-	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
-	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+export const task = pgTable(
+	'task',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		parentId: text('parent_id'),
+		title: text('title').notNull(),
+		description: text('description'),
+		statusId: text('status_id')
+			.notNull()
+			.references(() => status.id),
+		priority: text('priority').notNull().default('none'),
+		assigneeId: text('assignee_id').references(() => user.id),
+		milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
+		locationId: text('location_id').references(() => location.id, { onDelete: 'set null' }),
+		location: text('location'),
+		order: integer('task_order'),
+		position: integer('position').notNull().default(0),
+		startDate: timestamp('start_date', { mode: 'date' }),
+		dueDate: timestamp('due_date', { mode: 'date' }),
+		recurrence: text('recurrence'),
+		coverFileId: text('cover_file_id'),
+		createdBy: text('created_by')
+			.notNull()
+			.references(() => user.id),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
+		updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
+	},
+	(t) => [index('idx_task_project').on(t.projectId), index('idx_task_parent').on(t.parentId)]
+);
 
 export const customField = pgTable('custom_field', {
 	id: text('id').primaryKey(),
@@ -403,62 +416,78 @@ export const projectCustomValue = pgTable(
 	(t) => [primaryKey({ columns: [t.projectId, t.fieldId] })]
 );
 
-export const file = pgTable('file', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	fieldId: text('field_id').references(() => customField.id, { onDelete: 'set null' }),
-	taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
-	filename: text('filename').notNull(),
-	mimeType: text('mime_type').notNull(),
-	size: integer('size').notNull(),
-	storagePath: text('storage_path').notNull(),
-	createdBy: text('created_by')
-		.notNull()
-		.references(() => user.id),
-	createdAt: timestamp('created_at', { mode: 'date' }).notNull()
-});
+export const file = pgTable(
+	'file',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		fieldId: text('field_id').references(() => customField.id, { onDelete: 'set null' }),
+		taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
+		filename: text('filename').notNull(),
+		mimeType: text('mime_type').notNull(),
+		size: integer('size').notNull(),
+		storagePath: text('storage_path').notNull(),
+		createdBy: text('created_by')
+			.notNull()
+			.references(() => user.id),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull()
+	},
+	(t) => [index('idx_file_project').on(t.projectId)]
+);
 
-export const comment = pgTable('comment', {
-	id: text('id').primaryKey(),
-	taskId: text('task_id')
-		.notNull()
-		.references(() => task.id, { onDelete: 'cascade' }),
-	authorId: text('author_id')
-		.notNull()
-		.references(() => user.id),
-	body: text('body').notNull(),
-	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
-	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+export const comment = pgTable(
+	'comment',
+	{
+		id: text('id').primaryKey(),
+		taskId: text('task_id')
+			.notNull()
+			.references(() => task.id, { onDelete: 'cascade' }),
+		authorId: text('author_id')
+			.notNull()
+			.references(() => user.id),
+		body: text('body').notNull(),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
+		updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
+	},
+	(t) => [index('idx_comment_task').on(t.taskId)]
+);
 
-export const activity = pgTable('activity', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
-	actorId: text('actor_id')
-		.notNull()
-		.references(() => user.id),
-	type: text('type').notNull(),
-	data: text('data').notNull().default('{}'),
-	createdAt: timestamp('created_at', { mode: 'date' }).notNull()
-});
+export const activity = pgTable(
+	'activity',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
+		actorId: text('actor_id')
+			.notNull()
+			.references(() => user.id),
+		type: text('type').notNull(),
+		data: text('data').notNull().default('{}'),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull()
+	},
+	(t) => [index('idx_activity_task').on(t.taskId)]
+);
 
-export const notification = pgTable('notification', {
-	id: text('id').primaryKey(),
-	userId: text('user_id')
-		.notNull()
-		.references(() => user.id, { onDelete: 'cascade' }),
-	type: text('type').notNull(),
-	projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
-	taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
-	body: text('body').notNull(),
-	read: boolean('read').notNull().default(false),
-	createdAt: timestamp('created_at', { mode: 'date' }).notNull()
-});
+export const notification = pgTable(
+	'notification',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		type: text('type').notNull(),
+		projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
+		taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
+		body: text('body').notNull(),
+		read: boolean('read').notNull().default(false),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull()
+	},
+	(t) => [index('idx_notification_user').on(t.userId)]
+);
 
 export const template = pgTable('template', {
 	id: text('id').primaryKey(),

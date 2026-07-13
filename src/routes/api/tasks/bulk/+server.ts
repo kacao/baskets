@@ -66,9 +66,9 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 	const ids = readIds(body.ids);
 	if (ids.length === 0) return apiError(400, 'ids must be a non-empty array of task ids');
 
-	const set = (body.set && typeof body.set === 'object' && !Array.isArray(body.set)
-		? body.set
-		: null) as Record<string, unknown> | null;
+	const set = (
+		body.set && typeof body.set === 'object' && !Array.isArray(body.set) ? body.set : null
+	) as Record<string, unknown> | null;
 	if (!set) return apiError(400, 'set must be an object');
 
 	const sel = await loadSelection(locals, ids);
@@ -91,7 +91,12 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 					? set.milestoneId
 					: null
 				: undefined,
-		priority: set.priority !== undefined ? (typeof set.priority === 'string' ? set.priority : '') : undefined,
+		priority:
+			set.priority !== undefined
+				? typeof set.priority === 'string'
+					? set.priority
+					: ''
+				: undefined,
 		parentId: undefined,
 		addLabelIds: readIds(set.addLabelIds),
 		removeLabelIds: readIds(set.removeLabelIds),
@@ -149,12 +154,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if ('error' in sel) return sel.error;
 	const { projectId } = sel;
 	// Creating in this project requires access (mirrors the action's canAccessProject guard).
-	if (!(await canAccessProject(locals.user, projectId)))
-		return apiError(404, 'No tasks found');
+	if (!(await canAccessProject(locals.user, projectId))) return apiError(404, 'No tasks found');
 
 	const res = await bulkReparentToNew(ids, projectId, title, locals.user);
 	if (!res.ok) return apiError(res.status, res.message);
-	return json({ success: true, parentId: res.data.parentId, moved: res.data.moved }, { status: 201 });
+	return json(
+		{ success: true, parentId: res.data.parentId, moved: res.data.moved },
+		{ status: 201 }
+	);
 };
 
 export const DELETE: RequestHandler = async ({ request, locals }) => {

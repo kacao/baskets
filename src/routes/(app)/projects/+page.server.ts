@@ -10,6 +10,7 @@ import {
 	grantedProjectIds
 } from '$lib/server/permissions';
 import { createProjectWithDefaults } from '$lib/server/projects';
+import { deleteFilesForProject } from '$lib/server/uploads';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, cookies }) => {
@@ -114,6 +115,7 @@ export const actions: Actions = {
 		if (!(await canEditProject(locals.user, id)))
 			return fail(403, { message: 'No edit permission on this project' });
 
+		await deleteFilesForProject(id);
 		await db.delete(project).where(eq(project.id, id));
 		return { success: true };
 	}

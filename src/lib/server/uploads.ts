@@ -1,6 +1,6 @@
 import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from './db';
 import { file } from './db/schema';
@@ -11,8 +11,25 @@ export const UPLOADS_DIR = env.UPLOADS_DIR ?? './data/uploads';
 // Extensions never accepted — executables AND active markup (SVG/HTML/XML can
 // carry <script>; served from our own origin they'd be stored XSS).
 export const BLOCKED_EXT = new Set([
-	'exe', 'sh', 'bat', 'cmd', 'com', 'msi', 'dll', 'scr', 'jar', 'app',
-	'svg', 'svgz', 'html', 'htm', 'xhtml', 'xml', 'mhtml', 'js', 'mjs'
+	'exe',
+	'sh',
+	'bat',
+	'cmd',
+	'com',
+	'msi',
+	'dll',
+	'scr',
+	'jar',
+	'app',
+	'svg',
+	'svgz',
+	'html',
+	'htm',
+	'xhtml',
+	'xml',
+	'mhtml',
+	'js',
+	'mjs'
 ]);
 
 // Server-derived Content-Type allowlist (we do NOT trust the client's blob.type).
@@ -64,4 +81,41 @@ export async function deleteFilesForField(fieldId: string) {
 		}
 	}
 	if (rows.length > 0) await db.delete(file).where(eq(file.fieldId, fieldId));
+}
+
+/**
+ * Remove all files attached to any of `taskIds` (direct attachments AND
+ * custom-field values scoped to those tasks): unlink each from disk (best
+ * effort) and delete the rows. Call before deleting a task — the FK cascade
+ * only removes the `file` rows, so without this the bytes would orphan.
+ */
+export async function deleteFilesForTasks(taskIds: string[]) {
+	if (taskIds.length === 0) return;
+	const rows = await db.select().from(file).where(inArray(file.taskId, taskIds));
+	for (const f of rows) {
+		try {
+			await unlink(filePath(f.storagePath));
+		} catch {
+			// already gone — fine
+		}
+	}
+	if (rows.length > 0) await db.delete(file).where(inArray(file.taskId, taskIds));
+}
+
+/**
+ * Remove all files belonging to a project (any task's attachments/custom-field
+ * values, and project-entity custom-field values): unlink each from disk (best
+ * effort) and delete the rows. Call before deleting a project — the FK cascade
+ * only removes the `file` rows, so without this the bytes would orphan.
+ */
+export async function deleteFilesForProject(projectId: string) {
+	const rows = await db.select().from(file).where(eq(file.projectId, projectId));
+	for (const f of rows) {
+		try {
+			await unlink(filePath(f.storagePath));
+		} catch {
+			// already gone — fine
+		}
+	}
+	if (rows.length > 0) await db.delete(file).where(eq(file.projectId, projectId));
 }

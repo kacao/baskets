@@ -23,11 +23,7 @@ export async function ensureDefaultWorkspace() {
 			.where(eq(user.role, 'admin'))
 			.limit(1);
 		if (!owner)
-			[owner] = await db
-				.select({ id: user.id })
-				.from(user)
-				.orderBy(asc(user.createdAt))
-				.limit(1);
+			[owner] = await db.select({ id: user.id }).from(user).orderBy(asc(user.createdAt)).limit(1);
 		if (!owner) return; // no users yet — retry after first signup
 
 		const now = new Date();
@@ -51,10 +47,7 @@ export async function ensureDefaultWorkspace() {
 	if (adopter) {
 		// pre-workspace rows: projects, labels, groups, and custom (non-built-in)
 		// app-wide statuses move into the oldest workspace
-		await db
-			.update(project)
-			.set({ workspaceId: adopter.id })
-			.where(isNull(project.workspaceId));
+		await db.update(project).set({ workspaceId: adopter.id }).where(isNull(project.workspaceId));
 		await db.update(label).set({ workspaceId: adopter.id }).where(isNull(label.workspaceId));
 		await db
 			.update(labelGroup)
@@ -63,9 +56,7 @@ export async function ensureDefaultWorkspace() {
 		await db
 			.update(status)
 			.set({ workspaceId: adopter.id })
-			.where(
-				and(isNull(status.workspaceId), isNull(status.projectId), eq(status.builtIn, false))
-			);
+			.where(and(isNull(status.workspaceId), isNull(status.projectId), eq(status.builtIn, false)));
 	}
 
 	ensured = true;

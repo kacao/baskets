@@ -11,7 +11,9 @@
 <svelte:head><title>{data.project.name} — {$t('Statuses')} — Baskets</title></svelte:head>
 
 <p class="u-tiny" style="margin-bottom: var(--sp-2);">
-	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"><Icon name="arrow-left" size={12} /> {data.project.name}</a>
+	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"
+		><Icon name="arrow-left" size={12} /> {data.project.name}</a
+	>
 </p>
 <h2 style="margin-bottom: var(--sp-4);">{$t('Statuses')}</h2>
 
@@ -21,7 +23,9 @@
 
 <div class="card section">
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
-		{$t('Pick which default and workspace statuses this project uses, and add statuses that only exist in this project.')}
+		{$t(
+			'Pick which default and workspace statuses this project uses, and add statuses that only exist in this project.'
+		)}
 	</p>
 
 	<form method="POST" action="?/updateProjectStatuses" use:enhance>
@@ -51,7 +55,9 @@
 
 	<span class="label">{$t('Project statuses')}</span>
 	<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">
-		{$t('Statuses that only exist in this project. Default and workspace statuses are shown for context and managed elsewhere.')}
+		{$t(
+			'Statuses that only exist in this project. Default and workspace statuses are shown for context and managed elsewhere.'
+		)}
 	</p>
 	<StatusEditor
 		categories={data.categories}

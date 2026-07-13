@@ -23,9 +23,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 	const projects =
 		wsAccess === 'all'
 			? all
-			: all.filter(
-					(p) => (p.workspaceId && wsAccess.has(p.workspaceId)) || projGrants.has(p.id)
-				);
+			: all.filter((p) => (p.workspaceId && wsAccess.has(p.workspaceId)) || projGrants.has(p.id));
 	return json({ projects });
 };
 

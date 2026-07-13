@@ -16,9 +16,15 @@
 		"start": "node --env-file=.env server.js",
 		"test": "vitest run",
 		"test:unit": "vitest run tests/unit",
+		"test:coverage": "vitest run --coverage",
 		"test:integration": "vitest run --config vitest.integration.config.ts",
+		"test:server": "DB_DIALECT=sqlite DATABASE_URL=./data/test-server.db vitest run --config vitest.server.config.ts",
 		"test:watch": "vitest",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"verify": "npm run check && npm run test:unit",
+		"lint": "eslint .",
+		"format": "prettier --write .",
+		"format:check": "prettier --check ."
 	},
 	"dependencies": {
 		"@fontsource/ibm-plex-mono": "^5.2.7",
@@ -42,23 +48,30 @@
 		"form-data": "^4.0.6"
 	},
 	"devDependencies": {
+		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.49.0",
 		"@sveltejs/adapter-node": "^5.2.0",
 		"@sveltejs/kit": "^2.20.0",
-		"@sveltejs/vite-plugin-svelte": "^5.0.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@testing-library/jest-dom": "^6.6.3",
 		"@testing-library/svelte": "^5.2.6",
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/leaflet": "^1.9.21",
 		"@types/qrcode": "^1.5.5",
 		"@types/ws": "^8.18.1",
-		"@vitest/ui": "^3.0.0",
+		"@vitest/coverage-v8": "^4.1.10",
+		"@vitest/ui": "^4.1.10",
 		"drizzle-kit": "^0.31.0",
-		"jsdom": "^25.0.1",
+		"eslint": "^10.6.0",
+		"eslint-plugin-svelte": "^3.20.0",
+		"jsdom": "^29.1.1",
+		"prettier": "^3.9.4",
+		"prettier-plugin-svelte": "^4.1.1",
 		"svelte": "^5.28.0",
 		"svelte-check": "^4.1.0",
-		"typescript": "^5.8.0",
-		"vite": "^6.3.0",
-		"vitest": "^3.0.0"
+		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.62.1",
+		"vite": "^8.1.3",
+		"vitest": "^4.1.10"
 	}
 }

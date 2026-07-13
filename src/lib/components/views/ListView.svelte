@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
-	import { setPaneUrl, readPaneParam } from '$lib/paneUrl';
-	import { untrack } from 'svelte';
+	import { createPaneNav } from '$lib/paneNav.svelte';
 	import { slide } from 'svelte/transition';
 	import StatusSelect from '$lib/components/StatusSelect.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
@@ -13,6 +11,8 @@
 	import { selection } from '$lib/selection.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { tooltip } from '$lib/tooltip';
+	import { fmtDate } from '$lib/date';
+	import { groupTasks } from '$lib/taskGroups';
 
 	type Task = {
 		id: string;
@@ -30,10 +30,35 @@
 		dueDate: Date | string | null;
 	};
 	type Status = { id: string; name: string; category: string };
-	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
-	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; position?: number };
-	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
-	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
+	type Location = {
+		id: string;
+		title: string;
+		address: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	};
+	type CustomFieldDef = {
+		id: string;
+		name: string;
+		type: string;
+		config: Record<string, unknown>;
+		position?: number;
+	};
+	type CustomFieldOption = {
+		id: string;
+		fieldId: string;
+		title: string;
+		color: string | null;
+		icon: string | null;
+	};
+	type FileRef = {
+		id: string;
+		taskId: string | null;
+		fieldId: string | null;
+		filename: string;
+		mimeType: string;
+		size: number;
+	};
 
 	let {
 		tasks,
@@ -74,46 +99,8 @@
 	} = $props();
 
 	let expanded = $state<Record<string, boolean>>({});
-	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
-	// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
-	// the top is the "← back" target, reset on any fresh open from outside the pane
-	let backStack = $state<string[]>([]);
-	// keep the pane in sync with browser back/forward to a ?task= link, without
-	// fighting user clicks (effect tracks the URL only, never selectedId)
-	let lastTaskParam = $state(page.url.searchParams.get('task'));
-	$effect(() => {
-		const fromUrl = readPaneParam('task');
-		if (fromUrl !== untrack(() => lastTaskParam)) {
-			lastTaskParam = fromUrl;
-			selectedId = fromUrl;
-			backStack = [];
-		}
-	});
-	// mirror the open task back into the URL so the pane is linkable / restorable in
-	// another window (shallow routing — load() doesn't re-run). lastTaskParam is a
-	// plain sentinel read via untrack() in BOTH effects, so changing it in one never
-	// re-runs the other with a stale page.url (which would clobber the selection).
-	$effect(() => {
-		const id = selectedId;
-		if (id !== untrack(() => lastTaskParam)) {
-			lastTaskParam = id;
-			setPaneUrl({ task: id });
-		}
-	});
-	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
-
-	function navTask(id: string) {
-		if (id === selectedId) return;
-		if (selectedId) backStack = [...backStack, selectedId];
-		selectedId = id;
-	}
-	function navBack() {
-		selectedId = backStack[backStack.length - 1] ?? null;
-		backStack = backStack.slice(0, -1);
-	}
-	const backTask = $derived(
-		backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
-	);
+	// ADR-055, extracted to paneNav.svelte.ts
+	const nav = createPaneNav<Task>(() => allTasks);
 
 	// order rank first (nulls last), then board position as tiebreaker; then the
 	// view's config.sortBy is layered on top via sortTasks (stable). (BASDEV-7)
@@ -148,71 +135,27 @@
 			.filter((l) => l.taskId === taskId)
 			.map((l) => labels.find((x) => x.id === l.labelId))
 			.filter(Boolean);
-	const taskLabelIds = (taskId: string) => taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
-
-	function fmtDate(d: Date | string | null) {
-		if (!d) return null;
-		return new Date(d).toISOString().slice(0, 10);
-	}
+	const taskLabelIds = (taskId: string) =>
+		taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
 
 	// Group by (config.groupBy): one section per group, like the table view.
 	const groupBy = $derived(typeof config.groupBy === 'string' ? (config.groupBy as string) : null);
 	// Hide empty groups (config.hideEmptyGroups, default true) — honors view filters/sort.
 	const hideEmptyGroups = $derived(config.hideEmptyGroups !== false);
 	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
-	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
+	const aggFieldIds = $derived(
+		Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []
+	);
 	type Group = { key: string; title: string; tasks: Task[] };
 
-	function dueBuckets(rows: Task[]): Group[] {
-		const start = new Date();
-		start.setHours(0, 0, 0, 0);
-		const today = start.getTime();
-		const week = today + 7 * 86400000;
-		const b: Record<string, Task[]> = { overdue: [], today: [], week: [], later: [], none: [] };
-		for (const t of rows) {
-			if (!t.dueDate) {
-				b.none.push(t);
-				continue;
-			}
-			const ts = new Date(new Date(t.dueDate).setHours(0, 0, 0, 0)).getTime();
-			if (ts < today) b.overdue.push(t);
-			else if (ts === today) b.today.push(t);
-			else if (ts < week) b.week.push(t);
-			else b.later.push(t);
-		}
-		return [
-			{ key: 'overdue', title: $i18n('Overdue'), tasks: b.overdue },
-			{ key: 'today', title: $i18n('Today'), tasks: b.today },
-			{ key: 'week', title: $i18n('Next 7 days'), tasks: b.week },
-			{ key: 'later', title: $i18n('Later'), tasks: b.later },
-			{ key: 'none', title: $i18n('No due date'), tasks: b.none }
-		];
-	}
-
-	const groups = $derived.by((): Group[] => {
-		const rows = ordered;
-		let g: Group[];
-		if (groupBy === 'status')
-			g = statuses.map((s) => ({ key: s.id, title: s.name, tasks: rows.filter((t) => t.statusId === s.id) }));
-		else if (groupBy === 'milestone')
-			g = [
-				...milestones.map((m) => ({ key: m.id, title: m.name, tasks: rows.filter((t) => t.milestoneId === m.id) })),
-				{ key: '_none', title: $i18n('No milestone'), tasks: rows.filter((t) => !t.milestoneId) }
-			];
-		else if (groupBy === 'assignee')
-			g = [
-				...users.map((u) => ({ key: u.id, title: u.name, tasks: rows.filter((t) => t.assigneeId === u.id) })),
-				{ key: '_none', title: $i18n('Unassigned'), tasks: rows.filter((t) => !t.assigneeId) }
-			];
-		else if (groupBy === 'due') g = dueBuckets(rows);
-		else if (groupBy === 'label')
-			g = [
-				...labels.map((l) => ({ key: l.id, title: l.name, tasks: rows.filter((t) => taskLabelIds(t.id).includes(l.id)) })),
-				{ key: '_none', title: $i18n('No label'), tasks: rows.filter((t) => taskLabelIds(t.id).length === 0) }
-			];
-		else return [{ key: '_all', title: '', tasks: rows }];
-		return hideEmptyGroups ? g.filter((x) => x.tasks.length > 0) : g;
-	});
+	const groups = $derived.by((): Group[] =>
+		groupTasks(
+			ordered,
+			groupBy,
+			{ statuses, milestones, users, labels, labelIdsOf: taskLabelIds, t: $i18n },
+			hideEmptyGroups
+		)
+	);
 	let collapsed = $state<Record<string, boolean>>({});
 </script>
 
@@ -251,9 +194,9 @@
 		</ul>
 	{/if}
 
-	{#if selected}
+	{#if nav.selected}
 		<TaskPanel
-			task={selected}
+			task={nav.selected}
 			tasks={allTasks}
 			{users}
 			{statuses}
@@ -269,13 +212,13 @@
 			{canEditTask}
 			{templates}
 			{statusDisplay}
-			back={backTask}
-			onBack={navBack}
+			back={nav.backTask}
+			onBack={nav.navBack}
 			onClose={() => {
-				selectedId = null;
-				backStack = [];
+				nav.selectedId = null;
+				nav.backStack = [];
 			}}
-			onSelectTask={(id) => navTask(id)}
+			onSelectTask={(id) => nav.navTask(id)}
 		/>
 	{/if}
 </div>
@@ -315,14 +258,17 @@
 			{:else}
 				<span class="order"></span>
 			{/if}
-			<StatusSelect taskId={t.id} statusId={t.statusId} {statuses} canEdit={canEditTask(t)} display={statusDisplay} />
+			<StatusSelect
+				taskId={t.id}
+				statusId={t.statusId}
+				{statuses}
+				canEdit={canEditTask(t)}
+				display={statusDisplay}
+			/>
 			<button
 				class="row-title"
-				class:selected={selectedId === t.id}
-				onclick={() => {
-					selectedId = selectedId === t.id ? null : t.id;
-					backStack = [];
-				}}
+				class:selected={nav.selectedId === t.id}
+				onclick={() => nav.openDetail(t)}
 			>
 				<span class="title-text">{t.title}</span>
 			</button>

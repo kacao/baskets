@@ -15,11 +15,15 @@
 
 <h2 style="margin-bottom: var(--sp-2);">{$t('Statuses')}</h2>
 <p class="u-small u-muted" style="margin-bottom: var(--sp-4); max-width: 65ch;">
-	{$t('The five default statuses every project starts from. Their name, category and deletion are fixed — but you can change each status’s icon here (applies everywhere). Custom statuses are added per workspace or per project in their settings.')}
+	{$t(
+		'The five default statuses every project starts from. Their name, category and deletion are fixed — but you can change each status’s icon here (applies everywhere). Custom statuses are added per workspace or per project in their settings.'
+	)}
 </p>
 
 {#if form?.message}
-	<div class="alert alert-error" role="alert" style="max-width: 640px; margin-bottom: var(--sp-3);">{form.message}</div>
+	<div class="alert alert-error" role="alert" style="max-width: 640px; margin-bottom: var(--sp-3);">
+		{form.message}
+	</div>
 {/if}
 
 <div class="card" style="max-width: 640px;">
@@ -28,7 +32,11 @@
 			<Popover ariaLabel={$t('Change icon')}>
 				{#snippet trigger()}
 					<span class="ic-trigger" use:tooltip={$t('Change icon')}>
-						{#if s.icon}<EntityIcon value={s.icon} size={18} />{:else}<span class="status-dot" style="--c: {s.color || 'var(--color-muted)'}" aria-hidden="true"></span>{/if}
+						{#if s.icon}<EntityIcon value={s.icon} size={18} />{:else}<span
+								class="status-dot"
+								style="--c: {s.color || 'var(--color-muted)'}"
+								aria-hidden="true"
+							></span>{/if}
 					</span>
 				{/snippet}
 				{#snippet panel(close)}
@@ -36,10 +44,11 @@
 						id="icon-form-{s.id}"
 						method="POST"
 						action="?/setStatusIcon"
-						use:enhance={() => async ({ update }) => {
-							close();
-							await update();
-						}}
+						use:enhance={() =>
+							async ({ update }) => {
+								close();
+								await update();
+							}}
 					>
 						<input type="hidden" name="id" value={s.id} />
 						<input type="hidden" name="icon" value={s.icon ?? ''} />

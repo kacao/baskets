@@ -58,7 +58,7 @@ import {
 	writeProjectCustomValues,
 	validateFieldConfig
 } from '$lib/server/customFields';
-import { deleteFilesForField } from '$lib/server/uploads';
+import { deleteFilesForField, deleteFilesForProject } from '$lib/server/uploads';
 import { importProjectFromExport } from '$lib/server/projectIO';
 import {
 	milestoneProgressByProject,
@@ -87,7 +87,9 @@ async function optionInProject(optionId: string, projectId: string) {
 }
 
 /** Parse the optional latitude/longitude form fields (blank ⇒ null), range-checked. */
-function parseCoords(form: FormData): { lat: number | null; lng: number | null } | { error: string } {
+function parseCoords(
+	form: FormData
+): { lat: number | null; lng: number | null } | { error: string } {
 	const latRaw = String(form.get('latitude') ?? '').trim();
 	const lngRaw = String(form.get('longitude') ?? '').trim();
 	let lat: number | null = null;
@@ -201,7 +203,10 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 	const hasRollup = customFields.some((f) => f.entity === 'project' && f.type === 'rollup');
 	const [rollupTasks, rollupTaskValues] = hasRollup
 		? await Promise.all([
-				db.select({ id: task.id, parentId: task.parentId }).from(task).where(eq(task.projectId, params.id)),
+				db
+					.select({ id: task.id, parentId: task.parentId })
+					.from(task)
+					.where(eq(task.projectId, params.id)),
 				db
 					.select({
 						taskId: taskCustomValue.taskId,
@@ -302,7 +307,6 @@ export const load: PageServerLoad = loadImpl;
 export type ProjectSettingsData = Awaited<ReturnType<typeof loadImpl>>;
 
 export const actions: Actions = {
-
 	updateProject: async ({ request, params, locals }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		if (!(await canEditProject(locals.user, params.id)))
@@ -377,7 +381,12 @@ export const actions: Actions = {
 			return fail(403, { message: 'No edit permission on this project' });
 
 		const raw = String((await request.formData()).get('fieldIds') ?? '');
-		const ids = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+		const ids = raw
+			? raw
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
+			: [];
 		// keep only this project's own (entity='project') fields, deduped, in given order
 		const valid = new Set(
 			(await listProjectCustomFields(params.id))
@@ -398,6 +407,7 @@ export const actions: Actions = {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		if (!(await canEditProject(locals.user, params.id)))
 			return fail(403, { message: 'No edit permission on this project' });
+		await deleteFilesForProject(params.id);
 		await db.delete(project).where(eq(project.id, params.id));
 		redirect(303, '/projects');
 	},
@@ -609,7 +619,9 @@ export const actions: Actions = {
 		if (others.some((o) => o.id !== id && o.name.toLowerCase() === name.toLowerCase()))
 			return fail(400, { message: 'A field with that name already exists' });
 
-		const config = form.has('config') ? validateFieldConfig(f.type, String(form.get('config'))) : f.config;
+		const config = form.has('config')
+			? validateFieldConfig(f.type, String(form.get('config')))
+			: f.config;
 		const set: { name: string; config: string; appliesTo?: string } = { name, config };
 		if (form.has('appliesTo')) {
 			const appliesTo = String(form.get('appliesTo'));
@@ -660,7 +672,10 @@ export const actions: Actions = {
 			return fail(400, { message: 'Invalid order' });
 
 		for (let i = 0; i < ids.length; i++)
-			await db.update(customField).set({ position: i * 10 }).where(eq(customField.id, ids[i]));
+			await db
+				.update(customField)
+				.set({ position: i * 10 })
+				.where(eq(customField.id, ids[i]));
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
@@ -680,7 +695,8 @@ export const actions: Actions = {
 			.select()
 			.from(customField)
 			.where(and(eq(customField.id, fieldId), eq(customField.projectId, params.id)));
-		if (!f || f.type !== 'select') return fail(400, { message: 'Not a select field of this project' });
+		if (!f || f.type !== 'select')
+			return fail(400, { message: 'Not a select field of this project' });
 		if (!title) return fail(400, { message: 'Option title is required' });
 		if (title.length > 60) return fail(400, { message: 'Title too long (max 60)' });
 
@@ -790,7 +806,10 @@ export const actions: Actions = {
 			return fail(400, { message: 'Invalid order' });
 
 		for (let i = 0; i < ids.length; i++)
-			await db.update(customFieldOption).set({ position: i * 10 }).where(eq(customFieldOption.id, ids[i]));
+			await db
+				.update(customFieldOption)
+				.set({ position: i * 10 })
+				.where(eq(customFieldOption.id, ids[i]));
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},

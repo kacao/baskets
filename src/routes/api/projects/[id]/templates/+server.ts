@@ -77,8 +77,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// Workspace-scoped templates additionally need workspace-edit rights.
 	if (scope === 'workspace') {
 		if (!proj?.workspaceId) return apiError(404, 'Not found');
-		if (!(await canEditWorkspace(locals.user, proj.workspaceId)))
-			return apiError(404, 'Not found');
+		if (!(await canEditWorkspace(locals.user, proj.workspaceId))) return apiError(404, 'Not found');
 	}
 
 	const id = await createTemplate({

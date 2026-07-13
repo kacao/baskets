@@ -31,9 +31,9 @@ async function labelIsValid(t: typeof task.$inferSelect, labelId: string): Promi
 	const [proj] = await db.select().from(project).where(eq(project.id, t.projectId));
 	return Boolean(
 		l &&
-			proj &&
-			((l.workspaceId !== null && l.workspaceId === proj.workspaceId) ||
-				(l.projectId !== null && l.projectId === t.projectId))
+		proj &&
+		((l.workspaceId !== null && l.workspaceId === proj.workspaceId) ||
+			(l.projectId !== null && l.projectId === t.projectId))
 	);
 }
 

@@ -24,16 +24,12 @@ export function registerDictionary(code: string, dict: Record<string, string>) {
 	dictionaries[code] = { ...dictionaries[code], ...dict };
 }
 
-export const t = derived(
-	locale,
-	(l) =>
-		(key: string, params?: Record<string, string | number>) => {
-			let s = l === 'en' ? key : (dictionaries[l]?.[key] ?? key);
-			if (params) {
-				for (const [k, v] of Object.entries(params)) {
-					s = s.replaceAll(`{${k}}`, String(v));
-				}
-			}
-			return s;
+export const t = derived(locale, (l) => (key: string, params?: Record<string, string | number>) => {
+	let s = l === 'en' ? key : (dictionaries[l]?.[key] ?? key);
+	if (params) {
+		for (const [k, v] of Object.entries(params)) {
+			s = s.replaceAll(`{${k}}`, String(v));
 		}
-);
+	}
+	return s;
+});

@@ -137,13 +137,18 @@
 	// Per-task searchable text from custom-field values (resolved to display labels).
 	// Lets free-text search + the task-cf link picker hit custom fields. ponytail:
 	// rebuilt on any data change, O(values) — fine at app scale.
+	const optionTitleById = $derived(new Map(data.customFieldOptions.map((o) => [o.id, o.title])));
+	const userNameById = $derived(new Map(data.users.map((u) => [u.id, u.name])));
+	const locationTitleById = $derived(new Map(data.locations.map((l) => [l.id, l.title])));
+	const taskTitleById = $derived(new Map(data.tasks.map((t) => [t.id, t.title])));
+	const fileNameById = $derived(new Map(data.files.map((f) => [f.id, f.filename])));
 	const cfSearchByTask = $derived(
 		buildTaskCfSearch(data.customFields, data.taskCustomValues, {
-			option: (id) => data.customFieldOptions.find((o) => o.id === id)?.title ?? '',
-			user: (id) => data.users.find((u) => u.id === id)?.name ?? '',
-			location: (id) => data.locations.find((l) => l.id === id)?.title ?? '',
-			task: (id) => data.tasks.find((t) => t.id === id)?.title ?? '',
-			file: (id) => data.files.find((f) => f.id === id)?.filename ?? ''
+			option: (id) => optionTitleById.get(id) ?? '',
+			user: (id) => userNameById.get(id) ?? '',
+			location: (id) => locationTitleById.get(id) ?? '',
+			task: (id) => taskTitleById.get(id) ?? '',
+			file: (id) => fileNameById.get(id) ?? ''
 		})
 	);
 	const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';
@@ -329,7 +334,8 @@
 			a.total++;
 			if (doneStatusIds.has(t.statusId)) a.done++;
 		}
-		for (const k in acc) acc[k].pct = acc[k].total ? Math.round((acc[k].done / acc[k].total) * 100) : 0;
+		for (const k in acc)
+			acc[k].pct = acc[k].total ? Math.round((acc[k].done / acc[k].total) * 100) : 0;
 		return acc;
 	});
 
@@ -389,7 +395,16 @@
 			.join('')
 			.toUpperCase();
 
-	const VIEW_TYPES = ['table', 'board', 'list', 'timeline', 'calendar', 'dashboard', 'map', 'flow'] as const;
+	const VIEW_TYPES = [
+		'table',
+		'board',
+		'list',
+		'timeline',
+		'calendar',
+		'dashboard',
+		'map',
+		'flow'
+	] as const;
 	const VIEW_ICONS: Record<string, string> = {
 		table: 'table',
 		board: 'view-grid',
@@ -405,12 +420,8 @@
 		return d === 'icon' || d === 'text-icon' ? d : 'text';
 	};
 
-	const projectLabels = $derived(
-		data.labels.filter((l) => data.projectLabelIds.includes(l.id))
-	);
-	const dependsOn = $derived(
-		data.allProjects.filter((p) => data.projectDependsOn.includes(p.id))
-	);
+	const projectLabels = $derived(data.labels.filter((l) => data.projectLabelIds.includes(l.id)));
+	const dependsOn = $derived(data.allProjects.filter((p) => data.projectDependsOn.includes(p.id)));
 
 	// Project header chips (ADR-040 design): the project's OWN (entity='project') custom
 	// fields rendered as two-tone key-value pills [ name | value ]. Display-only; values
@@ -445,7 +456,9 @@
 	const projectFieldPills = $derived.by(() => {
 		const byId = new Map(data.projectFields.map((f) => [f.id, f]));
 		const ordered = chipFieldOrder
-			? chipFieldOrder.map((id) => byId.get(id)).filter((f): f is (typeof data.projectFields)[number] => Boolean(f))
+			? chipFieldOrder
+					.map((id) => byId.get(id))
+					.filter((f): f is (typeof data.projectFields)[number] => Boolean(f))
 			: data.projectFields;
 		return ordered
 			.map((f) => ({
@@ -455,7 +468,10 @@
 				value:
 					f.type === 'rollup'
 						? (data.projectRollupText[f.id] ?? '')
-						: projectFieldDisplay(f, data.projectCustomValues.find((v) => v.fieldId === f.id)?.value)
+						: projectFieldDisplay(
+								f,
+								data.projectCustomValues.find((v) => v.fieldId === f.id)?.value
+							)
 			}))
 			.filter((p) => p.value !== '');
 	});
@@ -586,7 +602,9 @@
 		ids.splice(to, 0, src);
 		const fd = new FormData();
 		fd.set('ids', ids.join(','));
-		fetch(`${page.url.pathname}?/reorderView`, { method: 'POST', body: fd }).then(() => invalidateAll());
+		fetch(`${page.url.pathname}?/reorderView`, { method: 'POST', body: fd }).then(() =>
+			invalidateAll()
+		);
 	}
 </script>
 
@@ -600,752 +618,457 @@
 />
 
 <div class="proj-page">
-
-<!-- Project header — portaled up into the shell topbar ([data-page-header]) -->
-<div class="proj-topbar" use:portal={'[data-page-header]'}>
-	<a href="/projects" class="back-link" use:tooltip={$t('Projects')} aria-label={$t('Projects')}><Icon name="arrow-left" size={16} /></a>
-	<h2 class="proj-title">
-		<span class="proj-name">{data.project.name}</span>
-	</h2>
-	{#if data.project.pinned}
-		<span class="u-muted" use:tooltip={$t('Pinned')}><Icon name="star" size={14} /></span>
-	{/if}
-	{#if data.perm.project}
-		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-		<div class="menu-wrap" onclick={(e) => e.stopPropagation()}>
-			<button
-				class="dots-btn"
-				aria-label={$t('Project menu')}
-				aria-expanded={projMenuOpen}
-				onclick={() => {
-					projMenuOpen = !projMenuOpen;
-					openSub = null;
-				}}
-			>
-				<Icon name="more-horiz" size={18} />
-			</button>
-			{#if projMenuOpen}
-				<div class="menu" transition:popover>
-					<!-- Create… (flyout / mobile accordion): Task / Milestone -->
-					<div class="menu-sub" class:open={openSub === 'create'}>
-						<button
-							class="menu-item menu-item--sub"
-							aria-haspopup="true"
-							aria-expanded={openSub === 'create'}
-							onclick={() => (openSub = openSub === 'create' ? null : 'create')}
-						>
-							{$t('Create…')} <span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
-						</button>
-						<div class="flyout">
+	<!-- Project header — portaled up into the shell topbar ([data-page-header]) -->
+	<div class="proj-topbar" use:portal={'[data-page-header]'}>
+		<a href="/projects" class="back-link" use:tooltip={$t('Projects')} aria-label={$t('Projects')}
+			><Icon name="arrow-left" size={16} /></a
+		>
+		<h2 class="proj-title">
+			<span class="proj-name">{data.project.name}</span>
+		</h2>
+		{#if data.project.pinned}
+			<span class="u-muted" use:tooltip={$t('Pinned')}><Icon name="star" size={14} /></span>
+		{/if}
+		{#if data.perm.project}
+			<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+			<div class="menu-wrap" onclick={(e) => e.stopPropagation()}>
+				<button
+					class="dots-btn"
+					aria-label={$t('Project menu')}
+					aria-expanded={projMenuOpen}
+					onclick={() => {
+						projMenuOpen = !projMenuOpen;
+						openSub = null;
+					}}
+				>
+					<Icon name="more-horiz" size={18} />
+				</button>
+				{#if projMenuOpen}
+					<div class="menu" transition:popover>
+						<!-- Create… (flyout / mobile accordion): Task / Milestone -->
+						<div class="menu-sub" class:open={openSub === 'create'}>
 							<button
-								class="menu-item"
-								onclick={() => {
-									projMenuOpen = false;
-									openNewTask();
-								}}
+								class="menu-item menu-item--sub"
+								aria-haspopup="true"
+								aria-expanded={openSub === 'create'}
+								onclick={() => (openSub = openSub === 'create' ? null : 'create')}
 							>
-								{$t('Task')}
+								{$t('Create…')}
+								<span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
 							</button>
-							<button
-								class="menu-item"
-								onclick={() => {
-									projMenuOpen = false;
-									openNewMilestone();
-								}}
-							>
-								{$t('Milestone')}
-							</button>
-							<button
-								class="menu-item"
-								onclick={() => {
-									projMenuOpen = false;
-									openTemplatePicker();
-								}}
-							>
-								{$t('New from template')}
-							</button>
-						</div>
-					</div>
-
-					<div class="menu-rule"></div>
-
-					<!-- Status (flyout / mobile accordion) -->
-					<div class="menu-sub" class:open={openSub === 'status'}>
-						<button
-							class="menu-item menu-item--sub"
-							aria-haspopup="true"
-							aria-expanded={openSub === 'status'}
-							onclick={() => (openSub = openSub === 'status' ? null : 'status')}
-						>
-							{$t('Status')} <span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
-						</button>
-						<div class="flyout">
-							<form method="POST" action="?/setProjectStatus" use:enhance>
-								<button class="menu-item" type="submit">
-									<span class="check">{data.project.statusId ? '' : '✓'}</span>
-									{$t('No status')}
+							<div class="flyout">
+								<button
+									class="menu-item"
+									onclick={() => {
+										projMenuOpen = false;
+										openNewTask();
+									}}
+								>
+									{$t('Task')}
 								</button>
-							</form>
-							{#each data.projectStatuses as s (s.id)}
+								<button
+									class="menu-item"
+									onclick={() => {
+										projMenuOpen = false;
+										openNewMilestone();
+									}}
+								>
+									{$t('Milestone')}
+								</button>
+								<button
+									class="menu-item"
+									onclick={() => {
+										projMenuOpen = false;
+										openTemplatePicker();
+									}}
+								>
+									{$t('New from template')}
+								</button>
+							</div>
+						</div>
+
+						<div class="menu-rule"></div>
+
+						<!-- Status (flyout / mobile accordion) -->
+						<div class="menu-sub" class:open={openSub === 'status'}>
+							<button
+								class="menu-item menu-item--sub"
+								aria-haspopup="true"
+								aria-expanded={openSub === 'status'}
+								onclick={() => (openSub = openSub === 'status' ? null : 'status')}
+							>
+								{$t('Status')}
+								<span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
+							</button>
+							<div class="flyout">
 								<form method="POST" action="?/setProjectStatus" use:enhance>
-									<input type="hidden" name="statusId" value={s.id} />
 									<button class="menu-item" type="submit">
-										<span class="check">{data.project.statusId === s.id ? '✓' : ''}</span>
-										<span class="opt-dot" style="--c: {s.color || 'var(--color-muted)'}" aria-hidden="true"></span>
-										{s.name}
+										<span class="check">{data.project.statusId ? '' : '✓'}</span>
+										{$t('No status')}
 									</button>
 								</form>
-							{/each}
-						</div>
-					</div>
-
-					<div class="menu-rule"></div>
-
-					<a class="menu-item" href="/projects/{data.project.id}/settings">
-						{$t('Edit project…')}
-					</a>
-					<a
-						class="menu-item"
-						href="/api/projects/{data.project.id}/export?format=csv"
-						download
-						onclick={() => (projMenuOpen = false)}
-					>
-						{$t('Export CSV')}
-					</a>
-					<form
-						method="POST"
-						action="?/pinProject"
-						use:enhance={() => {
-							projMenuOpen = false;
-							return async ({ update }) => update();
-						}}
-					>
-						<button class="menu-item" type="submit">
-							{data.project.pinned ? $t('Unpin') : $t('Pin')}
-						</button>
-					</form>
-
-					<div class="menu-rule"></div>
-
-					<div class="menu-sub" class:open={openSub === 'icon'}>
-						<button
-							class="menu-item menu-item--sub"
-							aria-haspopup="true"
-							aria-expanded={openSub === 'icon'}
-							onclick={() => (openSub = openSub === 'icon' ? null : 'icon')}
-						>
-							{$t('Icon')} <span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
-						</button>
-						<div class="flyout flyout--picker">
-							<IconPicker
-								value={data.project.icon}
-								onSelect={(v) => chooseIcon(v)}
-								onRemove={() => chooseIcon('')}
-							/>
-						</div>
-					</div>
-
-					<div class="menu-sub" class:open={openSub === 'labels'}>
-						<button
-							class="menu-item menu-item--sub"
-							aria-haspopup="true"
-							aria-expanded={openSub === 'labels'}
-							onclick={() => (openSub = openSub === 'labels' ? null : 'labels')}
-						>
-							{$t('Labels')} <span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
-						</button>
-						<div class="flyout">
-							<!-- svelte-ignore a11y_autofocus -->
-							<input
-								class="label-search"
-								placeholder={$t('Add labels…')}
-								bind:value={labelQuery}
-							/>
-							{#each labelSections as section (section.group?.id ?? 'ungrouped')}
-								{#if section.group}
-									<span class="menu-heading">{section.group.name}</span>
-								{/if}
-								{#each section.labels as l (l.id)}
-									{@const on = data.projectLabelIds.includes(l.id)}
-									<form method="POST" action="?/toggleProjectLabel" use:enhance>
-										<input type="hidden" name="labelId" value={l.id} />
+								{#each data.projectStatuses as s (s.id)}
+									<form method="POST" action="?/setProjectStatus" use:enhance>
+										<input type="hidden" name="statusId" value={s.id} />
 										<button class="menu-item" type="submit">
-											<span class="check">{on ? '✓' : ''}</span>
-											{l.name}
+											<span class="check">{data.project.statusId === s.id ? '✓' : ''}</span>
+											<span
+												class="opt-dot"
+												style="--c: {s.color || 'var(--color-muted)'}"
+												aria-hidden="true"
+											></span>
+											{s.name}
 										</button>
 									</form>
 								{/each}
-							{:else}
-								<span class="menu-heading">{$t('No labels.')}</span>
-							{/each}
+							</div>
 						</div>
-					</div>
 
-					<button
-						class="menu-item"
-						onclick={() => {
-							customizing = false;
-							milestonesOpen = true;
-							projMenuOpen = false;
-						}}
-					>
-						{$t('Milestones…')}
-					</button>
+						<div class="menu-rule"></div>
 
-					<div class="menu-rule"></div>
-
-					<form
-						method="POST"
-						action="?/deleteProject"
-						use:enhance={({ cancel }) => {
-							if (!confirm($t('Delete this project and all its tasks?'))) cancel();
-							return async ({ update }) => update();
-						}}
-					>
-						<button class="menu-item menu-item--danger" type="submit">{$t('Delete')}</button>
-					</form>
-
-					<!-- hidden target for the IconPicker (emits the chosen value) -->
-					<form
-						method="POST"
-						action="?/setProjectIcon"
-						use:enhance={() => async ({ update }) => {
-							projMenuOpen = false;
-							await update();
-						}}
-						bind:this={iconFormEl}
-						style="display: none;"
-					>
-						<input type="hidden" name="icon" bind:value={pendingIcon} />
-					</form>
-				</div>
-			{/if}
-		</div>
-	{/if}
-	{#if projectFieldPills.length > 0 || dependsOn.length > 0}
-		<div class="topbar-pills">
-			{#each projectFieldPills as f (f.id)}
-				<span class="kv-pill">
-					<span class="kv-key">{f.name}</span>
-					<span class="kv-val">{f.value}</span>
-				</span>
-			{/each}
-			{#each dependsOn as p (p.id)}
-				<a class="badge" href="/projects/{p.id}" style="text-decoration: none;">{p.name}</a>
-			{/each}
-		</div>
-	{/if}
-	{#if others.length > 0}
-		<div class="presence" aria-label={$t('People viewing')}>
-			{#each others as u (u.id)}
-				<span class="avatar" use:tooltip={u.name}>{initials(u.name)}</span>
-			{/each}
-		</div>
-	{/if}
-</div>
-{#if form?.message}
-	<div class="alert alert-error" role="alert">{form.message}</div>
-{/if}
-
-<!-- View tabs -->
-<div class="viewbar">
-	{#each visibleViews as v (v.id)}
-		{@const mode = displayOf(v)}
-		<a
-			class="view-tab"
-			class:active={activeView?.id === v.id}
-			class:drag-over={dragOverId === v.id && dragViewId !== v.id}
-			class:dragging={dragViewId === v.id}
-			href="?view={v.id}"
-			data-sveltekit-noscroll
-			use:tooltip={v.name}
-			draggable={data.perm.views[v.id]}
-			ondragstart={(e) => {
-				dragViewId = v.id;
-				if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-			}}
-			ondragover={(e) => {
-				if (dragViewId && dragViewId !== v.id) {
-					e.preventDefault();
-					dragOverId = v.id;
-				}
-			}}
-			ondragleave={() => dragOverId === v.id && (dragOverId = null)}
-			ondrop={(e) => {
-				e.preventDefault();
-				onTabDrop(v.id);
-			}}
-			ondragend={() => {
-				dragViewId = null;
-				dragOverId = null;
-			}}
-			oncontextmenu={(e) => {
-				if (data.perm.views[v.id]) openCtx(e, v.id);
-			}}
-			use:longpress={(p) => {
-				if (data.perm.views[v.id]) openCtxAt(p.clientX, p.clientY, v.id);
-			}}
-			ondblclick={(e) => {
-				if (!data.perm.views[v.id]) return;
-				e.preventDefault();
-				closeMenus();
-				milestonesOpen = false;
-				customizing = true;
-				if (activeView?.id !== v.id) goto(`?view=${v.id}&pane=customize`, { noScroll: true, keepFocus: true });
-			}}
-		>
-			{#if mode !== 'text'}<Icon name={VIEW_ICONS[v.type] ?? 'table'} size={14} />{/if}
-			{#if mode !== 'icon'}{v.name}{/if}
-		</a>
-	{/each}
-	{#if data.perm.project}
-		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-		<div class="add-view" onclick={(e) => e.stopPropagation()}>
-			<button
-				class="view-tab view-tab--ghost"
-				aria-expanded={addingView}
-				aria-label={$t('Add a view')}
-				onclick={() => (addingView = !addingView)}
-			>
-				+
-			</button>
-			{#if addingView}
-				<div class="add-view-menu" transition:slide={{ duration: 150 }}>
-					{#each VIEW_TYPES as vt (vt)}
+						<a class="menu-item" href="/projects/{data.project.id}/settings">
+							{$t('Edit project…')}
+						</a>
+						<a
+							class="menu-item"
+							href="/api/projects/{data.project.id}/export?format=csv"
+							download
+							onclick={() => (projMenuOpen = false)}
+						>
+							{$t('Export CSV')}
+						</a>
 						<form
 							method="POST"
-							action="?/createView"
+							action="?/pinProject"
 							use:enhance={() => {
-								addingView = false;
+								projMenuOpen = false;
 								return async ({ update }) => update();
 							}}
 						>
-							<input type="hidden" name="type" value={vt} />
-							<button class="add-view-item" type="submit">
-								<Icon name={VIEW_ICONS[vt]} size={14} />
-								{$t(vt[0].toUpperCase() + vt.slice(1))}
+							<button class="menu-item" type="submit">
+								{data.project.pinned ? $t('Unpin') : $t('Pin')}
 							</button>
 						</form>
-					{/each}
-					{#if hiddenViews.length > 0}
+
 						<div class="menu-rule"></div>
-						<span class="menu-heading">{$t('Hidden views')}</span>
-						{#each hiddenViews as hv (hv.id)}
+
+						<div class="menu-sub" class:open={openSub === 'icon'}>
+							<button
+								class="menu-item menu-item--sub"
+								aria-haspopup="true"
+								aria-expanded={openSub === 'icon'}
+								onclick={() => (openSub = openSub === 'icon' ? null : 'icon')}
+							>
+								{$t('Icon')}
+								<span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
+							</button>
+							<div class="flyout flyout--picker">
+								<IconPicker
+									value={data.project.icon}
+									onSelect={(v) => chooseIcon(v)}
+									onRemove={() => chooseIcon('')}
+								/>
+							</div>
+						</div>
+
+						<div class="menu-sub" class:open={openSub === 'labels'}>
+							<button
+								class="menu-item menu-item--sub"
+								aria-haspopup="true"
+								aria-expanded={openSub === 'labels'}
+								onclick={() => (openSub = openSub === 'labels' ? null : 'labels')}
+							>
+								{$t('Labels')}
+								<span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
+							</button>
+							<div class="flyout">
+								<!-- svelte-ignore a11y_autofocus -->
+								<input
+									class="label-search"
+									placeholder={$t('Add labels…')}
+									bind:value={labelQuery}
+								/>
+								{#each labelSections as section (section.group?.id ?? 'ungrouped')}
+									{#if section.group}
+										<span class="menu-heading">{section.group.name}</span>
+									{/if}
+									{#each section.labels as l (l.id)}
+										{@const on = data.projectLabelIds.includes(l.id)}
+										<form method="POST" action="?/toggleProjectLabel" use:enhance>
+											<input type="hidden" name="labelId" value={l.id} />
+											<button class="menu-item" type="submit">
+												<span class="check">{on ? '✓' : ''}</span>
+												{l.name}
+											</button>
+										</form>
+									{/each}
+								{:else}
+									<span class="menu-heading">{$t('No labels.')}</span>
+								{/each}
+							</div>
+						</div>
+
+						<button
+							class="menu-item"
+							onclick={() => {
+								customizing = false;
+								milestonesOpen = true;
+								projMenuOpen = false;
+							}}
+						>
+							{$t('Milestones…')}
+						</button>
+
+						<div class="menu-rule"></div>
+
+						<form
+							method="POST"
+							action="?/deleteProject"
+							use:enhance={({ cancel }) => {
+								if (!confirm($t('Delete this project and all its tasks?'))) cancel();
+								return async ({ update }) => update();
+							}}
+						>
+							<button class="menu-item menu-item--danger" type="submit">{$t('Delete')}</button>
+						</form>
+
+						<!-- hidden target for the IconPicker (emits the chosen value) -->
+						<form
+							method="POST"
+							action="?/setProjectIcon"
+							use:enhance={() =>
+								async ({ update }) => {
+									projMenuOpen = false;
+									await update();
+								}}
+							bind:this={iconFormEl}
+							style="display: none;"
+						>
+							<input type="hidden" name="icon" bind:value={pendingIcon} />
+						</form>
+					</div>
+				{/if}
+			</div>
+		{/if}
+		{#if projectFieldPills.length > 0 || dependsOn.length > 0}
+			<div class="topbar-pills">
+				{#each projectFieldPills as f (f.id)}
+					<span class="kv-pill">
+						<span class="kv-key">{f.name}</span>
+						<span class="kv-val">{f.value}</span>
+					</span>
+				{/each}
+				{#each dependsOn as p (p.id)}
+					<a class="badge" href="/projects/{p.id}" style="text-decoration: none;">{p.name}</a>
+				{/each}
+			</div>
+		{/if}
+		{#if others.length > 0}
+			<div class="presence" aria-label={$t('People viewing')}>
+				{#each others as u (u.id)}
+					<span class="avatar" use:tooltip={u.name}>{initials(u.name)}</span>
+				{/each}
+			</div>
+		{/if}
+	</div>
+	{#if form?.message}
+		<div class="alert alert-error" role="alert">{form.message}</div>
+	{/if}
+
+	<!-- View tabs -->
+	<div class="viewbar">
+		{#each visibleViews as v (v.id)}
+			{@const mode = displayOf(v)}
+			<a
+				class="view-tab"
+				class:active={activeView?.id === v.id}
+				class:drag-over={dragOverId === v.id && dragViewId !== v.id}
+				class:dragging={dragViewId === v.id}
+				href="?view={v.id}"
+				data-sveltekit-noscroll
+				use:tooltip={v.name}
+				draggable={data.perm.views[v.id]}
+				ondragstart={(e) => {
+					dragViewId = v.id;
+					if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+				}}
+				ondragover={(e) => {
+					if (dragViewId && dragViewId !== v.id) {
+						e.preventDefault();
+						dragOverId = v.id;
+					}
+				}}
+				ondragleave={() => dragOverId === v.id && (dragOverId = null)}
+				ondrop={(e) => {
+					e.preventDefault();
+					onTabDrop(v.id);
+				}}
+				ondragend={() => {
+					dragViewId = null;
+					dragOverId = null;
+				}}
+				oncontextmenu={(e) => {
+					if (data.perm.views[v.id]) openCtx(e, v.id);
+				}}
+				use:longpress={(p) => {
+					if (data.perm.views[v.id]) openCtxAt(p.clientX, p.clientY, v.id);
+				}}
+				ondblclick={(e) => {
+					if (!data.perm.views[v.id]) return;
+					e.preventDefault();
+					closeMenus();
+					milestonesOpen = false;
+					customizing = true;
+					if (activeView?.id !== v.id)
+						goto(`?view=${v.id}&pane=customize`, { noScroll: true, keepFocus: true });
+				}}
+			>
+				{#if mode !== 'text'}<Icon name={VIEW_ICONS[v.type] ?? 'table'} size={14} />{/if}
+				{#if mode !== 'icon'}{v.name}{/if}
+			</a>
+		{/each}
+		{#if data.perm.project}
+			<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+			<div class="add-view" onclick={(e) => e.stopPropagation()}>
+				<button
+					class="view-tab view-tab--ghost"
+					aria-expanded={addingView}
+					aria-label={$t('Add a view')}
+					onclick={() => (addingView = !addingView)}
+				>
+					+
+				</button>
+				{#if addingView}
+					<div class="add-view-menu" transition:slide={{ duration: 150 }}>
+						{#each VIEW_TYPES as vt (vt)}
 							<form
 								method="POST"
-								action="?/unhideView"
+								action="?/createView"
 								use:enhance={() => {
 									addingView = false;
 									return async ({ update }) => update();
 								}}
 							>
-								<input type="hidden" name="id" value={hv.id} />
+								<input type="hidden" name="type" value={vt} />
 								<button class="add-view-item" type="submit">
-									<Icon name={VIEW_ICONS[hv.type] ?? 'table'} size={14} />
-									{hv.name}
+									<Icon name={VIEW_ICONS[vt]} size={14} />
+									{$t(vt[0].toUpperCase() + vt.slice(1))}
 								</button>
 							</form>
 						{/each}
-					{/if}
-				</div>
-			{/if}
-		</div>
-	{/if}
-</div>
-
-<!-- View context menu (right-click on a tab) -->
-{#if ctx && ctxView}
-	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-	<div
-		class="ctx-menu"
-		style="left: {ctx.x}px; top: {ctx.y}px;"
-		transition:popover
-		onclick={(e) => e.stopPropagation()}
-	>
-		{#if ctxRenaming}
-			<form
-				method="POST"
-				action="?/updateView"
-				use:enhance={() => {
-					closeMenus();
-					return async ({ update }) => update();
-				}}
-				class="ctx-rename"
-			>
-				<input type="hidden" name="id" value={ctxView.id} />
-				<!-- svelte-ignore a11y_autofocus -->
-				<input class="input" name="name" value={ctxView.name} required autofocus />
-				<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
-			</form>
-		{:else}
-			<button class="menu-item" onclick={() => (ctxRenaming = true)}>{$t('Rename')}</button>
-			<button
-				class="menu-item menu-item--sub"
-				aria-expanded={ctxSub === 'display'}
-				onclick={() => (ctxSub = ctxSub === 'display' ? null : 'display')}
-			>
-				{$t('Display as')} <span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
-			</button>
-			{#if ctxSub === 'display'}
-				<div class="submenu" transition:slide={{ duration: 150 }}>
-					{#each [['text-icon', 'Text and icon'], ['text', 'Text only'], ['icon', 'Icon only']] as [mode, label] (mode)}
-						<form
-							method="POST"
-							action="?/updateView"
-							use:enhance={() => {
-								closeMenus();
-								return async ({ update }) => update();
-							}}
-						>
-							<input type="hidden" name="id" value={ctxView.id} />
-							<input type="hidden" name="name" value={ctxView.name} />
-							<input type="hidden" name="config" value={displayConfig(ctxView, mode)} />
-							<button class="menu-item" type="submit">
-								<span class="check">{displayOf(ctxView) === mode ? '✓' : ''}</span>
-								{$t(label)}
-							</button>
-						</form>
-					{/each}
-				</div>
-			{/if}
-			<button
-				class="menu-item"
-				type="button"
-				onclick={(e) => {
-					// stop the window onclick (closeMenus) from swallowing this same
-					// click — that race made the pane open then vanish immediately.
-					e.stopPropagation();
-					const id = ctxView.id;
-					closeMenus();
-					milestonesOpen = false;
-					customizing = true;
-					if (activeView?.id !== id) goto(`?view=${id}&pane=customize`, { noScroll: true, keepFocus: true });
-				}}
-			>
-				{$t('Customize')}
-			</button>
-
-			<div class="menu-rule"></div>
-
-			<form
-				method="POST"
-				action="?/duplicateView"
-				use:enhance={() => {
-					closeMenus();
-					return async ({ update }) => update();
-				}}
-			>
-				<input type="hidden" name="id" value={ctxView.id} />
-				<button class="menu-item" type="submit">{$t('Duplicate view')}</button>
-			</form>
-			<form
-				method="POST"
-				action="?/deleteView"
-				use:enhance={({ cancel }) => {
-					if (!confirm($t('Delete this view? This cannot be undone.'))) {
-						cancel();
-						return;
-					}
-					closeMenus();
-					return async ({ update }) => update();
-				}}
-			>
-				<input type="hidden" name="id" value={ctxView.id} />
-				<button class="menu-item menu-item--danger" type="submit">{$t('Delete view')}</button>
-			</form>
+						{#if hiddenViews.length > 0}
+							<div class="menu-rule"></div>
+							<span class="menu-heading">{$t('Hidden views')}</span>
+							{#each hiddenViews as hv (hv.id)}
+								<form
+									method="POST"
+									action="?/unhideView"
+									use:enhance={() => {
+										addingView = false;
+										return async ({ update }) => update();
+									}}
+								>
+									<input type="hidden" name="id" value={hv.id} />
+									<button class="add-view-item" type="submit">
+										<Icon name={VIEW_ICONS[hv.type] ?? 'table'} size={14} />
+										{hv.name}
+									</button>
+								</form>
+							{/each}
+						{/if}
+					</div>
+				{/if}
+			</div>
 		{/if}
 	</div>
-{/if}
 
-<!-- Single-select pill (Group by / Sort field): label + current value, popover of options. -->
-{#snippet selectPill(
-	label: string,
-	options: readonly (readonly [string, string])[],
-	currentVal: string,
-	configFn: (v: string) => string
-)}
-	{@const curLabel = options.find(([v]) => v === currentVal)?.[1] ?? options[0]?.[1] ?? ''}
-	<span class="cz-pill" class:cz-pill--on={!!currentVal}>
-		<Popover ariaLabel={label}>
-			{#snippet trigger()}{label}: {$t(curLabel)}{/snippet}
-			{#snippet panel(close)}
-				<div class="cz-opts">
-					{#each options as [val, lbl] (val)}
-						<button
-							class="cz-opt"
-							class:cz-opt--on={currentVal === val}
-							type="button"
-							onclick={() => {
-								postViewConfig(configFn(val));
-								close();
-							}}
-						>
-							<span class="cz-check">{#if currentVal === val}<Icon name="check" size={13} />{/if}</span>
-							{$t(lbl)}
-						</button>
-					{/each}
-				</div>
-			{/snippet}
-		</Popover>
-	</span>
-{/snippet}
-
-<!-- Multi-select filter pill: label + count, popover of checkable items (stays open). -->
-{#snippet filterPill(group: { key: string; label: string; opts: [string, string][] })}
-	{@const on = isFilterActive(group.key)}
-	{@const chosen = filterChosen(group.key)}
-	{@const hidden = on ? group.opts.length - chosen.length : 0}
-	<span class="cz-pill" class:cz-pill--on={on}>
-		<Popover ariaLabel={$t(group.label)}>
-			{#snippet trigger()}{$t(group.label)}{#if hidden > 0}<span class="cz-count">{hidden}</span>{/if}{/snippet}
-			{#snippet panel()}
-				<div class="cz-opts">
-					{#each group.opts as [val, lbl] (val)}
-						{@const ok = !on || chosen.includes(val)}
-						<button
-							class="cz-opt"
-							class:cz-opt--on={ok}
-							type="button"
-							onclick={() => postViewConfig(toggleFilterConfig(group.key, val, group.opts.map((o) => o[0])))}
-						>
-							<span class="cz-check">{#if ok}<Icon name="check" size={13} />{/if}</span>
-							{lbl}
-						</button>
-					{:else}
-						<span class="cz-empty">{$t('No options')}</span>
-					{/each}
-				</div>
-			{/snippet}
-		</Popover>
-	</span>
-{/snippet}
-
-<!-- Customize pane (ADR-025): edits the ACTIVE view; changes apply immediately (auto-save) -->
-{#if customizing && activeView && canEditActiveView}
-	<SidePane title={`${$t('Customize')} — ${activeView.name}`} onClose={() => (customizing = false)}>
-		<div class="field">
-			<label class="label" for="vname">{$t('View name')}</label>
-			<!-- reset:false: value={activeView.name} is set as a property, so a default
-			     form.reset() on submit would blank it to its empty defaultValue (same as
-			     the task title) — clearing the name on click-in / click-out. -->
-			<form method="POST" action="?/updateView" use:enhance={() => async ({ update }) => update({ reset: false })}>
-				<input type="hidden" name="id" value={activeView.id} />
-				<input
-					id="vname"
-					name="name"
-					class="input"
-					value={activeView.name}
-					required
-					onblur={(e) => e.currentTarget.form?.requestSubmit()}
-				/>
-			</form>
-		</div>
-
-		{#if ['table', 'board', 'list', 'flow', 'timeline', 'calendar'].includes(activeView.type)}
-			<span class="label">{$t('Status display')}</span>
-			<div class="chips-row">
-				{@render selectPill(
-					$t('Status display'),
-					STATUS_DISPLAY_OPTIONS,
-					statusDisplay,
-					setStatusDisplayConfig
-				)}
-			</div>
-		{/if}
-
-		{#if activeView.type === 'table'}
-			<span class="label">{$t('Group by')}</span>
-			<div class="chips-row">
-				{@render selectPill($t('Group by'), GROUP_BY_OPTIONS, groupByValue, setGroupByConfig)}
-				{#if groupByValue}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={setHideEmptyConfig()} />
-						<button class="chip" class:chip--on={hideEmptyOn} type="submit"
-							>{$t('Hide empty groups')}</button
-						>
-					</form>
-				{/if}
-			</div>
-			<span class="label">{$t('Sort by')}</span>
-			<div class="chips-row">
-				{@render selectPill($t('Sort by'), SORT_FIELD_OPTIONS, sortFieldValue, setSortFieldConfig)}
-				{#if sortFieldValue}
-					<span class="seg">
-						<button
-							class="seg-btn"
-							class:seg-btn--on={!sortParsed.desc}
-							type="button"
-							onclick={() => postViewConfig(setSortDirConfig(false))}>{$t('A–Z')}</button
-						><button
-							class="seg-btn"
-							class:seg-btn--on={sortParsed.desc}
-							type="button"
-							onclick={() => postViewConfig(setSortDirConfig(true))}>{$t('Z–A')}</button
-						>
-					</span>
-				{/if}
-			</div>
-			<span class="label">{$t('Task count')}</span>
-			<div class="chips-row">
-				<form method="POST" action="?/updateView" use:enhance>
-					<input type="hidden" name="id" value={activeView.id} />
-					<input type="hidden" name="name" value={activeView.name} />
-					<input type="hidden" name="config" value={setShowCountConfig()} />
-					<button class="chip" class:chip--on={showCountOn} type="submit">{$t('Show task count')}</button>
+	<!-- View context menu (right-click on a tab) -->
+	{#if ctx && ctxView}
+		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+		<div
+			class="ctx-menu"
+			style="left: {ctx.x}px; top: {ctx.y}px;"
+			transition:popover
+			onclick={(e) => e.stopPropagation()}
+		>
+			{#if ctxRenaming}
+				<form
+					method="POST"
+					action="?/updateView"
+					use:enhance={() => {
+						closeMenus();
+						return async ({ update }) => update();
+					}}
+					class="ctx-rename"
+				>
+					<input type="hidden" name="id" value={ctxView.id} />
+					<!-- svelte-ignore a11y_autofocus -->
+					<input class="input" name="name" value={ctxView.name} required autofocus />
+					<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
 				</form>
-			</div>
-			<span class="label">{$t('Columns')}</span>
-			<div class="chips-row">
-				{#each TABLE_COLUMNS as key (key)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={toggleColumnConfig(key)} />
-						<button class="chip" class:chip--on={colOn(key)} type="submit">{$t(COLUMN_LABELS[key])}</button>
-					</form>
-				{/each}
-				{#each tableCustomCols as f (f.id)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={toggleColumnConfig(`cf:${f.id}`)} />
-						<button class="chip" class:chip--on={colOn(`cf:${f.id}`)} type="submit">{f.name}</button>
-					</form>
-				{/each}
-			</div>
-			<span class="label">{$t('Statuses shown')}</span>
-			<div class="chips-row">
-				{#each data.statuses as s (s.id)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={toggleStatusConfig(s.id)} />
-						<button class="chip" class:chip--on={shownStatusIds.includes(s.id)} type="submit">{s.name}</button>
-					</form>
-				{/each}
-			</div>
-		{/if}
-
-		{#if activeView.type === 'board'}
-			<span class="label">{$t('Group by')}</span>
-			<div class="chips-row">
-				{@render selectPill(
-					$t('Group by'),
-					BOARD_GROUP_BY_OPTIONS,
-					boardGroupByValue,
-					setBoardGroupByConfig
-				)}
-				{#if boardGroupByValue !== 'status'}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={setHideEmptyConfig()} />
-						<button class="chip" class:chip--on={hideEmptyOn} type="submit"
-							>{$t('Hide empty groups')}</button
-						>
-					</form>
+			{:else}
+				<button class="menu-item" onclick={() => (ctxRenaming = true)}>{$t('Rename')}</button>
+				<button
+					class="menu-item menu-item--sub"
+					aria-expanded={ctxSub === 'display'}
+					onclick={() => (ctxSub = ctxSub === 'display' ? null : 'display')}
+				>
+					{$t('Display as')}
+					<span class="sub-arrow"><Icon name="nav-arrow-right" size={11} /></span>
+				</button>
+				{#if ctxSub === 'display'}
+					<div class="submenu" transition:slide={{ duration: 150 }}>
+						{#each [['text-icon', 'Text and icon'], ['text', 'Text only'], ['icon', 'Icon only']] as [mode, label] (mode)}
+							<form
+								method="POST"
+								action="?/updateView"
+								use:enhance={() => {
+									closeMenus();
+									return async ({ update }) => update();
+								}}
+							>
+								<input type="hidden" name="id" value={ctxView.id} />
+								<input type="hidden" name="name" value={ctxView.name} />
+								<input type="hidden" name="config" value={displayConfig(ctxView, mode)} />
+								<button class="menu-item" type="submit">
+									<span class="check">{displayOf(ctxView) === mode ? '✓' : ''}</span>
+									{$t(label)}
+								</button>
+							</form>
+						{/each}
+					</div>
 				{/if}
-			</div>
-			<span class="label">{$t('Statuses shown')}</span>
-			<div class="chips-row">
-				{#each data.statuses as s (s.id)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={toggleStatusConfig(s.id)} />
-						<button class="chip" class:chip--on={shownStatusIds.includes(s.id)} type="submit">{s.name}</button>
-					</form>
-				{/each}
-			</div>
-		{/if}
+				<button
+					class="menu-item"
+					type="button"
+					onclick={(e) => {
+						// stop the window onclick (closeMenus) from swallowing this same
+						// click — that race made the pane open then vanish immediately.
+						e.stopPropagation();
+						const id = ctxView.id;
+						closeMenus();
+						milestonesOpen = false;
+						customizing = true;
+						if (activeView?.id !== id)
+							goto(`?view=${id}&pane=customize`, { noScroll: true, keepFocus: true });
+					}}
+				>
+					{$t('Customize')}
+				</button>
 
-		{#if activeView.type === 'list'}
-			<span class="label">{$t('Group by')}</span>
-			<div class="chips-row">
-				{@render selectPill($t('Group by'), GROUP_BY_OPTIONS, groupByValue, setGroupByConfig)}
-				{#if groupByValue}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={setHideEmptyConfig()} />
-						<button class="chip" class:chip--on={hideEmptyOn} type="submit"
-							>{$t('Hide empty groups')}</button
-						>
-					</form>
-				{/if}
-			</div>
-		{/if}
+				<div class="menu-rule"></div>
 
-		{#if activeView.type === 'flow'}
-			<span class="label">{$t('Milestones')}</span>
-			<div class="chips-row">
-				<form method="POST" action="?/updateView" use:enhance>
-					<input type="hidden" name="id" value={activeView.id} />
-					<input type="hidden" name="name" value={activeView.name} />
-					<input type="hidden" name="config" value={setFlowMilestonesConfig()} />
-					<button class="chip" class:chip--on={flowMilestonesOn} type="submit">{$t('Show milestones')}</button>
+				<form
+					method="POST"
+					action="?/duplicateView"
+					use:enhance={() => {
+						closeMenus();
+						return async ({ update }) => update();
+					}}
+				>
+					<input type="hidden" name="id" value={ctxView.id} />
+					<button class="menu-item" type="submit">{$t('Duplicate view')}</button>
 				</form>
-			</div>
-			<span class="label">{$t('Sort by')}</span>
-			<div class="chips-row">
-				{@render selectPill($t('Sort by'), SORT_FIELD_OPTIONS, sortFieldValue, setSortFieldConfig)}
-				{#if sortFieldValue}
-					<span class="seg">
-						<button
-							class="seg-btn"
-							class:seg-btn--on={!sortParsed.desc}
-							type="button"
-							onclick={() => postViewConfig(setSortDirConfig(false))}>{$t('A–Z')}</button
-						><button
-							class="seg-btn"
-							class:seg-btn--on={sortParsed.desc}
-							type="button"
-							onclick={() => postViewConfig(setSortDirConfig(true))}>{$t('Z–A')}</button
-						>
-					</span>
-				{/if}
-			</div>
-			<span class="label">{$t('Statuses shown')}</span>
-			<div class="chips-row">
-				{#each data.statuses as s (s.id)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={toggleStatusConfig(s.id)} />
-						<button class="chip" class:chip--on={shownStatusIds.includes(s.id)} type="submit">{s.name}</button>
-					</form>
-				{/each}
-			</div>
-		{/if}
-
-		{#if ['table', 'board', 'list', 'flow'].includes(activeView.type)}
-			<span class="label">{$t('Filters')}</span>
-			<div class="chips-row">
-				{#each filterGroups as group (group.key)}
-					{@render filterPill(group)}
-				{/each}
-			</div>
-		{/if}
-
-		{#if ['table', 'board', 'list'].includes(activeView.type) && numberFields.length}
-			<span class="label">{$t('Aggregations')}</span>
-			<div class="chips-row">
-				{#each numberFields as f (f.id)}
-					<form method="POST" action="?/updateView" use:enhance>
-						<input type="hidden" name="id" value={activeView.id} />
-						<input type="hidden" name="name" value={activeView.name} />
-						<input type="hidden" name="config" value={toggleAggregationConfig(f.id)} />
-						<button class="chip" class:chip--on={aggOn(f.id)} type="submit">{f.name}</button>
-					</form>
-				{/each}
-			</div>
-		{/if}
-
-		<div class="customize-actions">
-			<button class="btn btn-sm" type="button" onclick={() => (customizing = false)}>{$t('Close')}</button>
-			{#if visibleViews.length > 1}
 				<form
 					method="POST"
 					action="?/deleteView"
@@ -1354,237 +1077,595 @@
 							cancel();
 							return;
 						}
-						return async ({ update }) => {
-							customizing = false;
-							update();
-						};
+						closeMenus();
+						return async ({ update }) => update();
 					}}
 				>
-					<input type="hidden" name="id" value={activeView.id} />
-					<button class="btn btn-sm btn-outline btn-error" type="submit">{$t('Delete view')}</button>
+					<input type="hidden" name="id" value={ctxView.id} />
+					<button class="menu-item menu-item--danger" type="submit">{$t('Delete view')}</button>
 				</form>
 			{/if}
 		</div>
-	</SidePane>
-{/if}
+	{/if}
 
-<!-- Milestones pane (ADR-025): opened from the project "…" menu -->
-{#if milestonesOpen && data.perm.project}
-	<SidePane title={$t('Milestones')} onClose={() => (milestonesOpen = false)}>
-		<MilestonesManager
+	<!-- Single-select pill (Group by / Sort field): label + current value, popover of options. -->
+	{#snippet selectPill(
+		label: string,
+		options: readonly (readonly [string, string])[],
+		currentVal: string,
+		configFn: (v: string) => string
+	)}
+		{@const curLabel = options.find(([v]) => v === currentVal)?.[1] ?? options[0]?.[1] ?? ''}
+		<span class="cz-pill" class:cz-pill--on={!!currentVal}>
+			<Popover ariaLabel={label}>
+				{#snippet trigger()}{label}: {$t(curLabel)}{/snippet}
+				{#snippet panel(close)}
+					<div class="cz-opts">
+						{#each options as [val, lbl] (val)}
+							<button
+								class="cz-opt"
+								class:cz-opt--on={currentVal === val}
+								type="button"
+								onclick={() => {
+									postViewConfig(configFn(val));
+									close();
+								}}
+							>
+								<span class="cz-check"
+									>{#if currentVal === val}<Icon name="check" size={13} />{/if}</span
+								>
+								{$t(lbl)}
+							</button>
+						{/each}
+					</div>
+				{/snippet}
+			</Popover>
+		</span>
+	{/snippet}
+
+	<!-- Multi-select filter pill: label + count, popover of checkable items (stays open). -->
+	{#snippet filterPill(group: { key: string; label: string; opts: [string, string][] })}
+		{@const on = isFilterActive(group.key)}
+		{@const chosen = filterChosen(group.key)}
+		{@const hidden = on ? group.opts.length - chosen.length : 0}
+		<span class="cz-pill" class:cz-pill--on={on}>
+			<Popover ariaLabel={$t(group.label)}>
+				{#snippet trigger()}{$t(group.label)}{#if hidden > 0}<span class="cz-count">{hidden}</span
+						>{/if}{/snippet}
+				{#snippet panel()}
+					<div class="cz-opts">
+						{#each group.opts as [val, lbl] (val)}
+							{@const ok = !on || chosen.includes(val)}
+							<button
+								class="cz-opt"
+								class:cz-opt--on={ok}
+								type="button"
+								onclick={() =>
+									postViewConfig(
+										toggleFilterConfig(
+											group.key,
+											val,
+											group.opts.map((o) => o[0])
+										)
+									)}
+							>
+								<span class="cz-check"
+									>{#if ok}<Icon name="check" size={13} />{/if}</span
+								>
+								{lbl}
+							</button>
+						{:else}
+							<span class="cz-empty">{$t('No options')}</span>
+						{/each}
+					</div>
+				{/snippet}
+			</Popover>
+		</span>
+	{/snippet}
+
+	<!-- Customize pane (ADR-025): edits the ACTIVE view; changes apply immediately (auto-save) -->
+	{#if customizing && activeView && canEditActiveView}
+		<SidePane
+			title={`${$t('Customize')} — ${activeView.name}`}
+			onClose={() => (customizing = false)}
+		>
+			<div class="field">
+				<label class="label" for="vname">{$t('View name')}</label>
+				<!-- reset:false: value={activeView.name} is set as a property, so a default
+			     form.reset() on submit would blank it to its empty defaultValue (same as
+			     the task title) — clearing the name on click-in / click-out. -->
+				<form
+					method="POST"
+					action="?/updateView"
+					use:enhance={() =>
+						async ({ update }) =>
+							update({ reset: false })}
+				>
+					<input type="hidden" name="id" value={activeView.id} />
+					<input
+						id="vname"
+						name="name"
+						class="input"
+						value={activeView.name}
+						required
+						onblur={(e) => e.currentTarget.form?.requestSubmit()}
+					/>
+				</form>
+			</div>
+
+			{#if ['table', 'board', 'list', 'flow', 'timeline', 'calendar'].includes(activeView.type)}
+				<span class="label">{$t('Status display')}</span>
+				<div class="chips-row">
+					{@render selectPill(
+						$t('Status display'),
+						STATUS_DISPLAY_OPTIONS,
+						statusDisplay,
+						setStatusDisplayConfig
+					)}
+				</div>
+			{/if}
+
+			{#if activeView.type === 'table'}
+				<span class="label">{$t('Group by')}</span>
+				<div class="chips-row">
+					{@render selectPill($t('Group by'), GROUP_BY_OPTIONS, groupByValue, setGroupByConfig)}
+					{#if groupByValue}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={setHideEmptyConfig()} />
+							<button class="chip" class:chip--on={hideEmptyOn} type="submit"
+								>{$t('Hide empty groups')}</button
+							>
+						</form>
+					{/if}
+				</div>
+				<span class="label">{$t('Sort by')}</span>
+				<div class="chips-row">
+					{@render selectPill(
+						$t('Sort by'),
+						SORT_FIELD_OPTIONS,
+						sortFieldValue,
+						setSortFieldConfig
+					)}
+					{#if sortFieldValue}
+						<span class="seg">
+							<button
+								class="seg-btn"
+								class:seg-btn--on={!sortParsed.desc}
+								type="button"
+								onclick={() => postViewConfig(setSortDirConfig(false))}>{$t('A–Z')}</button
+							><button
+								class="seg-btn"
+								class:seg-btn--on={sortParsed.desc}
+								type="button"
+								onclick={() => postViewConfig(setSortDirConfig(true))}>{$t('Z–A')}</button
+							>
+						</span>
+					{/if}
+				</div>
+				<span class="label">{$t('Task count')}</span>
+				<div class="chips-row">
+					<form method="POST" action="?/updateView" use:enhance>
+						<input type="hidden" name="id" value={activeView.id} />
+						<input type="hidden" name="name" value={activeView.name} />
+						<input type="hidden" name="config" value={setShowCountConfig()} />
+						<button class="chip" class:chip--on={showCountOn} type="submit"
+							>{$t('Show task count')}</button
+						>
+					</form>
+				</div>
+				<span class="label">{$t('Columns')}</span>
+				<div class="chips-row">
+					{#each TABLE_COLUMNS as key (key)}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={toggleColumnConfig(key)} />
+							<button class="chip" class:chip--on={colOn(key)} type="submit"
+								>{$t(COLUMN_LABELS[key])}</button
+							>
+						</form>
+					{/each}
+					{#each tableCustomCols as f (f.id)}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={toggleColumnConfig(`cf:${f.id}`)} />
+							<button class="chip" class:chip--on={colOn(`cf:${f.id}`)} type="submit"
+								>{f.name}</button
+							>
+						</form>
+					{/each}
+				</div>
+				<span class="label">{$t('Statuses shown')}</span>
+				<div class="chips-row">
+					{#each data.statuses as s (s.id)}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={toggleStatusConfig(s.id)} />
+							<button class="chip" class:chip--on={shownStatusIds.includes(s.id)} type="submit"
+								>{s.name}</button
+							>
+						</form>
+					{/each}
+				</div>
+			{/if}
+
+			{#if activeView.type === 'board'}
+				<span class="label">{$t('Group by')}</span>
+				<div class="chips-row">
+					{@render selectPill(
+						$t('Group by'),
+						BOARD_GROUP_BY_OPTIONS,
+						boardGroupByValue,
+						setBoardGroupByConfig
+					)}
+					{#if boardGroupByValue !== 'status'}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={setHideEmptyConfig()} />
+							<button class="chip" class:chip--on={hideEmptyOn} type="submit"
+								>{$t('Hide empty groups')}</button
+							>
+						</form>
+					{/if}
+				</div>
+				<span class="label">{$t('Statuses shown')}</span>
+				<div class="chips-row">
+					{#each data.statuses as s (s.id)}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={toggleStatusConfig(s.id)} />
+							<button class="chip" class:chip--on={shownStatusIds.includes(s.id)} type="submit"
+								>{s.name}</button
+							>
+						</form>
+					{/each}
+				</div>
+			{/if}
+
+			{#if activeView.type === 'list'}
+				<span class="label">{$t('Group by')}</span>
+				<div class="chips-row">
+					{@render selectPill($t('Group by'), GROUP_BY_OPTIONS, groupByValue, setGroupByConfig)}
+					{#if groupByValue}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={setHideEmptyConfig()} />
+							<button class="chip" class:chip--on={hideEmptyOn} type="submit"
+								>{$t('Hide empty groups')}</button
+							>
+						</form>
+					{/if}
+				</div>
+			{/if}
+
+			{#if activeView.type === 'flow'}
+				<span class="label">{$t('Milestones')}</span>
+				<div class="chips-row">
+					<form method="POST" action="?/updateView" use:enhance>
+						<input type="hidden" name="id" value={activeView.id} />
+						<input type="hidden" name="name" value={activeView.name} />
+						<input type="hidden" name="config" value={setFlowMilestonesConfig()} />
+						<button class="chip" class:chip--on={flowMilestonesOn} type="submit"
+							>{$t('Show milestones')}</button
+						>
+					</form>
+				</div>
+				<span class="label">{$t('Sort by')}</span>
+				<div class="chips-row">
+					{@render selectPill(
+						$t('Sort by'),
+						SORT_FIELD_OPTIONS,
+						sortFieldValue,
+						setSortFieldConfig
+					)}
+					{#if sortFieldValue}
+						<span class="seg">
+							<button
+								class="seg-btn"
+								class:seg-btn--on={!sortParsed.desc}
+								type="button"
+								onclick={() => postViewConfig(setSortDirConfig(false))}>{$t('A–Z')}</button
+							><button
+								class="seg-btn"
+								class:seg-btn--on={sortParsed.desc}
+								type="button"
+								onclick={() => postViewConfig(setSortDirConfig(true))}>{$t('Z–A')}</button
+							>
+						</span>
+					{/if}
+				</div>
+				<span class="label">{$t('Statuses shown')}</span>
+				<div class="chips-row">
+					{#each data.statuses as s (s.id)}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={toggleStatusConfig(s.id)} />
+							<button class="chip" class:chip--on={shownStatusIds.includes(s.id)} type="submit"
+								>{s.name}</button
+							>
+						</form>
+					{/each}
+				</div>
+			{/if}
+
+			{#if ['table', 'board', 'list', 'flow'].includes(activeView.type)}
+				<span class="label">{$t('Filters')}</span>
+				<div class="chips-row">
+					{#each filterGroups as group (group.key)}
+						{@render filterPill(group)}
+					{/each}
+				</div>
+			{/if}
+
+			{#if ['table', 'board', 'list'].includes(activeView.type) && numberFields.length}
+				<span class="label">{$t('Aggregations')}</span>
+				<div class="chips-row">
+					{#each numberFields as f (f.id)}
+						<form method="POST" action="?/updateView" use:enhance>
+							<input type="hidden" name="id" value={activeView.id} />
+							<input type="hidden" name="name" value={activeView.name} />
+							<input type="hidden" name="config" value={toggleAggregationConfig(f.id)} />
+							<button class="chip" class:chip--on={aggOn(f.id)} type="submit">{f.name}</button>
+						</form>
+					{/each}
+				</div>
+			{/if}
+
+			<div class="customize-actions">
+				<button class="btn btn-sm" type="button" onclick={() => (customizing = false)}
+					>{$t('Close')}</button
+				>
+				{#if visibleViews.length > 1}
+					<form
+						method="POST"
+						action="?/deleteView"
+						use:enhance={({ cancel }) => {
+							if (!confirm($t('Delete this view? This cannot be undone.'))) {
+								cancel();
+								return;
+							}
+							return async ({ update }) => {
+								customizing = false;
+								update();
+							};
+						}}
+					>
+						<input type="hidden" name="id" value={activeView.id} />
+						<button class="btn btn-sm btn-outline btn-error" type="submit"
+							>{$t('Delete view')}</button
+						>
+					</form>
+				{/if}
+			</div>
+		</SidePane>
+	{/if}
+
+	<!-- Milestones pane (ADR-025): opened from the project "…" menu -->
+	{#if milestonesOpen && data.perm.project}
+		<SidePane title={$t('Milestones')} onClose={() => (milestonesOpen = false)}>
+			<MilestonesManager
+				milestones={data.milestones}
+				progress={milestoneProgressMap}
+				milestoneDeps={data.milestoneDeps}
+				canEdit={data.perm.project}
+			/>
+		</SidePane>
+	{/if}
+
+	<!-- New task pane (ADR-027): header "+" or a grouped table's per-group "+" -->
+	{#if newTaskOpen && data.user}
+		<NewTaskPane
+			statuses={data.statuses}
+			users={data.users}
 			milestones={data.milestones}
-			progress={milestoneProgressMap}
-			milestoneDeps={data.milestoneDeps}
-			canEdit={data.perm.project}
-		/>
-	</SidePane>
-{/if}
-
-<!-- New task pane (ADR-027): header "+" or a grouped table's per-group "+" -->
-{#if newTaskOpen && data.user}
-	<NewTaskPane
-		statuses={data.statuses}
-		users={data.users}
-		milestones={data.milestones}
-		locations={data.locations}
-		tasks={data.tasks}
-		customFields={data.customFields}
-		customFieldOptions={data.customFieldOptions}
-		taskSearch={taskCfSearch}
-		prefill={newTaskPrefill}
-		onClose={() => (newTaskOpen = false)}
-	/>
-{/if}
-
-{#if newMilestoneOpen && data.perm.project}
-	<NewMilestonePane onClose={() => (newMilestoneOpen = false)} />
-{/if}
-
-{#if activeView && ['table', 'board', 'list', 'flow'].includes(activeView.type)}
-	<div class="filter-row">
-		<FilterBar
+			locations={data.locations}
 			tasks={data.tasks}
+			customFields={data.customFields}
+			customFieldOptions={data.customFieldOptions}
+			taskSearch={taskCfSearch}
+			prefill={newTaskPrefill}
+			onClose={() => (newTaskOpen = false)}
+		/>
+	{/if}
+
+	{#if newMilestoneOpen && data.perm.project}
+		<NewMilestonePane onClose={() => (newMilestoneOpen = false)} />
+	{/if}
+
+	{#if activeView && ['table', 'board', 'list', 'flow'].includes(activeView.type)}
+		<div class="filter-row">
+			<FilterBar
+				tasks={data.tasks}
+				statuses={data.statuses}
+				users={data.users}
+				milestones={data.milestones}
+				labels={projectLabels}
+				config={viewConfig}
+				bind:searchText
+				viewId={activeView.id}
+				viewName={activeView.name}
+				canEditView={canEditActiveView}
+			/>
+		</div>
+	{/if}
+
+	<!-- Active view -->
+	{#if activeView?.type === 'table'}
+		<TableView
+			tasks={filteredTasks}
+			allTasks={data.tasks}
+			users={data.users}
+			statuses={data.statuses}
+			milestones={data.milestones}
+			locations={data.locations}
+			labels={data.labels}
+			taskLabels={data.taskLabels}
+			taskDeps={data.taskDeps}
+			customFields={data.customFields}
+			customFieldOptions={data.customFieldOptions}
+			taskCustomValues={data.taskCustomValues}
+			files={data.files}
+			config={viewConfig}
+			viewId={activeView.id}
+			viewName={activeView.name}
+			canEditView={Boolean(activeView && data.perm.views[activeView.id])}
+			onNewTask={openNewTask}
+			{statusDisplay}
+			{canEditTask}
+			templates={data.templates}
+		/>
+	{:else if activeView?.type === 'board'}
+		<BoardView
+			tasks={filteredTasks}
+			allTasks={data.tasks}
+			statuses={data.statuses}
+			users={data.users}
+			labels={data.labels}
+			taskLabels={data.taskLabels}
+			taskDeps={data.taskDeps}
+			milestones={data.milestones}
+			locations={data.locations}
+			customFields={data.customFields}
+			customFieldOptions={data.customFieldOptions}
+			taskCustomValues={data.taskCustomValues}
+			files={data.files}
+			config={viewConfig}
+			viewId={activeView.id}
+			viewName={activeView.name}
+			canEditView={Boolean(activeView && data.perm.views[activeView.id])}
+			onNewTask={openNewTask}
+			{statusDisplay}
+			{canEditTask}
+			templates={data.templates}
+		/>
+	{:else if activeView?.type === 'list'}
+		<ListView
+			tasks={filteredTasks}
+			allTasks={data.tasks}
+			statuses={data.statuses}
+			users={data.users}
+			labels={data.labels}
+			taskLabels={data.taskLabels}
+			taskDeps={data.taskDeps}
+			milestones={data.milestones}
+			locations={data.locations}
+			customFields={data.customFields}
+			customFieldOptions={data.customFieldOptions}
+			taskCustomValues={data.taskCustomValues}
+			files={data.files}
+			config={viewConfig}
+			{statusDisplay}
+			{canEditTask}
+			templates={data.templates}
+		/>
+	{:else if activeView?.type === 'timeline'}
+		<TimelineView
+			tasks={filteredTasks}
+			allTasks={data.tasks}
+			statuses={data.statuses}
+			users={data.users}
+			labels={data.labels}
+			taskLabels={data.taskLabels}
+			taskDeps={data.taskDeps}
+			milestones={data.milestones}
+			locations={data.locations}
+			customFields={data.customFields}
+			customFieldOptions={data.customFieldOptions}
+			taskCustomValues={data.taskCustomValues}
+			files={data.files}
+			config={viewConfig}
+			viewId={activeView.id}
+			viewName={activeView.name}
+			canEditView={Boolean(activeView && data.perm.views[activeView.id])}
+			onNewTask={openNewTask}
+			{statusDisplay}
+			{canEditTask}
+			templates={data.templates}
+		/>
+	{:else if activeView?.type === 'calendar'}
+		<CalendarView
+			tasks={filteredTasks}
+			allTasks={data.tasks}
+			statuses={data.statuses}
+			users={data.users}
+			labels={data.labels}
+			taskLabels={data.taskLabels}
+			taskDeps={data.taskDeps}
+			milestones={data.milestones}
+			locations={data.locations}
+			customFields={data.customFields}
+			customFieldOptions={data.customFieldOptions}
+			taskCustomValues={data.taskCustomValues}
+			files={data.files}
+			onNewTask={openNewTask}
+			{statusDisplay}
+			{canEditTask}
+			templates={data.templates}
+		/>
+	{:else if activeView?.type === 'dashboard'}
+		<DashboardView tasks={data.tasks} statuses={data.statuses} milestones={data.milestones} />
+	{:else if activeView?.type === 'map'}
+		<MapView tasks={data.tasks} locations={data.locations} />
+	{:else if activeView?.type === 'flow'}
+		<FlowView
+			tasks={filteredTasks}
+			allTasks={data.tasks}
+			statusIds={shownStatusIds}
+			showMilestones={flowMilestonesOn}
+			users={data.users}
+			statuses={data.statuses}
+			milestones={data.milestones}
+			locations={data.locations}
+			labels={data.labels}
+			taskLabels={data.taskLabels}
+			taskDeps={data.taskDeps}
+			milestoneDeps={data.milestoneDeps}
+			customFields={data.customFields}
+			customFieldOptions={data.customFieldOptions}
+			taskCustomValues={data.taskCustomValues}
+			files={data.files}
+			templates={data.templates}
+			{statusDisplay}
+			{canEditTask}
+		/>
+	{/if}
+
+	{#if templatePickerOpen}
+		<TemplatePicker templates={data.templates} onClose={() => (templatePickerOpen = false)} />
+	{/if}
+
+	{#if (activeView?.type === 'table' || activeView?.type === 'board' || activeView?.type === 'list') && selection.size > 0}
+		<BulkActionBar
+			count={selection.size}
 			statuses={data.statuses}
 			users={data.users}
 			milestones={data.milestones}
 			labels={projectLabels}
-			config={viewConfig}
-			bind:searchText
-			viewId={activeView.id}
-			viewName={activeView.name}
-			canEditView={canEditActiveView}
+			canEdit={canEditActiveView}
+			onSetStatus={(statusId) => bulkSubmit('bulkPatchTasks', { statusId })}
+			onSetAssignee={(assigneeId) => bulkSubmit('bulkPatchTasks', { assigneeId: assigneeId ?? '' })}
+			onSetMilestone={(milestoneId) =>
+				bulkSubmit('bulkPatchTasks', { milestoneId: milestoneId ?? '' })}
+			onSetPriority={(priority) => bulkSubmit('bulkPatchTasks', { priority })}
+			labelOn={(labelId) =>
+				selection.size > 0 && selection.ids.every((id) => labelIdsOf(id).includes(labelId))}
+			onToggleLabel={(labelId, add) =>
+				bulkSubmit('bulkSetLabel', { labelId, add: add ? '1' : '0' })}
+			onDelete={async () => {
+				await bulkSubmit('bulkDeleteTasks', {});
+				selection.clear();
+			}}
+			onClear={() => selection.clear()}
 		/>
-	</div>
-{/if}
-
-<!-- Active view -->
-{#if activeView?.type === 'table'}
-	<TableView
-		tasks={filteredTasks}
-		allTasks={data.tasks}
-		users={data.users}
-		statuses={data.statuses}
-		milestones={data.milestones}
-		locations={data.locations}
-		labels={data.labels}
-		taskLabels={data.taskLabels}
-		taskDeps={data.taskDeps}
-		customFields={data.customFields}
-		customFieldOptions={data.customFieldOptions}
-		taskCustomValues={data.taskCustomValues}
-		files={data.files}
-		config={viewConfig}
-		viewId={activeView.id}
-		viewName={activeView.name}
-		canEditView={Boolean(activeView && data.perm.views[activeView.id])}
-		onNewTask={openNewTask}
-		{statusDisplay}
-		{canEditTask}
-		templates={data.templates}
-	/>
-{:else if activeView?.type === 'board'}
-	<BoardView
-		tasks={filteredTasks}
-		allTasks={data.tasks}
-		statuses={data.statuses}
-		users={data.users}
-		labels={data.labels}
-		taskLabels={data.taskLabels}
-		taskDeps={data.taskDeps}
-		milestones={data.milestones}
-		locations={data.locations}
-		customFields={data.customFields}
-		customFieldOptions={data.customFieldOptions}
-		taskCustomValues={data.taskCustomValues}
-		files={data.files}
-		config={viewConfig}
-		viewId={activeView.id}
-		viewName={activeView.name}
-		canEditView={Boolean(activeView && data.perm.views[activeView.id])}
-		onNewTask={openNewTask}
-		{statusDisplay}
-		{canEditTask}
-		templates={data.templates}
-	/>
-{:else if activeView?.type === 'list'}
-	<ListView
-		tasks={filteredTasks}
-		allTasks={data.tasks}
-		statuses={data.statuses}
-		users={data.users}
-		labels={data.labels}
-		taskLabels={data.taskLabels}
-		taskDeps={data.taskDeps}
-		milestones={data.milestones}
-		locations={data.locations}
-		customFields={data.customFields}
-		customFieldOptions={data.customFieldOptions}
-		taskCustomValues={data.taskCustomValues}
-		files={data.files}
-		config={viewConfig}
-		{statusDisplay}
-		{canEditTask}
-		templates={data.templates}
-	/>
-{:else if activeView?.type === 'timeline'}
-	<TimelineView
-		tasks={filteredTasks}
-		allTasks={data.tasks}
-		statuses={data.statuses}
-		users={data.users}
-		labels={data.labels}
-		taskLabels={data.taskLabels}
-		taskDeps={data.taskDeps}
-		milestones={data.milestones}
-		locations={data.locations}
-		customFields={data.customFields}
-		customFieldOptions={data.customFieldOptions}
-		taskCustomValues={data.taskCustomValues}
-		files={data.files}
-		config={viewConfig}
-		viewId={activeView.id}
-		viewName={activeView.name}
-		canEditView={Boolean(activeView && data.perm.views[activeView.id])}
-		onNewTask={openNewTask}
-		{statusDisplay}
-		{canEditTask}
-		templates={data.templates}
-	/>
-{:else if activeView?.type === 'calendar'}
-	<CalendarView
-		tasks={filteredTasks}
-		allTasks={data.tasks}
-		statuses={data.statuses}
-		users={data.users}
-		labels={data.labels}
-		taskLabels={data.taskLabels}
-		taskDeps={data.taskDeps}
-		milestones={data.milestones}
-		locations={data.locations}
-		customFields={data.customFields}
-		customFieldOptions={data.customFieldOptions}
-		taskCustomValues={data.taskCustomValues}
-		files={data.files}
-		onNewTask={openNewTask}
-		{statusDisplay}
-		{canEditTask}
-		templates={data.templates}
-	/>
-{:else if activeView?.type === 'dashboard'}
-	<DashboardView tasks={data.tasks} statuses={data.statuses} milestones={data.milestones} />
-{:else if activeView?.type === 'map'}
-	<MapView tasks={data.tasks} locations={data.locations} />
-{:else if activeView?.type === 'flow'}
-	<FlowView
-		tasks={filteredTasks}
-		allTasks={data.tasks}
-		statusIds={shownStatusIds}
-		showMilestones={flowMilestonesOn}
-		users={data.users}
-		statuses={data.statuses}
-		milestones={data.milestones}
-		locations={data.locations}
-		labels={data.labels}
-		taskLabels={data.taskLabels}
-		taskDeps={data.taskDeps}
-		milestoneDeps={data.milestoneDeps}
-		customFields={data.customFields}
-		customFieldOptions={data.customFieldOptions}
-		taskCustomValues={data.taskCustomValues}
-		files={data.files}
-		templates={data.templates}
-		{statusDisplay}
-		{canEditTask}
-	/>
-{/if}
-
-{#if templatePickerOpen}
-	<TemplatePicker templates={data.templates} onClose={() => (templatePickerOpen = false)} />
-{/if}
-
-{#if (activeView?.type === 'table' || activeView?.type === 'board' || activeView?.type === 'list') && selection.size > 0}
-	<BulkActionBar
-		count={selection.size}
-		statuses={data.statuses}
-		users={data.users}
-		milestones={data.milestones}
-		labels={projectLabels}
-		canEdit={canEditActiveView}
-		onSetStatus={(statusId) => bulkSubmit('bulkPatchTasks', { statusId })}
-		onSetAssignee={(assigneeId) => bulkSubmit('bulkPatchTasks', { assigneeId: assigneeId ?? '' })}
-		onSetMilestone={(milestoneId) => bulkSubmit('bulkPatchTasks', { milestoneId: milestoneId ?? '' })}
-		onSetPriority={(priority) => bulkSubmit('bulkPatchTasks', { priority })}
-		labelOn={(labelId) =>
-			selection.size > 0 && selection.ids.every((id) => labelIdsOf(id).includes(labelId))}
-		onToggleLabel={(labelId, add) => bulkSubmit('bulkSetLabel', { labelId, add: add ? '1' : '0' })}
-		onDelete={async () => {
-			await bulkSubmit('bulkDeleteTasks', {});
-			selection.clear();
-		}}
-		onClear={() => selection.clear()}
-	/>
-{/if}
-
+	{/if}
 </div>
 
 <style>
@@ -1665,7 +1746,9 @@
 		color: var(--color-muted);
 		cursor: pointer;
 		padding: 2px 8px;
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	/* extend the icon-only hit area toward ~40px without shifting layout */
@@ -1775,7 +1858,9 @@
 		color: var(--color-muted);
 		border-radius: var(--radius-field, 0.25rem);
 		padding: 2px;
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.back-link:hover {
@@ -2187,7 +2272,9 @@
 		line-height: 1.7;
 		padding: 0 8px;
 		cursor: pointer;
-		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
 	}
 
 	.seg-btn + .seg-btn {
@@ -2239,5 +2326,4 @@
 		border-color: color-mix(in oklab, var(--color-fg) 45%, var(--color-bg));
 		color: var(--color-fg);
 	}
-
 </style>

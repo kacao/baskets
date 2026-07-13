@@ -2,8 +2,7 @@
 	import { browser } from '$app/environment';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { setPaneUrl, readPaneParam } from '$lib/paneUrl';
-	import { untrack } from 'svelte';
+	import { createPaneNav } from '$lib/paneNav.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
@@ -27,10 +26,35 @@
 		dueDate: Date | string | null;
 	};
 	type Status = { id: string; name: string; category: string };
-	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
-	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; position?: number };
-	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
-	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
+	type Location = {
+		id: string;
+		title: string;
+		address: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	};
+	type CustomFieldDef = {
+		id: string;
+		name: string;
+		type: string;
+		config: Record<string, unknown>;
+		position?: number;
+	};
+	type CustomFieldOption = {
+		id: string;
+		fieldId: string;
+		title: string;
+		color: string | null;
+		icon: string | null;
+	};
+	type FileRef = {
+		id: string;
+		taskId: string | null;
+		fieldId: string | null;
+		filename: string;
+		mimeType: string;
+		size: number;
+	};
 
 	let {
 		tasks,
@@ -78,50 +102,8 @@
 		onNewTask?: (prefill?: Record<string, string>) => void;
 	} = $props();
 
-	// split pane: ?task= deep-links a task open (matches Board/Table views)
-	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
-	// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
-	// the top is the "← back" target, reset on any fresh open from outside the pane
-	let backStack = $state<string[]>([]);
-	// keep the pane in sync with browser back/forward to a ?task= link, without
-	// fighting user clicks (effect tracks the URL only, never selectedId)
-	let lastTaskParam = $state(page.url.searchParams.get('task'));
-	$effect(() => {
-		const fromUrl = readPaneParam('task');
-		if (fromUrl !== untrack(() => lastTaskParam)) {
-			lastTaskParam = fromUrl;
-			selectedId = fromUrl;
-			backStack = [];
-		}
-	});
-	// mirror the open task back into the URL so the pane is linkable / restorable in
-	// another window (shallow routing — load() doesn't re-run). lastTaskParam is a
-	// plain sentinel read via untrack() in BOTH effects, so changing it in one never
-	// re-runs the other with a stale page.url (which would clobber the selection).
-	$effect(() => {
-		const id = selectedId;
-		if (id !== untrack(() => lastTaskParam)) {
-			lastTaskParam = id;
-			setPaneUrl({ task: id });
-		}
-	});
-	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
-	function openDetail(t: Task) {
-		selectedId = selectedId === t.id ? null : t.id;
-		backStack = [];
-	}
-	function navTask(id: string) {
-		if (id === selectedId) return;
-		if (selectedId) backStack = [...backStack, selectedId];
-		selectedId = id;
-	}
-	function navBack() {
-		selectedId = backStack[backStack.length - 1] ?? null;
-		backStack = backStack.slice(0, -1);
-	}
-	const backTask = $derived(
-		backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
-	);
+	// split pane: ?task= deep-links a task open (ADR-055, extracted to paneNav.svelte.ts)
+	const nav = createPaneNav<Task>(() => allTasks);
 
 	const DAY = 86400000;
 	function dayStart(d: Date | string): number {
@@ -288,7 +270,9 @@
 		return out;
 	});
 	const rowByTask = $derived(new Map(rows.map((r) => [r.task.id, r])));
-	const chartHeight = $derived(rows.length > 0 ? (rows.length + lanes.length) * ROW_H + ROW_H : ROW_H);
+	const chartHeight = $derived(
+		rows.length > 0 ? (rows.length + lanes.length) * ROW_H + ROW_H : ROW_H
+	);
 
 	// Dependency lines: from each dependency's end to the dependent task's start,
 	// only when both endpoints are visible rows.
@@ -306,7 +290,8 @@
 
 	function fmtRange(t: Task): string {
 		const sp = span(t)!;
-		const f = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+		const f = (ms: number) =>
+			new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 		return sp.start === sp.end ? f(sp.start) : `${f(sp.start)} – ${f(sp.end)}`;
 	}
 </script>
@@ -314,15 +299,31 @@
 <div class="tl-wrap">
 	<div class="tl-toolbar">
 		<div class="zoom">
-			<button class="zbtn" class:active={zoom === 'week'} type="button" onclick={() => setZoom('week')}>
+			<button
+				class="zbtn"
+				class:active={zoom === 'week'}
+				type="button"
+				onclick={() => setZoom('week')}
+			>
 				{$t('Week')}
 			</button>
-			<button class="zbtn" class:active={zoom === 'month'} type="button" onclick={() => setZoom('month')}>
+			<button
+				class="zbtn"
+				class:active={zoom === 'month'}
+				type="button"
+				onclick={() => setZoom('month')}
+			>
 				{$t('Month')}
 			</button>
 		</div>
 		{#if onNewTask}
-			<button class="tl-add" type="button" aria-label={$t('New task')} use:tooltip={$t('New task')} onclick={() => onNewTask?.()}>+</button>
+			<button
+				class="tl-add"
+				type="button"
+				aria-label={$t('New task')}
+				use:tooltip={$t('New task')}
+				onclick={() => onNewTask?.()}>+</button
+			>
 		{/if}
 	</div>
 
@@ -381,11 +382,11 @@
 								<div class="tl-row" style={`height:${ROW_H}px`}>
 									<button
 										class="tl-bar cat-{cat(tk.statusId)}"
-										class:selected={selectedId === tk.id}
+										class:selected={nav.selectedId === tk.id}
 										style={`left:${xOf(sp!.start)}px; width:${Math.max(colW, xOf(sp!.end) - xOf(sp!.start) + colW)}px`}
 										type="button"
 										use:tooltip={`${tk.title} · ${fmtRange(tk)}`}
-										onclick={() => openDetail(tk)}
+										onclick={() => nav.openDetail(tk)}
 									>
 										<PriorityIcon priority={tk.priority} />
 										<span class="tl-bar-title">{tk.title}</span>
@@ -401,14 +402,16 @@
 
 	{#if undated.length > 0}
 		<div class="tl-nodates">
-			<div class="tl-nodates-head">{$t('No dates')} <span class="tl-lane-count">{undated.length}</span></div>
+			<div class="tl-nodates-head">
+				{$t('No dates')} <span class="tl-lane-count">{undated.length}</span>
+			</div>
 			<div class="tl-nodates-list">
 				{#each undated as tk (tk.id)}
 					<button
 						class="tl-chip cat-{cat(tk.statusId)}"
-						class:selected={selectedId === tk.id}
+						class:selected={nav.selectedId === tk.id}
 						type="button"
-						onclick={() => openDetail(tk)}
+						onclick={() => nav.openDetail(tk)}
 					>
 						<PriorityIcon priority={tk.priority} />
 						<span class="tl-bar-title">{tk.title}</span>
@@ -419,9 +422,9 @@
 	{/if}
 </div>
 
-{#if selected}
+{#if nav.selected}
 	<TaskPanel
-		task={selected}
+		task={nav.selected}
 		tasks={allTasks}
 		{users}
 		{statuses}
@@ -437,13 +440,13 @@
 		{canEditTask}
 		{templates}
 		{statusDisplay}
-		back={backTask}
-		onBack={navBack}
+		back={nav.backTask}
+		onBack={nav.navBack}
 		onClose={() => {
-			selectedId = null;
-			backStack = [];
+			nav.selectedId = null;
+			nav.backStack = [];
 		}}
-		onSelectTask={(id) => navTask(id)}
+		onSelectTask={(id) => nav.navTask(id)}
 	/>
 {/if}
 
@@ -475,7 +478,9 @@
 		font-weight: 500;
 		padding: 4px 10px;
 		cursor: pointer;
-		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
 	}
 
 	.zbtn:hover {
@@ -500,7 +505,9 @@
 		color: var(--color-muted);
 		cursor: pointer;
 		padding: 0 6px;
-		transition: color var(--dur-fast) ease, transform var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			transform var(--dur-fast) ease;
 	}
 
 	.tl-add:hover {
@@ -597,7 +604,9 @@
 		cursor: pointer;
 		padding: 2px;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.tl-lane-toggle::before {
@@ -645,7 +654,9 @@
 		cursor: pointer;
 		overflow: hidden;
 		z-index: 2;
-		transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+		transition:
+			border-color var(--dur-fast) ease,
+			box-shadow var(--dur-fast) ease;
 	}
 
 	.tl-bar:hover,

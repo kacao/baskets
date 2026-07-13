@@ -11,7 +11,8 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
 	// ADR-019: inaccessible workspaces are indistinguishable from missing ones
-	if (!(await canAccessWorkspace(locals.user, params.id))) return apiError(404, 'Workspace not found');
+	if (!(await canAccessWorkspace(locals.user, params.id)))
+		return apiError(404, 'Workspace not found');
 
 	const statuses = await listWorkspaceStatuses(params.id);
 	return json({ statuses });
@@ -20,7 +21,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 export const POST: RequestHandler = async ({ request, params, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
 	// ADR-019: access/edit gate BEFORE reading the body (no existence oracle).
-	if (!(await canAccessWorkspace(locals.user, params.id))) return apiError(404, 'Workspace not found');
+	if (!(await canAccessWorkspace(locals.user, params.id)))
+		return apiError(404, 'Workspace not found');
 	if (!(await canEditWorkspace(locals.user, params.id)))
 		return apiError(403, 'No edit permission on this workspace');
 
@@ -34,8 +36,11 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	if (name.length > 40) return apiError(400, 'name too long (max 40)');
 
 	const description =
-		typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null;
-	if (description && description.length > 200) return apiError(400, 'description too long (max 200)');
+		typeof body.description === 'string' && body.description.trim()
+			? body.description.trim()
+			: null;
+	if (description && description.length > 200)
+		return apiError(400, 'description too long (max 200)');
 
 	const category = typeof body.category === 'string' ? body.category : 'backlog';
 
@@ -51,7 +56,8 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
 	// ADR-019: access/edit gate BEFORE reading the body (no existence oracle).
-	if (!(await canAccessWorkspace(locals.user, params.id))) return apiError(404, 'Workspace not found');
+	if (!(await canAccessWorkspace(locals.user, params.id)))
+		return apiError(404, 'Workspace not found');
 	if (!(await canEditWorkspace(locals.user, params.id)))
 		return apiError(403, 'No edit permission on this workspace');
 
