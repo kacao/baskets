@@ -7,7 +7,10 @@ import {
 	status,
 	permission,
 	organization,
-	member
+	member,
+	view,
+	integration,
+	notification
 } from '$lib/server/db/schema.sqlite';
 import { ensureDefaultStatuses } from '$lib/server/statuses';
 
@@ -15,7 +18,7 @@ import { ensureDefaultStatuses } from '$lib/server/statuses';
 export const SENTINEL_ORG_ID = '__ISO_SENTINEL_ORG__';
 
 /** Fixture actor shape matching `Actor`/`SessionUser` across permissions.ts/tasks.ts. */
-export type TestUser = { id: string; name: string; role: string | null };
+export type TestUser = { id: string; name: string; email: string; role: string | null };
 
 let counter = 0;
 function uid(prefix: string): string {
@@ -27,17 +30,18 @@ export async function createUser(
 	opts: { role?: string | null; name?: string } = {}
 ): Promise<TestUser> {
 	const id = uid('user');
+	const email = `${id}@example.invalid`;
 	const now = new Date();
 	await db.insert(user).values({
 		id,
 		name: opts.name ?? id,
-		email: `${id}@example.invalid`,
+		email,
 		emailVerified: false,
 		createdAt: now,
 		updatedAt: now,
 		role: opts.role ?? null
 	});
-	return { id, name: opts.name ?? id, role: opts.role ?? null };
+	return { id, name: opts.name ?? id, email, role: opts.role ?? null };
 }
 
 export async function createAdmin(): Promise<TestUser> {
@@ -93,6 +97,63 @@ export async function createProject(workspaceId: string, createdBy: string, name
 		.insert(project)
 		.values({ id, name, workspaceId, createdBy, createdAt: now, updatedAt: now });
 	return { id, name, workspaceId, createdBy };
+}
+
+export async function createView(projectId: string, createdBy: string, name = 'Table') {
+	const id = uid('view');
+	const now = new Date();
+	await db
+		.insert(view)
+		.values({ id, projectId, name, type: 'table', createdBy, createdAt: now, updatedAt: now });
+	return { id, name, projectId };
+}
+
+/** A Slack integration row for an org (composite unique is per (org, type)). */
+export async function createIntegration(
+	organizationId: string,
+	createdBy: string,
+	config: Record<string, unknown>,
+	enabled = true
+) {
+	const id = uid('integration');
+	const now = new Date();
+	await db.insert(integration).values({
+		id,
+		type: 'slack',
+		organizationId,
+		enabled,
+		config: JSON.stringify(config),
+		createdBy,
+		createdAt: now,
+		updatedAt: now
+	});
+	return { id, organizationId };
+}
+
+/** Insert a notification row directly (org is required in code; stamp it explicitly). */
+export async function insertNotification(opts: {
+	userId: string;
+	organizationId: string;
+	projectId?: string | null;
+	taskId?: string | null;
+	type?: string;
+	body?: string;
+	read?: boolean;
+}) {
+	const id = uid('notif');
+	const now = new Date();
+	await db.insert(notification).values({
+		id,
+		userId: opts.userId,
+		type: opts.type ?? 'mention',
+		body: opts.body ?? 'hello',
+		organizationId: opts.organizationId,
+		projectId: opts.projectId ?? null,
+		taskId: opts.taskId ?? null,
+		read: opts.read ?? false,
+		createdAt: now
+	});
+	return { id };
 }
 
 /**
@@ -172,4 +233,61 @@ export async function seedProjectFixture() {
 	const proj = await createProject(ws.id, owner.id);
 	const statuses = await ensureStatuses();
 	return { org, admin, owner, ws, proj, statuses };
+}
+
+/**
+ * Two fully-populated organizations for cross-org isolation tests (ADR-062 W5).
+ *
+ *   orgA: ownerA (owner), adminA (admin), memberAGrant (member + a direct project
+ *         grant on projA), memberAPlain (member, NO grants); a workspace wsA owned
+ *         by ownerA, a project projA, and a view viewA.
+ *   orgB: ownerB (owner) + a workspace wsB, project projB, view viewB.
+ *
+ * Plus two org-less outsiders: `instanceAdmin` (user.role === 'admin' but a member
+ * of NO org — the D3 headline: no implicit tenant reach) and `stranger` (a plain
+ * signed-in user in no org). Everything in orgA must be invisible to orgB users,
+ * the instance admin, and the stranger — and vice versa.
+ */
+export async function seedTwoOrgFixture() {
+	const orgA = await createOrg('Org A');
+	const orgB = await createOrg('Org B');
+
+	const ownerA = await createMember(orgA.id, 'owner', { name: 'ownerA' });
+	const adminA = await createMember(orgA.id, 'admin', { name: 'adminA' });
+	const memberAGrant = await createMember(orgA.id, 'member', { name: 'memberAGrant' });
+	const memberAPlain = await createMember(orgA.id, 'member', { name: 'memberAPlain' });
+
+	const ownerB = await createMember(orgB.id, 'owner', { name: 'ownerB' });
+
+	const wsA = await createWorkspace(ownerA.id, 'WS A', orgA.id);
+	const projA = await createProject(wsA.id, ownerA.id, 'Proj A');
+	const viewA = await createView(projA.id, ownerA.id, 'Table A');
+	await grantPermission(memberAGrant.id, 'project', projA.id, ownerA.id);
+
+	const wsB = await createWorkspace(ownerB.id, 'WS B', orgB.id);
+	const projB = await createProject(wsB.id, ownerB.id, 'Proj B');
+	const viewB = await createView(projB.id, ownerB.id, 'Table B');
+
+	const instanceAdmin = await createUser({ role: 'admin', name: 'instanceAdmin' });
+	const stranger = await createUser({ name: 'stranger' });
+
+	const statuses = await ensureStatuses();
+	return {
+		orgA,
+		orgB,
+		ownerA,
+		adminA,
+		memberAGrant,
+		memberAPlain,
+		ownerB,
+		wsA,
+		projA,
+		viewA,
+		wsB,
+		projB,
+		viewB,
+		instanceAdmin,
+		stranger,
+		statuses
+	};
 }

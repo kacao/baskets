@@ -228,32 +228,39 @@ describe.skipIf(!RUN_INTEGRATION)('REST API authorization / ADR-019 (live :5173)
 		});
 	});
 
-	describe('(C) admin-gated grants: 403 BEFORE existence (no oracle)', () => {
-		it('demo GET grants on a REAL project → 403', async () => {
+	// ADR-062 re-pin: under the org model, demo (a plain member) has NO grant on
+	// admin's project and is not an org admin, so it can't even ACCESS it — the
+	// grants gate 404s at the access check (inaccessible ≡ missing) for a real
+	// project AND a ghost alike. The "no existence oracle" property is preserved,
+	// it just resolves to 404 (access layer) rather than the pre-org 403 (admin
+	// layer). Demo cannot escalate.
+	describe('(C) grants on an inaccessible project → 404, real ≡ ghost (no oracle)', () => {
+		it('demo GET grants on a REAL (inaccessible) project → 404', async () => {
 			if (!serverUp || !demoCookie || !projectA) return;
 			const res = await fetch(url(`/api/projects/${projectA}/grants`), {
 				headers: { cookie: demoCookie }
 			});
-			expect(res.status).toBe(403);
+			expect(res.status).toBe(404);
+			expect(res.status).not.toBe(403);
 		});
 
-		it('demo GET grants on a GHOST project → 403 (identical to the real one)', async () => {
+		it('demo GET grants on a GHOST project → 404 (identical to the real one)', async () => {
 			if (!serverUp || !demoCookie) return;
 			const res = await fetch(url(`/api/projects/${ghostId()}/grants`), {
 				headers: { cookie: demoCookie }
 			});
-			// The admin check runs first, so a non-admin can't tell a real project from a ghost.
-			expect(res.status).toBe(403);
+			// A non-member can't tell a real inaccessible project from a ghost.
+			expect(res.status).toBe(404);
 		});
 
-		it('demo POST a grant → 403 (cannot escalate)', async () => {
+		it('demo POST a grant → 404 (cannot escalate)', async () => {
 			if (!serverUp || !demoCookie || !projectA) return;
 			const res = await fetch(url(`/api/projects/${projectA}/grants`), {
 				method: 'POST',
 				headers: { 'content-type': 'application/json', cookie: demoCookie },
 				body: JSON.stringify({ userId: 'anyone' })
 			});
-			expect(res.status).toBe(403);
+			expect(res.status).toBe(404);
 		});
 	});
 
