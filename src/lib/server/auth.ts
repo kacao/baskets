@@ -7,10 +7,12 @@ import * as schema from './db/schema';
 import { DIALECT } from './db/dialect';
 import {
 	bootstrapOrgWorkspace,
+	purgeStaleGrants,
 	shouldSeedSamplesForOwner,
 	slugifyOrgName,
 	uniqueOrgSlug
 } from './orgs';
+import { kickUser } from './realtime/hub';
 
 export const auth = betterAuth({
 	appName: 'Baskets',
@@ -86,6 +88,33 @@ export const auth = betterAuth({
 						await bootstrapOrgWorkspace(org.id, user.id, { seedSamples });
 					} catch (e) {
 						console.error('afterCreateOrganization: workspace bootstrap failed', e);
+					}
+				},
+				// Removing a member (ADR-062 D1): delete their org-scoped grant rows (so a
+				// re-join can't silently resurrect access) and kick their live WS sockets
+				// (revoked access stops receiving pings/presence immediately).
+				afterRemoveMember: async ({ user, organization: org }) => {
+					try {
+						await purgeStaleGrants(user.id, org.id);
+						kickUser(user.id);
+					} catch (e) {
+						console.error('afterRemoveMember: grant purge / kick failed', e);
+					}
+				},
+				// Joining an org (direct add OR invite accept): purge any stale same-org
+				// grant rows so a departed-then-returned user starts from zero grants.
+				afterAddMember: async ({ user, organization: org }) => {
+					try {
+						await purgeStaleGrants(user.id, org.id);
+					} catch (e) {
+						console.error('afterAddMember: stale grant purge failed', e);
+					}
+				},
+				afterAcceptInvitation: async ({ user, organization: org }) => {
+					try {
+						await purgeStaleGrants(user.id, org.id);
+					} catch (e) {
+						console.error('afterAcceptInvitation: stale grant purge failed', e);
 					}
 				}
 			}

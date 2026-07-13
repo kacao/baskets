@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from './db';
 import {
+	member,
 	milestone,
 	milestoneDependency,
 	permission,
@@ -29,7 +30,8 @@ export type ViewType = (typeof VIEW_TYPES)[number];
  * - belongs to a workspace
  * - at least one view (default "Table")
  * - the five defaults + its workspace's statuses eligible
- * - non-admin creators get an edit grant on their own project
+ * - a creator who is NOT an org owner/admin gets an edit grant on their own
+ *   project (org owners/admins already see everything in-org — ADR-062)
  */
 export async function createProjectWithDefaults(opts: {
 	name: string;
@@ -39,6 +41,12 @@ export async function createProjectWithDefaults(opts: {
 }) {
 	const id = crypto.randomUUID();
 	const now = new Date();
+
+	const [ws] = await db
+		.select({ orgId: workspace.organizationId })
+		.from(workspace)
+		.where(eq(workspace.id, opts.workspaceId));
+	const orgId = ws?.orgId ?? null;
 
 	await db.insert(project).values({
 		id,
@@ -68,12 +76,22 @@ export async function createProjectWithDefaults(opts: {
 		await db.insert(projectStatus).values(statuses.map((s) => ({ projectId: id, statusId: s.id })));
 	}
 
-	if (opts.creator.role !== 'admin') {
+	// org owners/admins already see every project in the org, so they hold no grant
+	// (mirrors the single-tenant admin-skip). Grant org == resource org (ADR-062).
+	const [m] = orgId
+		? await db
+				.select({ role: member.role })
+				.from(member)
+				.where(and(eq(member.userId, opts.creator.id), eq(member.organizationId, orgId)))
+		: [];
+	const creatorIsOrgAdmin = m?.role === 'owner' || m?.role === 'admin';
+	if (!creatorIsOrgAdmin) {
 		await db.insert(permission).values({
 			id: crypto.randomUUID(),
 			userId: opts.creator.id,
 			resourceType: 'project',
 			resourceId: id,
+			organizationId: orgId,
 			grantedBy: opts.creator.id,
 			createdAt: now
 		});

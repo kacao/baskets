@@ -10,7 +10,7 @@
 // SvelteKit SSR bundle cheaply; it only ever calls `.send()` on stored sockets.
 
 export type RealtimeClient = {
-	ws: { send(data: string): void; readyState: number };
+	ws: { send(data: string): void; readyState: number; close?(): void };
 	userId: string;
 	userName: string;
 	projectId: string | null;
@@ -41,6 +41,28 @@ export function broadcastProjectChange(projectId: string, actorUserId?: string) 
 				if (c.ws.readyState === 1) c.ws.send(msg);
 			} catch {
 				/* dead socket; the transport layer's heartbeat prunes it */
+			}
+		}
+	} catch {
+		/* never let realtime break a mutation */
+	}
+}
+
+/**
+ * Fire-and-forget: close every live socket belonging to `userId` (ADR-062) —
+ * called when a member is removed from an org so their revoked access stops
+ * receiving pings/presence names instead of lingering until reconnect. Closing
+ * fires the transport's `close` handler, which prunes the client + rebroadcasts
+ * presence. Never throws; realtime must not break a mutation.
+ */
+export function kickUser(userId: string) {
+	try {
+		for (const c of hub().clients) {
+			if (c.userId !== userId) continue;
+			try {
+				c.ws.close?.();
+			} catch {
+				/* dead socket; heartbeat/close handler prunes it */
 			}
 		}
 	} catch {
