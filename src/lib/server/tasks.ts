@@ -1,5 +1,5 @@
 import { and, count, eq, inArray, isNull, asc } from 'drizzle-orm';
-import { db } from '$lib/server/db';
+import { db, withTransaction, type DB } from '$lib/server/db';
 import { file, label, location, milestone, project, task, taskLabel, user } from '$lib/server/db/schema';
 import { PRIORITIES } from '$lib/server/api';
 import { dispatchEvent } from '$lib/server/integrations';
@@ -43,14 +43,15 @@ async function spawnRecurrenceIfCompleting(
 	eligible: Awaited<ReturnType<typeof listProjectStatuses>>,
 	targetCategory: string,
 	wasCompleted: boolean,
-	actor: Actor
+	actor: Actor,
+	exec: DB = db
 ): Promise<void> {
 	if (targetCategory !== 'completed' || wasCompleted || !existing.recurrence) return;
 	const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
 	const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
 	if (!backlog) return;
 	const spawnNow = new Date();
-	await db.insert(task).values({
+	await exec.insert(task).values({
 		id: crypto.randomUUID(),
 		projectId: existing.projectId,
 		parentId: existing.parentId,
@@ -499,38 +500,57 @@ export async function updateTaskService(
 	const cf = input.cf ?? [];
 	if (Object.keys(set).length === 0 && cf.length === 0) return err(400, 'No fields to update');
 
-	// Write custom values FIRST so a CF validation error doesn't leave the task
-	// row partially updated with no rollback (no surrounding transaction).
-	if (cf.length > 0) {
-		const res = await writeTaskCustomValues(taskId, projectId, cf);
-		if (res.error) return err(400, res.error);
+	// Completing a parent completes its sub-tasks + recurrence spawn (REST PATCH).
+	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	const didCascade = Boolean(opts.completeCascade && targetStatus?.category === 'completed' && !wasDone);
+
+	// CF write, task update, and (on a completing transition) the recurrence spawn
+	// + sub-task cascade all happen atomically (ADR-057) — a CF validation error
+	// or any mid-sequence throw rolls back the whole patch, not just part of it.
+	// Fire-and-forget side effects (dispatchEvent, logActivity, notifyMentions,
+	// createNotification, broadcastProjectChange) stay OUTSIDE the transaction.
+	let updated: typeof task.$inferSelect;
+	let cfError: string | null = null;
+	try {
+		updated = await withTransaction(async (tx) => {
+			if (cf.length > 0) {
+				const res = await writeTaskCustomValues(taskId, projectId, cf, tx);
+				if (res.error) {
+					cfError = res.error;
+					throw new Error('cf-validation');
+				}
+			}
+
+			const [row] = await tx
+				.update(task)
+				.set({ ...set, updatedAt: new Date() })
+				.where(eq(task.id, taskId))
+				.returning();
+
+			if (didCascade && targetStatus) {
+				await spawnRecurrenceIfCompleting(existing, eligible, targetStatus.category, wasDone, actor, tx);
+
+				await tx
+					.update(task)
+					.set({ statusId: targetStatus.id, updatedAt: new Date() })
+					.where(eq(task.parentId, taskId));
+			}
+
+			return row;
+		});
+	} catch (e) {
+		if (cfError) return err(400, cfError);
+		throw e;
 	}
 
-	const [updated] = await db
-		.update(task)
-		.set({ ...set, updatedAt: new Date() })
-		.where(eq(task.id, taskId))
-		.returning();
-
-	// Completing a parent completes its sub-tasks + recurrence spawn (REST PATCH).
-	if (opts.completeCascade) {
-		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-		if (targetStatus?.category === 'completed' && !wasDone) {
-			await spawnRecurrenceIfCompleting(existing, eligible, targetStatus.category, wasDone, actor);
-
-			await db
-				.update(task)
-				.set({ statusId: targetStatus.id, updatedAt: new Date() })
-				.where(eq(task.parentId, taskId));
-
-			const [proj] = await db.select().from(project).where(eq(project.id, projectId));
-			void dispatchEvent({
-				type: 'task.completed',
-				actor: actor.name ?? 'Unknown',
-				projectName: proj?.name ?? 'Unknown project',
-				taskTitle: updated.title
-			});
-		}
+	if (didCascade) {
+		const [proj] = await db.select().from(project).where(eq(project.id, projectId));
+		void dispatchEvent({
+			type: 'task.completed',
+			actor: actor.name ?? 'Unknown',
+			projectName: proj?.name ?? 'Unknown project',
+			taskTitle: updated.title
+		});
 	}
 
 	if (opts.logActivity) {

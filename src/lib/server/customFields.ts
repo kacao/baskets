@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { db } from './db';
+import { db, type DB } from './db';
 import {
 	customField,
 	customFieldOption,
@@ -62,7 +62,12 @@ type Loaded = { id: string; type: string; config: Record<string, unknown> };
 type EncodeResult = { value: string | null } | { error: string };
 
 /** Validate + canonicalize one raw form value against its field definition. */
-async function encodeAndValidate(field: Loaded, raw: string | null, projectId: string): Promise<EncodeResult> {
+async function encodeAndValidate(
+	field: Loaded,
+	raw: string | null,
+	projectId: string,
+	exec: DB = db
+): Promise<EncodeResult> {
 	const type = field.type;
 	const s = raw == null ? '' : String(raw);
 
@@ -86,7 +91,7 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 
 		let valid: Set<string>;
 		if (type === 'select') {
-			const opts = await db
+			const opts = await exec
 				.select({ id: customFieldOption.id })
 				.from(customFieldOption)
 				.where(eq(customFieldOption.fieldId, field.id));
@@ -95,28 +100,28 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 			// person ids must be REAL users AND able to access this project — else a task
 			// editor could store an arbitrary user's id and read their name via CSV export
 			// (cross-project disclosure). Mirrors notifyMentions' scoping.
-			const [proj] = await db
+			const [proj] = await exec
 				.select({ workspaceId: project.workspaceId })
 				.from(project)
 				.where(eq(project.id, projectId));
 			const roster = await projectAccessUserIds(projectId, proj?.workspaceId ?? null);
-			const us = await db.select({ id: user.id }).from(user).where(inArray(user.id, ids));
+			const us = await exec.select({ id: user.id }).from(user).where(inArray(user.id, ids));
 			valid = new Set(us.map((u) => u.id).filter((id) => roster.has(id)));
 		} else if (type === 'place') {
-			const locs = await db
+			const locs = await exec
 				.select({ id: location.id })
 				.from(location)
 				.where(and(eq(location.projectId, projectId), inArray(location.id, ids)));
 			valid = new Set(locs.map((l) => l.id));
 		} else if (type === 'task') {
-			const ts = await db
+			const ts = await exec
 				.select({ id: task.id })
 				.from(task)
 				.where(and(eq(task.projectId, projectId), inArray(task.id, ids)));
 			valid = new Set(ts.map((t) => t.id));
 		} else {
 			// files
-			const fs = await db
+			const fs = await exec
 				.select({ id: file.id })
 				.from(file)
 				.where(and(eq(file.projectId, projectId), inArray(file.id, ids)));
@@ -180,10 +185,11 @@ async function encodeAndValidate(field: Loaded, raw: string | null, projectId: s
 export async function writeTaskCustomValues(
 	taskId: string,
 	projectId: string,
-	entries: { fieldId: string; raw: string | null }[]
+	entries: { fieldId: string; raw: string | null }[],
+	exec: DB = db
 ): Promise<{ error?: string }> {
 	if (entries.length === 0) return {};
-	const fields = await db.select().from(customField).where(eq(customField.projectId, projectId));
+	const fields = await exec.select().from(customField).where(eq(customField.projectId, projectId));
 	const byId = new Map(
 		fields.map((f) => [
 			f.id,
@@ -191,7 +197,7 @@ export async function writeTaskCustomValues(
 		])
 	);
 	// the field must apply to this task's level (top-level vs sub-task)
-	const [tk] = await db.select({ parentId: task.parentId }).from(task).where(eq(task.id, taskId));
+	const [tk] = await exec.select({ parentId: task.parentId }).from(task).where(eq(task.id, taskId));
 	const isSubtask = !!tk?.parentId;
 
 	const writes: { fieldId: string; value: string }[] = [];
@@ -201,16 +207,16 @@ export async function writeTaskCustomValues(
 		if (!field) return { error: 'Unknown custom field' };
 		if (field.entity === 'project') return { error: 'Field is a project field, not a task field' };
 		if (!fieldAppliesTo(field, isSubtask)) return { error: 'Field not available for this task' };
-		const res = await encodeAndValidate(field, raw, projectId);
+		const res = await encodeAndValidate(field, raw, projectId, exec);
 		if ('error' in res) return { error: res.error };
 		if (res.value === null) clears.push(fieldId);
 		else writes.push({ fieldId, value: res.value });
 	}
 
 	for (const fieldId of clears)
-		await db.delete(taskCustomValue).where(and(eq(taskCustomValue.taskId, taskId), eq(taskCustomValue.fieldId, fieldId)));
+		await exec.delete(taskCustomValue).where(and(eq(taskCustomValue.taskId, taskId), eq(taskCustomValue.fieldId, fieldId)));
 	for (const w of writes)
-		await db
+		await exec
 			.insert(taskCustomValue)
 			.values({ taskId, fieldId: w.fieldId, value: w.value })
 			.onConflictDoUpdate({ target: [taskCustomValue.taskId, taskCustomValue.fieldId], set: { value: w.value } });
