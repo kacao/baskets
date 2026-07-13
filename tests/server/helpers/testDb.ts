@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
 	user,
@@ -61,6 +62,17 @@ export async function createMembership(
 	return { id, userId, organizationId, role };
 }
 
+/** Create a user AND a membership in `orgId` in one step (the common fixture shape). */
+export async function createMember(
+	organizationId: string,
+	role: 'owner' | 'admin' | 'member' = 'member',
+	opts: { name?: string } = {}
+): Promise<TestUser> {
+	const u = await createUser({ name: opts.name });
+	await createMembership(u.id, organizationId, role);
+	return u;
+}
+
 export async function createWorkspace(
 	ownerId: string,
 	name = 'Test workspace',
@@ -83,13 +95,36 @@ export async function createProject(workspaceId: string, createdBy: string, name
 	return { id, name, workspaceId, createdBy };
 }
 
-/** Grants `userId` edit access on a resource (`workspace` | `project` | `view` | `task`). */
+/**
+ * Grants `userId` edit access on a resource (`workspace` | `project` | `view` |
+ * `task`). Stamps `organizationId` = the resource's org (ADR-062 invariant: grant
+ * org == resource org) so org-filtered readers (grantedProjectIds/
+ * accessibleWorkspaceIds) see it. Pass `organizationId` to override.
+ */
 export async function grantPermission(
 	userId: string,
 	resourceType: 'workspace' | 'project' | 'view' | 'task',
 	resourceId: string,
-	grantedBy: string
+	grantedBy: string,
+	organizationId?: string | null
 ) {
+	let orgId = organizationId ?? null;
+	if (orgId === null) {
+		if (resourceType === 'workspace') {
+			const [w] = await db
+				.select({ orgId: workspace.organizationId })
+				.from(workspace)
+				.where(eq(workspace.id, resourceId));
+			orgId = w?.orgId ?? null;
+		} else if (resourceType === 'project') {
+			const [p] = await db
+				.select({ orgId: workspace.organizationId })
+				.from(project)
+				.leftJoin(workspace, eq(project.workspaceId, workspace.id))
+				.where(eq(project.id, resourceId));
+			orgId = p?.orgId ?? null;
+		}
+	}
 	const id = uid('perm');
 	const now = new Date();
 	await db.insert(permission).values({
@@ -97,6 +132,7 @@ export async function grantPermission(
 		userId,
 		resourceType,
 		resourceId,
+		organizationId: orgId,
 		grantedBy,
 		createdAt: now
 	});
@@ -122,12 +158,18 @@ export async function ensureStatuses() {
 	};
 }
 
-/** Full fixture: admin + owner + workspace + project + built-in statuses. */
+/**
+ * Full fixture: an org + its owner (a member of the org) + workspace + project +
+ * built-in statuses. `admin` is an INSTANCE admin who is deliberately NOT a member
+ * of the org — under ADR-062 it therefore has no data reach into the fixture.
+ */
 export async function seedProjectFixture() {
+	const org = await createOrg();
 	const admin = await createAdmin();
 	const owner = await createUser({ name: 'Owner' });
-	const ws = await createWorkspace(owner.id);
+	await createMembership(owner.id, org.id, 'member');
+	const ws = await createWorkspace(owner.id, 'Test workspace', org.id);
 	const proj = await createProject(ws.id, owner.id);
 	const statuses = await ensureStatuses();
-	return { admin, owner, ws, proj, statuses };
+	return { org, admin, owner, ws, proj, statuses };
 }
