@@ -611,15 +611,18 @@ export async function deleteTaskService(
 /**
  * Resolve the editable subset of `ids` scoped to `projectId`: only rows in this
  * project the actor can edit. Mirrors the form actions (project from params).
+ *
+ * Task-edit permission == project access (ADR-019, canEditTask is defined as
+ * canAccessProject(user, t.projectId)) — resolve it once, not once per row.
  */
 async function bulkAllowed(ids: string[], projectId: string, actor: Actor): Promise<string[]> {
-	const rows = await db.select().from(task).where(inArray(task.id, ids));
-	const allowed: string[] = [];
-	for (const t of rows) {
-		if (t.projectId !== projectId) continue;
-		if (await canEditTask(actor, t)) allowed.push(t.id);
-	}
-	return allowed;
+	if (ids.length === 0) return [];
+	if (!(await canAccessProject(actor, projectId))) return [];
+	const rows = await db
+		.select({ id: task.id, projectId: task.projectId })
+		.from(task)
+		.where(inArray(task.id, ids));
+	return rows.filter((t) => t.projectId === projectId).map((t) => t.id);
 }
 
 export type BulkSet = {

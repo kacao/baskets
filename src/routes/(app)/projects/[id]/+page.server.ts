@@ -59,7 +59,6 @@ import {
 	canAccessProject,
 	canEditProject,
 	canEditTask,
-	canEditView,
 	canEditWorkspace,
 	grantedProjectIds,
 	isAdmin,
@@ -293,8 +292,30 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 	// Per-view edit rights (project grant covers all views); hidden views are never rendered
 	const editableViews: Record<string, boolean> = {};
-	for (const v of views.filter((v) => !v.hidden)) {
-		editableViews[v.id] = canEditProj || (await canEditView(locals.user, v.id));
+	const visibleViews = views.filter((v) => !v.hidden);
+	if (canEditProj) {
+		for (const v of visibleViews) editableViews[v.id] = true;
+	} else if (!locals.user) {
+		for (const v of visibleViews) editableViews[v.id] = false;
+	} else {
+		const grantedViewIds = new Set(
+			(
+				await db
+					.select({ id: permission.resourceId })
+					.from(permission)
+					.where(
+						and(
+							eq(permission.userId, locals.user.id),
+							eq(permission.resourceType, 'view'),
+							inArray(
+								permission.resourceId,
+								visibleViews.map((v) => v.id)
+							)
+						)
+					)
+			).map((r) => r.id)
+		);
+		for (const v of visibleViews) editableViews[v.id] = grantedViewIds.has(v.id);
 	}
 
 	// Project-entity rollup chip values (computed, never stored — aggregate a target
