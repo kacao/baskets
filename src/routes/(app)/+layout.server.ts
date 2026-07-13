@@ -1,13 +1,29 @@
 import { redirect } from '@sveltejs/kit';
-import { asc, desc } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { project, workspace } from '$lib/server/db/schema';
 import { accessibleWorkspaceIds, grantedProjectIds } from '$lib/server/permissions';
+import { resolveActiveOrgContext } from '$lib/server/orgs';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 	if (!locals.user) {
 		redirect(302, '/login');
+	}
+
+	// Active org (ADR-062 D4): everything below is scoped to it. A 0-org user gets
+	// empty data here; W3 adds the /onboarding redirect for that case.
+	const { orgs, org, orgId, role } = await resolveActiveOrgContext(locals.user, cookies);
+	if (!orgId) {
+		return {
+			user: locals.user,
+			orgs,
+			currentOrg: org,
+			orgRole: role,
+			projects: [],
+			workspaces: [],
+			currentWorkspaceId: null
+		};
 	}
 
 	const [allProjects, allWorkspaces, wsAccess, projGrants] = await Promise.all([
@@ -20,27 +36,24 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 				pinned: project.pinned
 			})
 			.from(project)
+			.innerJoin(workspace, eq(project.workspaceId, workspace.id))
+			.where(eq(workspace.organizationId, orgId))
 			.orderBy(desc(project.pinned), asc(project.name)),
 		db
 			.select({ id: workspace.id, name: workspace.name })
 			.from(workspace)
+			.where(eq(workspace.organizationId, orgId))
 			.orderBy(asc(workspace.name)),
-		accessibleWorkspaceIds(locals.user),
-		grantedProjectIds(locals.user)
+		accessibleWorkspaceIds(locals.user, orgId),
+		grantedProjectIds(locals.user, orgId)
 	]);
 
 	// ADR-019: only accessible workspaces/projects are shown
-	const projects =
-		wsAccess === 'all'
-			? allProjects
-			: allProjects.filter(
-					(p) => (p.workspaceId && wsAccess.has(p.workspaceId)) || projGrants.has(p.id)
-				);
+	const projects = allProjects.filter(
+		(p) => (p.workspaceId && wsAccess.has(p.workspaceId)) || projGrants.has(p.id)
+	);
 	const visibleWsIds = new Set(projects.map((p) => p.workspaceId));
-	const workspaces =
-		wsAccess === 'all'
-			? allWorkspaces
-			: allWorkspaces.filter((w) => wsAccess.has(w.id) || visibleWsIds.has(w.id));
+	const workspaces = allWorkspaces.filter((w) => wsAccess.has(w.id) || visibleWsIds.has(w.id));
 
 	const requested = cookies.get('workspace');
 	const currentWorkspaceId =
@@ -48,6 +61,9 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 
 	return {
 		user: locals.user,
+		orgs,
+		currentOrg: org,
+		orgRole: role,
 		projects,
 		workspaces,
 		currentWorkspaceId

@@ -12,12 +12,8 @@ import {
 	user,
 	workspace
 } from '$lib/server/db/schema';
-import {
-	canAccessWorkspace,
-	canEditWorkspace,
-	isAdmin,
-	listWorkspaceGrants
-} from '$lib/server/permissions';
+import { canAccessWorkspace, canEditWorkspace, listWorkspaceGrants } from '$lib/server/permissions';
+import { isOrgAdmin, listMembers, orgRole } from '$lib/server/orgs';
 import { parseIconValue } from '$lib/server/icons';
 import {
 	createWorkspaceStatus,
@@ -43,6 +39,15 @@ async function getWorkspaceOr404(id: string) {
 	return w;
 }
 
+/** Workspace grants are managed by org owners/admins OR the workspace owner (ADR-062). */
+async function canManageGrants(
+	user: NonNullable<App.Locals['user']>,
+	ws: typeof workspace.$inferSelect
+): Promise<boolean> {
+	if (ws.ownerId === user.id) return true;
+	return ws.organizationId ? isOrgAdmin(user.id, ws.organizationId) : false;
+}
+
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const ws = await getWorkspaceOr404(params.id);
 	// ADR-019 tiering: an inaccessible workspace must look identical to a missing
@@ -57,7 +62,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		labels,
 		groups,
 		projects,
-		users,
+		members,
 		statusUsage,
 		taskUse,
 		projectUse
@@ -79,22 +84,32 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.from(project)
 			.where(eq(project.workspaceId, params.id))
 			.orderBy(asc(project.name)),
-		db.select({ id: user.id, name: user.name }).from(user).orderBy(asc(user.name)),
+		// roster for the grant picker = org members only (ADR-062), not the full user table
+		ws.organizationId ? listMembers(ws.organizationId) : Promise.resolve([]),
+		// usage counts scoped to this workspace's projects (ADR-062: no instance-wide aggregate)
 		db
 			.select({ statusId: task.statusId, n: count(task.id) })
 			.from(task)
+			.innerJoin(project, eq(task.projectId, project.id))
+			.where(eq(project.workspaceId, params.id))
 			.groupBy(task.statusId),
 		db
 			.select({ labelId: taskLabel.labelId, n: count() })
 			.from(taskLabel)
+			.innerJoin(task, eq(taskLabel.taskId, task.id))
+			.innerJoin(project, eq(task.projectId, project.id))
+			.where(eq(project.workspaceId, params.id))
 			.groupBy(taskLabel.labelId),
 		db
 			.select({ labelId: projectLabel.labelId, n: count() })
 			.from(projectLabel)
+			.innerJoin(project, eq(projectLabel.projectId, project.id))
+			.where(eq(project.workspaceId, params.id))
 			.groupBy(projectLabel.labelId)
 	]);
 
-	const admin = isAdmin(locals.user);
+	const users = members.map((m) => ({ id: m.userId, name: m.name }));
+	const admin = ws.organizationId ? await isOrgAdmin(locals.user!.id, ws.organizationId) : false;
 	const owner = ws.ownerId === locals.user!.id;
 
 	return {
@@ -138,7 +153,15 @@ export const actions: Actions = {
 		if (!name) return fail(400, { message: 'Workspace name is required' });
 		if (name.length > 120) return fail(400, { message: 'Name too long (max 120)' });
 
-		const others = await db.select({ id: workspace.id, name: workspace.name }).from(workspace);
+		// per-org name uniqueness (ADR-062)
+		const [me] = await db
+			.select({ orgId: workspace.organizationId })
+			.from(workspace)
+			.where(eq(workspace.id, params.id));
+		const others = await db
+			.select({ id: workspace.id, name: workspace.name })
+			.from(workspace)
+			.where(me?.orgId ? eq(workspace.organizationId, me.orgId) : undefined);
 		if (others.some((w) => w.id !== params.id && w.name.toLowerCase() === name.toLowerCase()))
 			return fail(400, { message: 'A workspace with that name already exists' });
 
@@ -159,11 +182,11 @@ export const actions: Actions = {
 			.where(eq(project.workspaceId, params.id));
 		if (n > 0) return fail(400, { message: 'Move or delete its projects first' });
 
-		const [{ n: total }] = await db.select({ n: count(workspace.id) }).from(workspace);
-		if (total <= 1) return fail(400, { message: 'At least one workspace must exist' });
+		// ADR-062: an empty workspace is deletable even if it's the org's last one
+		// (a 0-workspace org is now legal — required for org deletion).
 
 		// permission.resourceId has no FK — clear workspace grants so a future
-		// workspace reusing this id (e.g. workspace-default) can't inherit them
+		// workspace reusing this id can't inherit them
 		await db
 			.delete(permission)
 			.where(and(eq(permission.resourceType, 'workspace'), eq(permission.resourceId, params.id)));
@@ -305,15 +328,17 @@ export const actions: Actions = {
 
 	grantPermission: async ({ request, params, locals }) => {
 		const ws = await getWorkspaceOr404(params.id);
-		if (!locals.user || !(isAdmin(locals.user) || ws.ownerId === locals.user.id))
-			return fail(403, { message: 'Only admins or the owner can grant permissions' });
+		if (!locals.user || !(await canManageGrants(locals.user, ws)))
+			return fail(403, { message: 'Only org admins or the owner can grant permissions' });
 
 		const form = await request.formData();
 		const userId = String(form.get('userId') ?? '');
 		if (!userId) return fail(400, { message: 'Invalid grant' });
 
-		const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, userId));
-		if (!u) return fail(400, { message: 'Unknown user' });
+		// grantee must be a member of the workspace's org (nonexistent vs out-of-org
+		// share one error — no oracle). Grant org == resource org (ADR-062).
+		if (!ws.organizationId || !(await orgRole(userId, ws.organizationId)))
+			return fail(400, { message: 'Unknown user' });
 
 		await db
 			.insert(permission)
@@ -322,6 +347,7 @@ export const actions: Actions = {
 				userId,
 				resourceType: 'workspace',
 				resourceId: params.id,
+				organizationId: ws.organizationId,
 				grantedBy: locals.user.id,
 				createdAt: new Date()
 			})
@@ -331,8 +357,8 @@ export const actions: Actions = {
 
 	revokePermission: async ({ request, params, locals }) => {
 		const ws = await getWorkspaceOr404(params.id);
-		if (!locals.user || !(isAdmin(locals.user) || ws.ownerId === locals.user.id))
-			return fail(403, { message: 'Only admins or the owner can revoke permissions' });
+		if (!locals.user || !(await canManageGrants(locals.user, ws)))
+			return fail(403, { message: 'Only org admins or the owner can revoke permissions' });
 
 		const form = await request.formData();
 		const id = String(form.get('id') ?? '');

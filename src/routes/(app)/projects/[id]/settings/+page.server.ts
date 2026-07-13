@@ -21,12 +21,15 @@ import {
 } from '$lib/server/db/schema';
 import {
 	accessibleWorkspaceIds,
+	canAccessProject,
 	canEditProject,
 	grantedProjectIds,
-	isAdmin,
 	listProjectGrants,
-	projectAccessUserIds
+	projectAccessUserIds,
+	projectOrgId,
+	workspaceOrgId
 } from '$lib/server/permissions';
+import { isOrgAdmin, listMembers, orgRole } from '$lib/server/orgs';
 import { decodeValue } from '$lib/customFields';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { notifyMentions } from '$lib/server/mentions';
@@ -126,6 +129,8 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 	if (!(await canEditProject(locals.user, params.id)))
 		error(403, 'No edit permission on this project');
 
+	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
+
 	const [
 		globalStatuses,
 		workspaceStatuses,
@@ -137,7 +142,7 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 		projDeps,
 		allProjects,
 		milestones,
-		users,
+		members,
 		views,
 		statusUsage
 	] = await Promise.all([
@@ -168,7 +173,8 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 			.from(milestone)
 			.where(eq(milestone.projectId, params.id))
 			.orderBy(asc(milestone.position), asc(milestone.createdAt)),
-		db.select({ id: user.id, name: user.name }).from(user).orderBy(asc(user.name)),
+		// grant-picker roster = org members only (ADR-062), not the full user table
+		projOrgId ? listMembers(projOrgId) : Promise.resolve([]),
 		db
 			.select({ id: view.id, name: view.name, type: view.type })
 			.from(view)
@@ -219,27 +225,26 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 			])
 		: [[], []];
 
-	const admin = isAdmin(locals.user);
+	// grant management is org owner/admin (ADR-062); the roster is org members only
+	const admin = projOrgId ? await isOrgAdmin(locals.user!.id, projOrgId) : false;
+	const roster = members.map((m) => ({ id: m.userId, name: m.name }));
 
-	// ADR-019: dependency picker offers only accessible projects (existing deps stay listed)
+	// ADR-019/ADR-062: dependency picker offers only accessible projects in this org
 	const [wsAccess, projGrants] = await Promise.all([
-		accessibleWorkspaceIds(locals.user),
-		grantedProjectIds(locals.user)
+		accessibleWorkspaceIds(locals.user, projOrgId),
+		grantedProjectIds(locals.user, projOrgId)
 	]);
-	const visibleProjects =
-		wsAccess === 'all'
-			? allProjects
-			: allProjects.filter(
-					(p) =>
-						(p.workspaceId && wsAccess.has(p.workspaceId)) ||
-						projGrants.has(p.id) ||
-						projDeps.some((d) => d.dependsOnId === p.id)
-				);
+	const visibleProjects = allProjects.filter(
+		(p) =>
+			(p.workspaceId && wsAccess.has(p.workspaceId)) ||
+			projGrants.has(p.id) ||
+			projDeps.some((d) => d.dependsOnId === p.id)
+	);
 
-	// ADR-019: admins manage grants and need the full roster; everyone else (workspace
-	// owner / project grantee) only needs users who can access this project + any
-	// already referenced by a person custom field, so the whole roster isn't exposed.
-	let visibleUsers = users;
+	// Org admins manage grants (need the org roster to pick non-members-of-a-project);
+	// everyone else (workspace owner / project grantee) only needs users who can access
+	// this project + any already referenced by a person custom field.
+	let visibleUsers = roster;
 	if (!admin) {
 		const ids = await projectAccessUserIds(params.id, proj.workspaceId);
 		for (const f of customFields) {
@@ -250,7 +255,7 @@ const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
 				if (Array.isArray(refs)) for (const id of refs) ids.add(String(id));
 			}
 		}
-		visibleUsers = users.filter((u) => ids.has(u.id));
+		visibleUsers = roster.filter((u) => ids.has(u.id));
 	}
 
 	// Milestone deps + per-milestone task progress for the rich milestones manager.
@@ -883,8 +888,10 @@ export const actions: Actions = {
 		if (!dependsOnId || dependsOnId === params.id)
 			return fail(400, { message: 'Invalid dependency' });
 
+		// same generic message whether absent or inaccessible/cross-org — no oracle
 		const [target] = await db.select().from(project).where(eq(project.id, dependsOnId));
-		if (!target) return fail(400, { message: 'Unknown project' });
+		if (!target || !(await canAccessProject(locals.user, dependsOnId)))
+			return fail(400, { message: 'Unknown project' });
 
 		const all = await db.select().from(projectDependency);
 		const edges = new Map<string, string[]>();
@@ -1077,8 +1084,9 @@ export const actions: Actions = {
 	/* ----------------------------- permissions ----------------------------- */
 
 	grantPermission: async ({ request, params, locals }) => {
-		if (!locals.user || !isAdmin(locals.user))
-			return fail(403, { message: 'Only admins can grant permissions' });
+		const orgId = await projectOrgId(params.id);
+		if (!locals.user || !orgId || !(await isOrgAdmin(locals.user.id, orgId)))
+			return fail(403, { message: 'Only org admins can grant permissions' });
 
 		const form = await request.formData();
 		const userId = String(form.get('userId') ?? '');
@@ -1094,6 +1102,10 @@ export const actions: Actions = {
 			if (!v || v.projectId !== params.id) return fail(400, { message: 'Invalid view' });
 		}
 
+		// grantee must be a member of this project's org (nonexistent vs out-of-org
+		// share one error — no oracle). Grant org == resource org (ADR-062).
+		if (!(await orgRole(userId, orgId))) return fail(400, { message: 'Unknown user' });
+
 		await db
 			.insert(permission)
 			.values({
@@ -1101,6 +1113,7 @@ export const actions: Actions = {
 				userId,
 				resourceType,
 				resourceId,
+				organizationId: orgId,
 				grantedBy: locals.user.id,
 				createdAt: new Date()
 			})
@@ -1108,12 +1121,17 @@ export const actions: Actions = {
 		return { success: true };
 	},
 
-	revokePermission: async ({ request, locals }) => {
-		if (!locals.user || !isAdmin(locals.user))
-			return fail(403, { message: 'Only admins can revoke permissions' });
+	revokePermission: async ({ request, params, locals }) => {
+		const orgId = await projectOrgId(params.id);
+		if (!locals.user || !orgId || !(await isOrgAdmin(locals.user.id, orgId)))
+			return fail(403, { message: 'Only org admins can revoke permissions' });
 
 		const form = await request.formData();
 		const id = String(form.get('id') ?? '');
+		// only delete a grant that belongs to THIS project's resource set (project/views/
+		// tasks) — never a raw id from another project/workspace (inventory §5 fix).
+		const owned = new Set((await listProjectGrants(params.id)).map((r) => r.id));
+		if (!owned.has(id)) return fail(404, { message: 'Grant not found' });
 		await db.delete(permission).where(eq(permission.id, id));
 		return { success: true };
 	}

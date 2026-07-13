@@ -10,7 +10,7 @@ import {
 	user,
 	workspace
 } from './db/schema';
-import { seedWorkspaceSamples } from './projects';
+import { isFirstWorkspaceForUser, seedWorkspaceSamples } from './projects';
 
 // Org service module (ADR-062). Primitives for the BetterAuth organization
 // plugin: membership/role reads, active-org resolution (mirrors the `workspace`
@@ -98,6 +98,92 @@ export async function resolveActiveOrg(user: SessionUser, cookies: Cookies) {
 	return orgs.find((o) => o.id === requested) ?? orgs[0];
 }
 
+export type OrgSummary = Awaited<ReturnType<typeof listUserOrgs>>[number];
+export type ActiveOrgContext = {
+	orgs: OrgSummary[];
+	org: OrgSummary | null;
+	orgId: string | null;
+	role: OrgRole | null;
+};
+
+/**
+ * The ONE shared org→workspace resolver for (app) loads (ADR-062 D4): resolves
+ * the active org (via resolveActiveOrg's rule) PLUS the user's full org list and
+ * their role in the active org. Callers then scope accessibleWorkspaceIds/
+ * grantedProjectIds by `orgId` and resolve the `workspace` cookie within the org.
+ * A 0-org user gets empty context (W3's layout redirects them to /onboarding).
+ */
+export async function resolveActiveOrgContext(
+	user: SessionUser,
+	cookies: Cookies
+): Promise<ActiveOrgContext> {
+	if (!user) return { orgs: [], org: null, orgId: null, role: null };
+	const orgs = await listUserOrgs(user.id);
+	if (orgs.length === 0) return { orgs, org: null, orgId: null, role: null };
+	const requested = cookies.get('org');
+	const org = orgs.find((o) => o.id === requested) ?? orgs[0];
+	const role = await orgRole(user.id, org.id);
+	return { orgs, org, orgId: org.id, role };
+}
+
+/**
+ * Create a workspace in an org (ADR-062) — the ONE service path for both the form
+ * action and REST. Requires the owner to be a member of `organizationId` (identical
+ * error for a nonexistent vs out-of-org id — no oracle), enforces per-org name
+ * uniqueness, stamps organizationId, and seeds sample content when this is the
+ * user's first owned workspace anywhere.
+ */
+export async function createWorkspaceService(opts: {
+	name: string;
+	ownerId: string;
+	organizationId: string;
+}): Promise<ServiceResult<{ id: string }>> {
+	const name = opts.name.trim();
+	if (!name) return { ok: false, status: 400, message: 'Workspace name is required' };
+	if (name.length > 120) return { ok: false, status: 400, message: 'Name too long (max 120)' };
+
+	// membership is the prerequisite; a nonexistent org and a non-member org both
+	// resolve to a null role, so they share one error (no existence oracle).
+	const role = await orgRole(opts.ownerId, opts.organizationId);
+	if (!role) return { ok: false, status: 400, message: 'Unknown organization' };
+
+	const existing = await db
+		.select({ name: workspace.name })
+		.from(workspace)
+		.where(eq(workspace.organizationId, opts.organizationId));
+	if (existing.some((w) => w.name.toLowerCase() === name.toLowerCase()))
+		return { ok: false, status: 400, message: 'A workspace with that name already exists' };
+
+	const seedSamples = await isFirstWorkspaceForUser(opts.ownerId);
+	const id = crypto.randomUUID();
+	const now = new Date();
+	await db.insert(workspace).values({
+		id,
+		name,
+		ownerId: opts.ownerId,
+		organizationId: opts.organizationId,
+		createdAt: now,
+		updatedAt: now
+	});
+	if (seedSamples) await seedWorkspaceSamples(id, { id: opts.ownerId });
+	return { ok: true, data: { id } };
+}
+
+/**
+ * Delete a user's permission rows in an org. Called when a member is removed or
+ * re-joins so a departed user's grants never silently resurrect (ADR-062 D1).
+ * Best-effort — swallow errors when fire-and-forget.
+ */
+export async function purgeStaleGrants(userId: string, orgId: string): Promise<void> {
+	try {
+		await db
+			.delete(permission)
+			.where(and(eq(permission.userId, userId), eq(permission.organizationId, orgId)));
+	} catch (e) {
+		console.error('[orgs] purgeStaleGrants failed', e);
+	}
+}
+
 /** True when the user owns exactly one org (i.e. this is their first owned org). */
 async function ownsExactlyOneOrg(userId: string): Promise<boolean> {
 	const rows = await db
@@ -183,6 +269,8 @@ export async function deleteOrganizationGuarded(
 	userId: string
 ): Promise<ServiceResult<{ id: string }>> {
 	const role = await orgRole(userId, orgId);
+	// ADR-019: a non-member must not be able to tell a real org from a missing one.
+	if (!role) return { ok: false, status: 404, message: 'Organization not found' };
 	if (role !== 'owner') {
 		return { ok: false, status: 403, message: 'Only the organization owner can delete it' };
 	}

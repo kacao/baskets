@@ -10,10 +10,15 @@ import {
 	grantedProjectIds
 } from '$lib/server/permissions';
 import { createProjectWithDefaults } from '$lib/server/projects';
+import { createWorkspaceService, resolveActiveOrgContext } from '$lib/server/orgs';
 import { deleteFilesForProject } from '$lib/server/uploads';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, cookies }) => {
+	// ADR-062: scope projects/workspaces to the active org.
+	const { orgId } = await resolveActiveOrgContext(locals.user, cookies);
+	if (!orgId) return { projects: [], currentWorkspaceId: null, workspaces: [] };
+
 	const [projects, workspaces] = await Promise.all([
 		db
 			.select({
@@ -28,35 +33,32 @@ export const load: PageServerLoad = async ({ locals, cookies }) => {
 				doneCount: sql<number>`coalesce(sum(case when ${status.category} = 'completed' then 1 else 0 end), 0)`
 			})
 			.from(project)
+			.innerJoin(workspace, eq(project.workspaceId, workspace.id))
 			.leftJoin(task, and(eq(task.projectId, project.id), isNull(task.parentId)))
 			.leftJoin(status, eq(task.statusId, status.id))
+			.where(eq(workspace.organizationId, orgId))
 			.groupBy(project.id)
 			.orderBy(desc(project.pinned), desc(project.createdAt)),
 		db
 			.select({ id: workspace.id, name: workspace.name })
 			.from(workspace)
+			.where(eq(workspace.organizationId, orgId))
 			.orderBy(asc(workspace.name))
 	]);
 
 	// ADR-019: only accessible workspaces/projects are shown
 	const [wsAccess, projGrants] = await Promise.all([
-		accessibleWorkspaceIds(locals.user),
-		grantedProjectIds(locals.user)
+		accessibleWorkspaceIds(locals.user, orgId),
+		grantedProjectIds(locals.user, orgId)
 	]);
-	const accessible =
-		wsAccess === 'all'
-			? projects
-			: projects.filter(
-					(p) => (p.workspaceId && wsAccess.has(p.workspaceId)) || projGrants.has(p.id)
-				);
+	const accessible = projects.filter(
+		(p) => (p.workspaceId && wsAccess.has(p.workspaceId)) || projGrants.has(p.id)
+	);
 	// the switcher shows accessible workspaces + any holding a directly-granted project
 	const grantedWsIds = new Set(
 		accessible.map((p) => p.workspaceId).filter((id): id is string => !!id)
 	);
-	const visibleWorkspaces =
-		wsAccess === 'all'
-			? workspaces
-			: workspaces.filter((w) => wsAccess.has(w.id) || grantedWsIds.has(w.id));
+	const visibleWorkspaces = workspaces.filter((w) => wsAccess.has(w.id) || grantedWsIds.has(w.id));
 
 	// Scope the project grid to the CURRENT workspace (same `workspace` cookie the
 	// sidebar/layout use) — a workspace shows only the projects it contains.
@@ -101,7 +103,12 @@ export const actions: Actions = {
 			creator: locals.user
 		});
 
-		void dispatchEvent({ type: 'project.created', actor: locals.user.name, projectName: name });
+		void dispatchEvent({
+			type: 'project.created',
+			actor: locals.user.name,
+			projectName: name,
+			projectId: id
+		});
 
 		redirect(303, `/projects/${id}`);
 	},

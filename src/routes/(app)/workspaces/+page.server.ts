@@ -7,10 +7,13 @@ import {
 	canEditWorkspace,
 	grantedProjectIds
 } from '$lib/server/permissions';
-import { isFirstWorkspaceForUser, seedWorkspaceSamples } from '$lib/server/projects';
+import { createWorkspaceService, resolveActiveOrg } from '$lib/server/orgs';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, cookies }) => {
+	const org = await resolveActiveOrg(locals.user, cookies);
+	if (!org) return { workspaces: [] };
+
 	const workspaces = await db
 		.select({
 			id: workspace.id,
@@ -22,28 +25,26 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.from(workspace)
 		.leftJoin(user, eq(workspace.ownerId, user.id))
 		.leftJoin(project, eq(project.workspaceId, workspace.id))
+		.where(eq(workspace.organizationId, org.id))
 		.groupBy(workspace.id)
 		.orderBy(asc(workspace.name));
 
 	// ADR-019: list only accessible workspaces (incl. ones holding a granted project)
 	const [wsAccess, projGrants] = await Promise.all([
-		accessibleWorkspaceIds(locals.user),
-		grantedProjectIds(locals.user)
+		accessibleWorkspaceIds(locals.user, org.id),
+		grantedProjectIds(locals.user, org.id)
 	]);
-	let visible = workspaces;
-	if (wsAccess !== 'all') {
-		const grantedWsIds = new Set(
-			projGrants.size > 0
-				? (
-						await db
-							.select({ workspaceId: project.workspaceId })
-							.from(project)
-							.where(inArray(project.id, [...projGrants]))
-					).map((r) => r.workspaceId)
-				: []
-		);
-		visible = workspaces.filter((w) => wsAccess.has(w.id) || grantedWsIds.has(w.id));
-	}
+	const grantedWsIds = new Set(
+		projGrants.size > 0
+			? (
+					await db
+						.select({ workspaceId: project.workspaceId })
+						.from(project)
+						.where(inArray(project.id, [...projGrants]))
+				).map((r) => r.workspaceId)
+			: []
+	);
+	const visible = workspaces.filter((w) => wsAccess.has(w.id) || grantedWsIds.has(w.id));
 
 	return {
 		workspaces: await Promise.all(
@@ -56,34 +57,22 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	create: async ({ request, locals }) => {
+	create: async ({ request, locals, cookies }) => {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 
+		const org = await resolveActiveOrg(locals.user, cookies);
+		if (!org) return fail(400, { message: 'No active organization' });
+
 		const form = await request.formData();
-		const name = String(form.get('name') ?? '').trim();
+		const name = String(form.get('name') ?? '');
 
-		if (!name) return fail(400, { message: 'Workspace name is required' });
-		if (name.length > 120) return fail(400, { message: 'Name too long (max 120)' });
-
-		const existing = await db.select({ name: workspace.name }).from(workspace);
-		if (existing.some((w) => w.name.toLowerCase() === name.toLowerCase()))
-			return fail(400, { message: 'A workspace with that name already exists' });
-
-		// the user's first workspace gets sample projects/milestones/tasks
-		const seedSamples = await isFirstWorkspaceForUser(locals.user.id);
-
-		const id = crypto.randomUUID();
-		const now = new Date();
-		await db.insert(workspace).values({
-			id,
+		const res = await createWorkspaceService({
 			name,
 			ownerId: locals.user.id,
-			createdAt: now,
-			updatedAt: now
+			organizationId: org.id
 		});
+		if (!res.ok) return fail(res.status, { message: res.message });
 
-		if (seedSamples) await seedWorkspaceSamples(id, locals.user);
-
-		redirect(303, `/workspaces/${id}/settings`);
+		redirect(303, `/workspaces/${res.data.id}/settings`);
 	}
 };

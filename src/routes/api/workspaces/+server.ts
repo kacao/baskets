@@ -4,33 +4,39 @@ import { db } from '$lib/server/db';
 import { project, workspace } from '$lib/server/db/schema';
 import { apiError, readJson } from '$lib/server/api';
 import { accessibleWorkspaceIds, grantedProjectIds } from '$lib/server/permissions';
-import { listWorkspaces } from '$lib/server/workspaces';
-import { isFirstWorkspaceForUser, seedWorkspaceSamples } from '$lib/server/projects';
+import { createWorkspaceService, listUserOrgs } from '$lib/server/orgs';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ locals }) => {
+export const GET: RequestHandler = async ({ locals, url }) => {
 	if (!locals.user) return apiError(401, 'Unauthorized');
 
-	const all = await listWorkspaces();
+	// ADR-062 D4: union over the caller's memberships of accessible workspaces (incl.
+	// ones holding a directly-granted project). Optional ?org= narrows to one org; an
+	// unknown/non-member org id yields [] (no oracle).
+	const orgFilter = url.searchParams.get('org');
+	const orgs = await listUserOrgs(locals.user.id);
+	const targetOrgs = orgFilter ? orgs.filter((o) => o.id === orgFilter) : orgs;
+	if (targetOrgs.length === 0) return json({ workspaces: [] });
 
-	// ADR-019: list only accessible workspaces (incl. ones holding a granted project)
-	const [wsAccess, projGrants] = await Promise.all([
-		accessibleWorkspaceIds(locals.user),
-		grantedProjectIds(locals.user)
-	]);
-	if (wsAccess === 'all') return json({ workspaces: all });
+	const visibleWsIds = new Set<string>();
+	const grantedProj = new Set<string>();
+	for (const o of targetOrgs) {
+		(await accessibleWorkspaceIds(locals.user, o.id)).forEach((id) => visibleWsIds.add(id));
+		(await grantedProjectIds(locals.user, o.id)).forEach((id) => grantedProj.add(id));
+	}
+	if (grantedProj.size > 0) {
+		const rows = await db
+			.select({ workspaceId: project.workspaceId })
+			.from(project)
+			.where(inArray(project.id, [...grantedProj]));
+		for (const r of rows) if (r.workspaceId) visibleWsIds.add(r.workspaceId);
+	}
+	if (visibleWsIds.size === 0) return json({ workspaces: [] });
 
-	const grantedWsIds = new Set(
-		projGrants.size > 0
-			? (
-					await db
-						.select({ workspaceId: project.workspaceId })
-						.from(project)
-						.where(inArray(project.id, [...projGrants]))
-				).map((r) => r.workspaceId)
-			: []
-	);
-	const workspaces = all.filter((w) => wsAccess.has(w.id) || grantedWsIds.has(w.id));
+	const workspaces = await db
+		.select()
+		.from(workspace)
+		.where(inArray(workspace.id, [...visibleWsIds]));
 	return json({ workspaces });
 };
 
@@ -41,28 +47,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!body) return apiError(400, 'Invalid JSON body');
 
 	const name = typeof body.name === 'string' ? body.name.trim() : '';
-	if (!name) return apiError(400, 'name is required');
-	if (name.length > 120) return apiError(400, 'name too long (max 120)');
+	// resolve the target org: explicit organizationId, else the sole membership;
+	// >1 org without an explicit id is ambiguous (400). A nonexistent vs non-member
+	// org id both surface identically through createWorkspaceService (no oracle).
+	let organizationId = typeof body.organizationId === 'string' ? body.organizationId : '';
+	if (!organizationId) {
+		const orgs = await listUserOrgs(locals.user.id);
+		if (orgs.length === 1) organizationId = orgs[0].id;
+		else if (orgs.length === 0) return apiError(400, 'You do not belong to any organization');
+		else
+			return apiError(400, 'organizationId is required when you belong to multiple organizations');
+	}
 
-	const existing = await db.select({ name: workspace.name }).from(workspace);
-	if (existing.some((w) => w.name.toLowerCase() === name.toLowerCase()))
-		return apiError(400, 'A workspace with that name already exists');
+	const res = await createWorkspaceService({ name, ownerId: locals.user.id, organizationId });
+	if (!res.ok) return apiError(res.status, res.message);
 
-	// the user's first workspace gets sample projects/milestones/tasks
-	const seedSamples = await isFirstWorkspaceForUser(locals.user.id);
-
-	const id = crypto.randomUUID();
-	const now = new Date();
-	await db.insert(workspace).values({
-		id,
-		name,
-		ownerId: locals.user.id,
-		createdAt: now,
-		updatedAt: now
-	});
-
-	if (seedSamples) await seedWorkspaceSamples(id, locals.user);
-
-	const [created] = await db.select().from(workspace).where(eq(workspace.id, id));
+	const [created] = await db.select().from(workspace).where(eq(workspace.id, res.data.id));
 	return json({ workspace: created }, { status: 201 });
 };

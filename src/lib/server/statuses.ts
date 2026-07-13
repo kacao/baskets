@@ -9,7 +9,7 @@ import {
 	canAccessWorkspace,
 	canEditProject,
 	canEditWorkspace,
-	isAdmin
+	isInstanceAdmin
 } from '$lib/server/permissions';
 
 export { STATUS_CATEGORIES, type StatusCategory };
@@ -357,7 +357,7 @@ export async function updateStatusById(
 	// Built-in app-wide default (projectId + workspaceId both null): only the icon
 	// is settable, admin-only (mirror setStatusIcon / PATCH built-in branch).
 	if (!s.projectId && !s.workspaceId) {
-		if (!isAdmin(actor)) return err(403, 'Admins only');
+		if (!isInstanceAdmin(actor)) return err(403, 'Admins only');
 		const icon = parseIconValue(input.icon);
 		if (!icon) return err(400, 'Pick an icon');
 		const [updated] = await db.update(status).set({ icon }).where(eq(status.id, id)).returning();
@@ -569,7 +569,7 @@ export async function setDefaultStatusIcon(
 	icon: unknown,
 	actor: Actor
 ): Promise<ServiceResult<StatusRow>> {
-	if (!isAdmin(actor)) return err(403, 'Admins only');
+	if (!isInstanceAdmin(actor)) return err(403, 'Admins only');
 	const parsed = parseIconValue(icon);
 	if (!parsed) return err(400, 'Pick an icon');
 

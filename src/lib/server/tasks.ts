@@ -1,15 +1,6 @@
 import { and, count, eq, inArray, isNull, asc } from 'drizzle-orm';
 import { db, withTransaction, type DB } from '$lib/server/db';
-import {
-	file,
-	label,
-	location,
-	milestone,
-	project,
-	task,
-	taskLabel,
-	user
-} from '$lib/server/db/schema';
+import { file, label, location, milestone, project, task, taskLabel } from '$lib/server/db/schema';
 import { PRIORITIES } from '$lib/server/api';
 import { dispatchEvent } from '$lib/server/integrations';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
@@ -18,7 +9,7 @@ import { logActivity } from '$lib/server/comments';
 import { create as createNotification } from '$lib/server/notifications';
 import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
 import { listProjectStatuses } from '$lib/server/statuses';
-import { canAccessProject, canEditTask } from '$lib/server/permissions';
+import { canAccessProject, canEditTask, projectAccessUserIds } from '$lib/server/permissions';
 import { writeTaskCustomValues } from '$lib/server/customFields';
 import { deleteFilesForTasks } from '$lib/server/uploads';
 
@@ -40,6 +31,20 @@ type CfEntry = { fieldId: string; raw: string | null };
 async function getTask(id: string) {
 	const [t] = await db.select().from(task).where(eq(task.id, id));
 	return t ?? null;
+}
+
+/**
+ * An assignee must be able to ACCESS the project (org-scoped roster), not merely
+ * exist (ADR-062 R9): assigning + its notification/reminder push would otherwise
+ * leak task titles to arbitrary or cross-org users. Mirrors the person-cf pattern.
+ */
+async function assigneeAllowed(assigneeId: string, projectId: string): Promise<boolean> {
+	const [p] = await db
+		.select({ workspaceId: project.workspaceId })
+		.from(project)
+		.where(eq(project.id, projectId));
+	const roster = await projectAccessUserIds(projectId, p?.workspaceId ?? null);
+	return roster.has(assigneeId);
 }
 
 function isPriority(p: string): boolean {
@@ -151,10 +156,8 @@ export async function createTaskService(
 	}
 
 	const assigneeId = input.assigneeId ?? null;
-	if (assigneeId) {
-		const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
-		if (!u) return err(400, 'Unknown assignee');
-	}
+	if (assigneeId && !(await assigneeAllowed(assigneeId, projectId)))
+		return err(400, 'Unknown assignee');
 	// Sub-tasks inherit the parent's milestone (the milestone UI is hidden on sub-tasks
 	// and always follows the parent); top-level tasks validate the supplied milestone.
 	let milestoneId: string | null;
@@ -222,7 +225,8 @@ export async function createTaskService(
 		type: 'task.created',
 		actor: actor.name ?? 'Unknown',
 		projectName: proj?.name ?? 'Unknown project',
-		taskTitle: title
+		taskTitle: title,
+		projectId
 	});
 
 	if (input.logCreate) void logActivity(projectId, taskId, actor.id, 'created', { title });
@@ -268,7 +272,8 @@ export async function setTaskStatusService(
 			type: 'task.completed',
 			actor: actor.name ?? 'Unknown',
 			projectName: proj?.name ?? 'Unknown project',
-			taskTitle: existing.title
+			taskTitle: existing.title,
+			projectId: existing.projectId
 		});
 	}
 
@@ -343,7 +348,8 @@ export async function moveTaskService(
 			type: 'task.completed',
 			actor: actor.name ?? 'Unknown',
 			projectName: proj?.name ?? 'Unknown project',
-			taskTitle: existing.title
+			taskTitle: existing.title,
+			projectId
 		});
 	}
 
@@ -442,10 +448,8 @@ export async function updateTaskService(
 	}
 	if (opts.has('assigneeId')) {
 		newAssigneeId = input.assigneeId ?? null;
-		if (newAssigneeId) {
-			const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, newAssigneeId));
-			if (!u) return err(400, 'Unknown assignee');
-		}
+		if (newAssigneeId && !(await assigneeAllowed(newAssigneeId, projectId)))
+			return err(400, 'Unknown assignee');
 		set.assigneeId = newAssigneeId;
 	}
 	if (opts.has('milestoneId')) {
@@ -567,7 +571,8 @@ export async function updateTaskService(
 			type: 'task.completed',
 			actor: actor.name ?? 'Unknown',
 			projectName: proj?.name ?? 'Unknown project',
-			taskTitle: updated.title
+			taskTitle: updated.title,
+			projectId
 		});
 	}
 
@@ -706,10 +711,8 @@ export async function bulkUpdateTasks(
 	}
 	if (set.has('assigneeId')) {
 		const assigneeId = set.assigneeId ?? null;
-		if (assigneeId) {
-			const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, assigneeId));
-			if (!u) return err(400, 'Unknown assignee');
-		}
+		if (assigneeId && !(await assigneeAllowed(assigneeId, projectId)))
+			return err(400, 'Unknown assignee');
 		updates.assigneeId = assigneeId;
 	}
 	if (set.has('milestoneId')) {

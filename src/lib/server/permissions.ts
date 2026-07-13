@@ -1,11 +1,57 @@
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { db } from './db';
-import { permission, project, task, user, view, workspace } from './db/schema';
+import { member, permission, project, task, user, view, workspace } from './db/schema';
 
 type SessionUser = { id: string; role?: string | null } | null | undefined;
 
-export function isAdmin(user: SessionUser) {
+/**
+ * Instance operator (admin plugin — `user.role === 'admin'`). This is an
+ * INSTANCE-level role for managing the deployment; it is NOT a tenant role and
+ * NEVER short-circuits org data guards (ADR-062 D3). Tenant powers live only on
+ * `member.role` (owner/admin/member); use `isOrgAdmin`/`orgRole` from `./orgs`
+ * for those. The only surfaces this gate keeps are /admin + /settings/statuses.
+ */
+export function isInstanceAdmin(user: SessionUser) {
 	return user?.role === 'admin';
+}
+
+type OrgRole = 'owner' | 'admin' | 'member';
+
+/**
+ * The user's role in an org, or null when they are NOT a member. Membership is a
+ * prerequisite for any access to that org's data (ADR-062 D3) — a null role means
+ * every guard below returns false, so stale grants go inert once a user leaves or
+ * is removed. (Kept private to permissions.ts to avoid an import cycle through
+ * orgs → projects → statuses → permissions; `orgRole` in orgs.ts is the public twin.)
+ */
+async function memberRole(userId: string, orgId: string): Promise<OrgRole | null> {
+	const [m] = await db
+		.select({ role: member.role })
+		.from(member)
+		.where(and(eq(member.userId, userId), eq(member.organizationId, orgId)))
+		.limit(1);
+	return (m?.role as OrgRole | undefined) ?? null;
+}
+
+const isOrgAdminRole = (r: OrgRole | null) => r === 'owner' || r === 'admin';
+
+/** The organization a workspace belongs to (null = integrity error: an org-less workspace). */
+export async function workspaceOrgId(workspaceId: string): Promise<string | null> {
+	const [w] = await db
+		.select({ orgId: workspace.organizationId })
+		.from(workspace)
+		.where(eq(workspace.id, workspaceId));
+	return w?.orgId ?? null;
+}
+
+/** The organization a project belongs to (resolved via its workspace); null if unresolvable. */
+export async function projectOrgId(projectId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ orgId: workspace.organizationId })
+		.from(project)
+		.leftJoin(workspace, eq(project.workspaceId, workspace.id))
+		.where(eq(project.id, projectId));
+	return row?.orgId ?? null;
 }
 
 async function hasGrant(userId: string, pairs: { type: string; id: string }[]) {
@@ -27,81 +73,177 @@ async function hasGrant(userId: string, pairs: { type: string; id: string }[]) {
 	return rows.length > 0;
 }
 
-/** Admins, the workspace owner, or users granted edit on the workspace. */
-export async function canEditWorkspace(user: SessionUser, workspaceId: string) {
+async function workspaceMeta(
+	workspaceId: string
+): Promise<{ orgId: string | null; ownerId: string } | null> {
+	const [w] = await db
+		.select({ orgId: workspace.organizationId, ownerId: workspace.ownerId })
+		.from(workspace)
+		.where(eq(workspace.id, workspaceId));
+	return w ?? null;
+}
+
+/**
+ * Shared workspace guard: org owner/admin ∨ workspace owner ∨ workspace grant,
+ * gated behind org membership (ADR-062 D3). For a workspace, ACCESS and EDIT
+ * resolve to the same set (there is one grant type per workspace), so
+ * canAccessWorkspace and canEditWorkspace both delegate here.
+ */
+async function grantsWorkspace(user: SessionUser, workspaceId: string): Promise<boolean> {
 	if (!user) return false;
-	if (isAdmin(user)) return true;
-	const [w] = await db.select().from(workspace).where(eq(workspace.id, workspaceId));
+	const w = await workspaceMeta(workspaceId);
 	if (!w) return false;
+	if (!w.orgId) {
+		console.error('[permissions] integrity: workspace %s has no organizationId', workspaceId);
+		return false;
+	}
+	const role = await memberRole(user.id, w.orgId);
+	if (!role) return false; // membership prerequisite
+	if (isOrgAdminRole(role)) return true;
 	if (w.ownerId === user.id) return true;
 	return hasGrant(user.id, [{ type: 'workspace', id: workspaceId }]);
 }
 
-/** Admins, users granted edit on the project, or its workspace's owner/grantees. */
-export async function canEditProject(user: SessionUser, projectId: string) {
-	if (!user) return false;
-	if (isAdmin(user)) return true;
-	const [p] = await db.select().from(project).where(eq(project.id, projectId));
-	if (!p) return false;
-	if (p.workspaceId) {
-		const [w] = await db.select().from(workspace).where(eq(workspace.id, p.workspaceId));
-		if (w?.ownerId === user.id) return true;
-	}
-	const pairs = [{ type: 'project', id: projectId }];
-	if (p.workspaceId) pairs.push({ type: 'workspace', id: p.workspaceId });
-	return hasGrant(user.id, pairs);
+/** Org owner/admin, the workspace owner, or a workspace grantee — after org membership. */
+export function canEditWorkspace(user: SessionUser, workspaceId: string): Promise<boolean> {
+	return grantsWorkspace(user, workspaceId);
 }
 
-/** View grant, its project's grant, or its workspace (owner/grant). */
-export async function canEditView(user: SessionUser, viewId: string) {
-	if (!user) return false;
-	if (isAdmin(user)) return true;
-	const [v] = await db.select().from(view).where(eq(view.id, viewId));
-	if (!v) return false;
-	if (await hasGrant(user.id, [{ type: 'view', id: viewId }])) return true;
-	return canEditProject(user, v.projectId);
+/** Visibility of a workspace (ADR-019). Same set as edit; membership-gated. */
+export function canAccessWorkspace(user: SessionUser, workspaceId: string): Promise<boolean> {
+	return grantsWorkspace(user, workspaceId);
+}
+
+type ProjectContext = { orgId: string; wsOwnerId: string; workspaceId: string };
+
+/** Resolve a project's org + workspace owner in one query; null when unresolvable (missing/orphan). */
+async function projectContext(projectId: string): Promise<ProjectContext | null> {
+	const [row] = await db
+		.select({
+			workspaceId: project.workspaceId,
+			orgId: workspace.organizationId,
+			wsOwnerId: workspace.ownerId
+		})
+		.from(project)
+		.leftJoin(workspace, eq(project.workspaceId, workspace.id))
+		.where(eq(project.id, projectId));
+	if (!row) return null;
+	if (!row.workspaceId) {
+		console.error('[permissions] integrity: project %s has no workspaceId', projectId);
+		return null;
+	}
+	if (!row.orgId || !row.wsOwnerId) {
+		console.error('[permissions] integrity: project %s workspace has no organizationId', projectId);
+		return null;
+	}
+	return { orgId: row.orgId, wsOwnerId: row.wsOwnerId, workspaceId: row.workspaceId };
 }
 
 /**
- * Visibility (ADR-019): admins see everything; everyone else sees only
- * workspaces they own or hold a workspace grant on, plus projects they hold
- * a direct project grant on.
+ * Shared project guard: org owner/admin ∨ workspace owner ∨ project/workspace
+ * grant, gated behind org membership. Like workspaces, project ACCESS and EDIT
+ * resolve to the same set (structure edit vs task edit is a separate, wider
+ * contract — see canEditTask), so canAccessProject/canEditProject share this.
  */
-export async function accessibleWorkspaceIds(user: SessionUser): Promise<'all' | Set<string>> {
-	if (!user) return new Set();
-	if (isAdmin(user)) return 'all';
-	const [owned, granted] = await Promise.all([
-		db.select({ id: workspace.id }).from(workspace).where(eq(workspace.ownerId, user.id)),
-		db
-			.select({ id: permission.resourceId })
-			.from(permission)
-			.where(and(eq(permission.userId, user.id), eq(permission.resourceType, 'workspace')))
+async function grantsProject(user: SessionUser, projectId: string): Promise<boolean> {
+	if (!user) return false;
+	const ctx = await projectContext(projectId);
+	if (!ctx) return false;
+	const role = await memberRole(user.id, ctx.orgId);
+	if (!role) return false; // membership prerequisite
+	if (isOrgAdminRole(role)) return true;
+	if (ctx.wsOwnerId === user.id) return true;
+	return hasGrant(user.id, [
+		{ type: 'project', id: projectId },
+		{ type: 'workspace', id: ctx.workspaceId }
 	]);
-	return new Set([...owned.map((r) => r.id), ...granted.map((r) => r.id)]);
 }
 
-/** Project ids the user holds direct project grants on. */
-export async function grantedProjectIds(user: SessionUser): Promise<Set<string>> {
-	if (!user) return new Set();
+/** Org owner/admin, the workspace owner, or a project/workspace grantee — after org membership. */
+export function canEditProject(user: SessionUser, projectId: string): Promise<boolean> {
+	return grantsProject(user, projectId);
+}
+
+/**
+ * Project visibility (ADR-019): inaccessible ≡ missing (caller returns 404).
+ * Same set as canEditProject; membership-gated.
+ */
+export function canAccessProject(user: SessionUser, projectId: string): Promise<boolean> {
+	return grantsProject(user, projectId);
+}
+
+/** View grant, its project's grant, its workspace (owner/grant), or org owner/admin — membership-gated. */
+export async function canEditView(user: SessionUser, viewId: string): Promise<boolean> {
+	if (!user) return false;
+	const [v] = await db.select({ projectId: view.projectId }).from(view).where(eq(view.id, viewId));
+	if (!v) return false;
+	const ctx = await projectContext(v.projectId);
+	if (!ctx) return false;
+	const role = await memberRole(user.id, ctx.orgId);
+	if (!role) return false;
+	if (isOrgAdminRole(role)) return true;
+	if (ctx.wsOwnerId === user.id) return true;
+	return hasGrant(user.id, [
+		{ type: 'view', id: viewId },
+		{ type: 'project', id: v.projectId },
+		{ type: 'workspace', id: ctx.workspaceId }
+	]);
+}
+
+/**
+ * Workspace ids visible in `orgId` (ADR-062): membership is required (null role →
+ * empty). Org owner/admin see every workspace in the org; a plain member sees
+ * only workspaces they own or hold a workspace grant on (∩ the org). NO 'all'
+ * sentinel — the return is always a concrete Set so consumers enumerate branches.
+ */
+export async function accessibleWorkspaceIds(
+	user: SessionUser,
+	orgId: string | null | undefined
+): Promise<Set<string>> {
+	if (!user || !orgId) return new Set();
+	const role = await memberRole(user.id, orgId);
+	if (!role) return new Set(); // membership prerequisite
+	const orgWs = await db
+		.select({ id: workspace.id, ownerId: workspace.ownerId })
+		.from(workspace)
+		.where(eq(workspace.organizationId, orgId));
+	const orgWsIds = new Set(orgWs.map((w) => w.id));
+	if (isOrgAdminRole(role)) return orgWsIds;
+	const granted = await db
+		.select({ id: permission.resourceId })
+		.from(permission)
+		.where(
+			and(
+				eq(permission.userId, user.id),
+				eq(permission.resourceType, 'workspace'),
+				eq(permission.organizationId, orgId)
+			)
+		);
+	const set = new Set<string>();
+	for (const w of orgWs) if (w.ownerId === user.id) set.add(w.id);
+	for (const g of granted) if (orgWsIds.has(g.id)) set.add(g.id);
+	return set;
+}
+
+/** Project ids the user holds direct project grants on, scoped to `orgId` (membership-gated). */
+export async function grantedProjectIds(
+	user: SessionUser,
+	orgId: string | null | undefined
+): Promise<Set<string>> {
+	if (!user || !orgId) return new Set();
+	const role = await memberRole(user.id, orgId);
+	if (!role) return new Set();
 	const rows = await db
 		.select({ id: permission.resourceId })
 		.from(permission)
-		.where(and(eq(permission.userId, user.id), eq(permission.resourceType, 'project')));
+		.where(
+			and(
+				eq(permission.userId, user.id),
+				eq(permission.resourceType, 'project'),
+				eq(permission.organizationId, orgId)
+			)
+		);
 	return new Set(rows.map((r) => r.id));
-}
-
-export async function canAccessWorkspace(user: SessionUser, workspaceId: string) {
-	const ids = await accessibleWorkspaceIds(user);
-	return ids === 'all' || ids.has(workspaceId);
-}
-
-export async function canAccessProject(user: SessionUser, projectId: string) {
-	if (!user) return false;
-	if (isAdmin(user)) return true;
-	const [p] = await db.select().from(project).where(eq(project.id, projectId));
-	if (!p) return false;
-	if (p.workspaceId && (await canAccessWorkspace(user, p.workspaceId))) return true;
-	return hasGrant(user.id, [{ type: 'project', id: projectId }]);
 }
 
 /**
@@ -138,26 +280,30 @@ export async function listProjectGrants(projectId: string) {
 }
 
 /**
- * User ids that can ACCESS a project — admins, the workspace owner, workspace
- * grantees, and direct project grantees. This is the roster offerable as
- * assignees / shown in assignee groupings: ADR-019 says don't leak the full
- * user list (names + emails) to everyone who can see a single project.
+ * User ids that can ACCESS a project — the org's owners/admins, the workspace
+ * owner, workspace grantees, and direct project grantees. This is the roster
+ * offerable as assignees / shown in assignee groupings: ADR-019/ADR-062 say don't
+ * leak the whole org's users (names + emails) to everyone who can see a single
+ * project. (The all-instance-admins seed of the single-tenant era is removed —
+ * instance admins get NO implicit data reach.)
  */
 export async function projectAccessUserIds(
 	projectId: string,
 	workspaceId: string | null
 ): Promise<Set<string>> {
 	const ids = new Set<string>();
-	const admins = await db.select({ id: user.id }).from(user).where(eq(user.role, 'admin'));
-	for (const a of admins) ids.add(a.id);
 
 	const pairs: { type: string; id: string }[] = [{ type: 'project', id: projectId }];
 	if (workspaceId) {
-		const [w] = await db
-			.select({ ownerId: workspace.ownerId })
-			.from(workspace)
-			.where(eq(workspace.id, workspaceId));
+		const w = await workspaceMeta(workspaceId);
 		if (w?.ownerId) ids.add(w.ownerId);
+		if (w?.orgId) {
+			const admins = await db
+				.select({ userId: member.userId })
+				.from(member)
+				.where(and(eq(member.organizationId, w.orgId), inArray(member.role, ['owner', 'admin'])));
+			for (const a of admins) ids.add(a.userId);
+		}
 		pairs.push({ type: 'workspace', id: workspaceId });
 	}
 	const grants = await db

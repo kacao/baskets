@@ -3,11 +3,23 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { task } from '$lib/server/db/schema';
 import { apiError, readJson } from '$lib/server/api';
-import { canAccessProject, isAdmin } from '$lib/server/permissions';
+import { canAccessProject, projectOrgId } from '$lib/server/permissions';
+import { isOrgAdmin } from '$lib/server/orgs';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { deleteComment, getComment, updateComment } from '$lib/server/comments';
 import { notifyMentions } from '$lib/server/mentions';
 import type { RequestHandler } from './$types';
+
+/** Moderator override: the comment author OR an org admin/owner of the project's org. */
+async function canModerate(
+	user: NonNullable<App.Locals['user']>,
+	authorId: string,
+	projectId: string
+): Promise<boolean> {
+	if (authorId === user.id) return true;
+	const orgId = await projectOrgId(projectId);
+	return orgId ? isOrgAdmin(user.id, orgId) : false;
+}
 
 /** PATCH /api/comments/:id — edit a comment (author or admin). */
 export const PATCH: RequestHandler = async ({ params, request, locals }) => {
@@ -23,7 +35,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 	if (!t || !(await canAccessProject(locals.user, t.projectId)))
 		return apiError(404, 'Comment not found');
 
-	if (existing.authorId !== locals.user.id && !isAdmin(locals.user))
+	if (!(await canModerate(locals.user, existing.authorId, t.projectId)))
 		return apiError(403, 'Not your comment');
 
 	const body = await readJson(request);
@@ -60,7 +72,7 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 	if (!t || !(await canAccessProject(locals.user, t.projectId)))
 		return apiError(404, 'Comment not found');
 
-	if (existing.authorId !== locals.user.id && !isAdmin(locals.user))
+	if (!(await canModerate(locals.user, existing.authorId, t.projectId)))
 		return apiError(403, 'Not your comment');
 
 	await deleteComment(params.id);
