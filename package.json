@@ -17,6 +17,7 @@
 		"test": "vitest run",
 		"test:unit": "vitest run tests/unit",
 		"test:integration": "vitest run --config vitest.integration.config.ts",
+		"test:server": "DB_DIALECT=sqlite DATABASE_URL=./data/test-server.db vitest run --config vitest.server.config.ts",
 		"test:watch": "vitest",
 		"test:e2e": "playwright test",
 		"verify": "npm run check && npm run test:unit"
