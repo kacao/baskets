@@ -1,0 +1,8 @@
+build/
+.svelte-kit/
+node_modules/
+static/heroicons.svg
+data/
+tests/webwright/
+package-lock.json
+coverage/
