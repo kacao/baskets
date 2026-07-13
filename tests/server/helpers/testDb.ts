@@ -1,6 +1,17 @@
 import { db } from '$lib/server/db';
-import { user, workspace, project, status, permission } from '$lib/server/db/schema.sqlite';
+import {
+	user,
+	workspace,
+	project,
+	status,
+	permission,
+	organization,
+	member
+} from '$lib/server/db/schema.sqlite';
 import { ensureDefaultStatuses } from '$lib/server/statuses';
+
+/** The sentinel org planted by globalSetup — the default tenant for fixtures. */
+export const SENTINEL_ORG_ID = '__ISO_SENTINEL_ORG__';
 
 /** Fixture actor shape matching `Actor`/`SessionUser` across permissions.ts/tasks.ts. */
 export type TestUser = { id: string; name: string; role: string | null };
@@ -32,11 +43,35 @@ export async function createAdmin(): Promise<TestUser> {
 	return createUser({ role: 'admin' });
 }
 
-export async function createWorkspace(ownerId: string, name = 'Test workspace') {
+export async function createOrg(name = 'Test org') {
+	const id = uid('org');
+	const now = new Date();
+	await db.insert(organization).values({ id, name, slug: id, createdAt: now });
+	return { id, name };
+}
+
+export async function createMembership(
+	userId: string,
+	organizationId: string,
+	role: 'owner' | 'admin' | 'member' = 'member'
+) {
+	const id = uid('member');
+	const now = new Date();
+	await db.insert(member).values({ id, organizationId, userId, role, createdAt: now });
+	return { id, userId, organizationId, role };
+}
+
+export async function createWorkspace(
+	ownerId: string,
+	name = 'Test workspace',
+	organizationId = SENTINEL_ORG_ID
+) {
 	const id = uid('ws');
 	const now = new Date();
-	await db.insert(workspace).values({ id, name, ownerId, createdAt: now, updatedAt: now });
-	return { id, name, ownerId };
+	await db
+		.insert(workspace)
+		.values({ id, name, ownerId, organizationId, createdAt: now, updatedAt: now });
+	return { id, name, ownerId, organizationId };
 }
 
 export async function createProject(workspaceId: string, createdBy: string, name = 'Test project') {

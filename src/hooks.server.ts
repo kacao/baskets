@@ -3,7 +3,7 @@ import { building } from '$app/environment';
 import { auth } from '$lib/server/auth';
 import { API_KEY_PREFIX, resolveApiKey } from '$lib/server/api-keys';
 import { ensureDefaultStatuses } from '$lib/server/statuses';
-import { ensureDefaultWorkspace } from '$lib/server/workspaces';
+import { ensureDefaultOrganization } from '$lib/server/workspaces';
 import type { Handle } from '@sveltejs/kit';
 
 const THEMES = ['light', 'dark'];
@@ -11,7 +11,7 @@ const THEMES = ['light', 'dark'];
 export const handle: Handle = async ({ event, resolve }) => {
 	if (!building) {
 		await ensureDefaultStatuses();
-		await ensureDefaultWorkspace();
+		await ensureDefaultOrganization();
 	}
 
 	// DaisyUI theme + high-contrast accessibility flag: cookie-driven, applied to

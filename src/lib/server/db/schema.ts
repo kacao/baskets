@@ -20,6 +20,10 @@ export const {
 	account,
 	verification,
 	twoFactor,
+	// better-auth organization plugin (ADR-062)
+	organization,
+	member,
+	invitation,
 	// app
 	workspace,
 	project,

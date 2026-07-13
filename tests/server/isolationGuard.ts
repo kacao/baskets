@@ -16,6 +16,7 @@ import { workspace, user } from '$lib/server/db/schema.sqlite';
 
 export const SENTINEL_WORKSPACE_ID = '__ISO_SENTINEL__';
 export const SENTINEL_USER_ID = '__ISO_SENTINEL_USER__';
+export const SENTINEL_ORG_ID = '__ISO_SENTINEL_ORG__';
 
 export async function assertIsolated(): Promise<void> {
 	const rows = await db.select().from(workspace).where(eq(workspace.id, SENTINEL_WORKSPACE_ID));
@@ -73,7 +74,10 @@ export async function resetTables(): Promise<void> {
 		session,
 		account,
 		verification,
-		twoFactor
+		twoFactor,
+		member,
+		invitation,
+		organization
 	} = await import('$lib/server/db/schema.sqlite');
 
 	// children first
@@ -113,10 +117,17 @@ export async function resetTables(): Promise<void> {
 	await db.delete(account);
 	await db.delete(verification);
 	await db.delete(twoFactor);
+	// org plugin children (FK → organization + user): clear before their parents.
+	await db.delete(member);
+	await db.delete(invitation);
 	// workspace/user: delete everything EXCEPT the sentinel row, keeping the
 	// tripwire valid for subsequent test files in the same run.
 	await db.delete(workspace).where(ne(workspace.id, SENTINEL_WORKSPACE_ID));
 	await db.delete(user).where(ne(user.id, SENTINEL_USER_ID));
+	// organization last (workspace/member/invitation/permission/notification/
+	// integration all FK it in the fresh test schema); keep the sentinel org so the
+	// sentinel workspace's org FK stays satisfied.
+	await db.delete(organization).where(ne(organization.id, SENTINEL_ORG_ID));
 
 	await assertIsolated();
 }

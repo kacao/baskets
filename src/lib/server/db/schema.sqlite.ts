@@ -41,7 +41,9 @@ export const session = sqliteTable('session', {
 		.notNull()
 		.references(() => user.id, { onDelete: 'cascade' }),
 	// admin plugin
-	impersonatedBy: text('impersonated_by')
+	impersonatedBy: text('impersonated_by'),
+	// organization plugin (active org for the session; app reads the `org` cookie instead)
+	activeOrganizationId: text('active_organization_id')
 });
 
 export const account = sqliteTable('account', {
@@ -82,20 +84,87 @@ export const twoFactor = sqliteTable('two_factor', {
 });
 
 /* ------------------------------------------------------------------ */
+/* better-auth organization plugin (ADR-062) — the tenant primitive.   */
+/* Field names/types mirror the plugin's registered schema exactly     */
+/* (organization: name/slug/logo/createdAt/metadata; member; invitation)*/
+/* so the drizzle adapter resolves every field. Org roles live only on  */
+/* member.role, never user.role.                                        */
+/* ------------------------------------------------------------------ */
+
+export const organization = sqliteTable('organization', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	slug: text('slug').notNull().unique(),
+	logo: text('logo'),
+	metadata: text('metadata'), // JSON string; carries the migration marker {"migrated":true}
+	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+});
+
+export const member = sqliteTable(
+	'member',
+	{
+		id: text('id').primaryKey(),
+		organizationId: text('organization_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		role: text('role').notNull().default('member'), // owner | admin | member
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [
+		unique().on(t.organizationId, t.userId),
+		index('idx_member_org').on(t.organizationId),
+		index('idx_member_user').on(t.userId)
+	]
+);
+
+export const invitation = sqliteTable(
+	'invitation',
+	{
+		id: text('id').primaryKey(),
+		organizationId: text('organization_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		email: text('email').notNull(),
+		role: text('role'),
+		status: text('status').notNull().default('pending'),
+		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+		inviterId: text('inviter_id')
+			.notNull()
+			.references(() => user.id),
+		// plugin inserts createdAt unconditionally — omitting it breaks inviteMember
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [
+		index('idx_invitation_org').on(t.organizationId),
+		index('idx_invitation_email').on(t.email)
+	]
+);
+
+/* ------------------------------------------------------------------ */
 /* App tables                                                          */
 /* ------------------------------------------------------------------ */
 
 // Workspaces own projects, custom statuses and labels. Owned by one user;
 // other users get edit rights via permission grants (resourceType 'workspace').
-export const workspace = sqliteTable('workspace', {
-	id: text('id').primaryKey(),
-	name: text('name').notNull(),
-	ownerId: text('owner_id')
-		.notNull()
-		.references(() => user.id),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-});
+export const workspace = sqliteTable(
+	'workspace',
+	{
+		id: text('id').primaryKey(),
+		name: text('name').notNull(),
+		ownerId: text('owner_id')
+			.notNull()
+			.references(() => user.id),
+		// nullable for db:push on pre-org rows; backfilled by ensureDefaultOrganization,
+		// required in code (ADR-062). ALTER-added → no real FK on sqlite (code integrity).
+		organizationId: text('organization_id').references(() => organization.id),
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [index('idx_workspace_org').on(t.organizationId)]
+);
 
 export const project = sqliteTable('project', {
 	id: text('id').primaryKey(),
@@ -134,17 +203,25 @@ export const apiKey = sqliteTable('api_key', {
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
 });
 
-export const integration = sqliteTable('integration', {
-	id: text('id').primaryKey(),
-	type: text('type').notNull().unique(), // 'slack' (single tenant: one row per type)
-	enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-	config: text('config').notNull(), // JSON, shape depends on type
-	createdBy: text('created_by')
-		.notNull()
-		.references(() => user.id),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-});
+export const integration = sqliteTable(
+	'integration',
+	{
+		id: text('id').primaryKey(),
+		type: text('type').notNull(), // 'slack' — one row per (org, type)
+		// nullable for db:push on pre-org rows; backfilled by ensureDefaultOrganization,
+		// required in code (ADR-062). The composite unique ignores NULL rows on sqlite,
+		// so every integration write must set organizationId.
+		organizationId: text('organization_id').references(() => organization.id),
+		enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+		config: text('config').notNull(), // JSON, shape depends on type
+		createdBy: text('created_by')
+			.notNull()
+			.references(() => user.id),
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [unique().on(t.organizationId, t.type), index('idx_integration_org').on(t.organizationId)]
+);
 
 export const status = sqliteTable('status', {
 	id: text('id').primaryKey(),
@@ -205,12 +282,18 @@ export const permission = sqliteTable(
 			.references(() => user.id, { onDelete: 'cascade' }),
 		resourceType: text('resource_type').notNull(), // workspace | project | view | task
 		resourceId: text('resource_id').notNull(),
+		// denormalized org of the granted resource (ADR-062): grant org == resource org,
+		// enforced on every grant write. Nullable for db:push; backfilled by migration.
+		organizationId: text('organization_id').references(() => organization.id),
 		grantedBy: text('granted_by')
 			.notNull()
 			.references(() => user.id),
 		createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
 	},
-	(t) => [unique().on(t.userId, t.resourceType, t.resourceId)]
+	(t) => [
+		unique().on(t.userId, t.resourceType, t.resourceId),
+		index('idx_permission_org').on(t.organizationId)
+	]
 );
 
 export const milestone = sqliteTable(
@@ -517,13 +600,19 @@ export const notification = sqliteTable(
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		type: text('type').notNull(), // assigned | mention | due_soon | overdue | ...
+		// derived from projectId at create; required in code (ADR-062). Nullable for
+		// db:push; migration stamps derivable legacy rows + deletes the rest.
+		organizationId: text('organization_id').references(() => organization.id),
 		projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
 		taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
 		body: text('body').notNull(),
 		read: integer('read', { mode: 'boolean' }).notNull().default(false),
 		createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
 	},
-	(t) => [index('idx_notification_user').on(t.userId)]
+	(t) => [
+		index('idx_notification_user').on(t.userId),
+		index('idx_notification_org').on(t.organizationId)
+	]
 );
 
 // Reusable task templates, workspace- or project-scoped (BASDEV-8).
