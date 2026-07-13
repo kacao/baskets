@@ -21,6 +21,11 @@ const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL ?? 'admin@baskets.local';
 const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? 'admin-baskets-2026';
 const SLACK_WEBHOOK_HOST = 'https://hooks.slack.com/';
 
+// Explicit opt-in: integration tests need a live, seeded dev server. When
+// RUN_INTEGRATION is unset the whole suite is SKIPPED (see describe.skipIf
+// below). When it IS set, a broken/unseeded env must FAIL loudly, not skip.
+const RUN_INTEGRATION = !!process.env.RUN_INTEGRATION;
+
 const url = (path: string) => `${BASE}${path}`;
 
 // A random id that should never resolve to a real, accessible row.
@@ -68,8 +73,16 @@ async function signInAdmin(): Promise<string> {
 
 beforeAll(async () => {
 	serverUp = await ping();
-	if (!serverUp) return;
+	if (!serverUp) {
+		if (RUN_INTEGRATION) throw new Error(`dev server not reachable at ${BASE}`);
+		return;
+	}
 	sessionCookie = await signInAdmin();
+	if (!sessionCookie) {
+		if (RUN_INTEGRATION)
+			throw new Error('admin sign-in failed — is the DB seeded (npm run db:seed)?');
+		return;
+	}
 }, 20_000);
 
 afterAll(async () => {
@@ -87,7 +100,7 @@ afterAll(async () => {
 	}
 });
 
-describe('REST API security (live :5173)', () => {
+describe.skipIf(!RUN_INTEGRATION)('REST API security (live :5173)', () => {
 	describe('(a) unauthenticated reads are rejected', () => {
 		it('GET /api/projects without a session returns 401', async () => {
 			if (!serverUp) return void it.skip;

@@ -34,6 +34,11 @@ const BASE = process.env.TEST_BASE_URL ?? 'http://localhost:5173';
 const ADMIN_EMAIL = 'admin@baskets.local';
 const ADMIN_PASSWORD = 'admin-baskets-2026';
 
+// Explicit opt-in: integration tests need a live, seeded dev server. When
+// RUN_INTEGRATION is unset the whole suite is SKIPPED (see describe.skipIf
+// below). When it IS set, a broken/unseeded env must FAIL loudly, not skip.
+const RUN_INTEGRATION = !!process.env.RUN_INTEGRATION;
+
 let cookie = '';
 let skipReason = '';
 const createdProjectIds = new Set<string>();
@@ -66,6 +71,7 @@ beforeAll(async () => {
 	}
 	if (!reachable) {
 		skipReason = `dev server not reachable at ${BASE} — start it with \`npm run dev\``;
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 
@@ -79,15 +85,18 @@ beforeAll(async () => {
 		});
 	} catch (err) {
 		skipReason = `sign-in request failed: ${(err as Error).message}`;
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 	if (!res.ok) {
 		skipReason = `sign-in returned ${res.status} — is the DB seeded (npm run db:seed)?`;
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 	const setCookie = res.headers.get('set-cookie');
 	if (!setCookie) {
 		skipReason = 'sign-in succeeded but no session cookie was returned';
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 	cookie = setCookie
@@ -100,6 +109,7 @@ beforeAll(async () => {
 	if (!me.ok) {
 		skipReason = `session cookie did not authenticate (/api/me → ${me.status})`;
 		cookie = '';
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 	}
 });
 
@@ -178,7 +188,7 @@ async function findOtherWorkspaceId(excludeWs: string): Promise<string | null> {
 	return null;
 }
 
-describe('templates: cross-scope instantiation is rejected (regression)', () => {
+describe.skipIf(!RUN_INTEGRATION)('templates: cross-scope instantiation is rejected (regression)', () => {
 	it('does not copy project A’s template tasks into a different project B', async () => {
 		if (!ensureAuth()) return;
 

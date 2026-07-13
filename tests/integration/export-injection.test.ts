@@ -25,6 +25,11 @@ const ADMIN_PASSWORD = 'admin-baskets-2026';
 // evaluate it unless neutralized with a leading single-quote.
 const EVIL_TITLE = '=HYPERLINK("http://evil","x")';
 
+// Explicit opt-in: integration tests need a live, seeded dev server. When
+// RUN_INTEGRATION is unset the whole suite is SKIPPED (see describe.skipIf
+// below). When it IS set, a broken/unseeded env must FAIL loudly, not skip.
+const RUN_INTEGRATION = !!process.env.RUN_INTEGRATION;
+
 let cookie = '';
 let skipReason = '';
 const createdProjectIds = new Set<string>();
@@ -57,6 +62,7 @@ beforeAll(async () => {
 	}
 	if (!reachable) {
 		skipReason = `dev server not reachable at ${BASE} — start it with \`npm run dev\``;
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 
@@ -70,16 +76,19 @@ beforeAll(async () => {
 		});
 	} catch (err) {
 		skipReason = `sign-in request failed: ${(err as Error).message}`;
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 	if (!res.ok) {
 		skipReason = `sign-in returned ${res.status} — is the DB seeded (npm run db:seed)?`;
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 	// BetterAuth sets the session via Set-Cookie; reuse the raw cookie pairs.
 	const setCookie = res.headers.get('set-cookie');
 	if (!setCookie) {
 		skipReason = 'sign-in succeeded but no session cookie was returned';
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 		return;
 	}
 	cookie = setCookie
@@ -92,6 +101,7 @@ beforeAll(async () => {
 	if (!me.ok) {
 		skipReason = `session cookie did not authenticate (/api/me → ${me.status})`;
 		cookie = '';
+		if (RUN_INTEGRATION) throw new Error(skipReason);
 	}
 });
 
@@ -163,7 +173,7 @@ function parseCsv(text: string): string[][] {
 	return rows;
 }
 
-describe('CSV export: formula-injection neutralization (integration)', () => {
+describe.skipIf(!RUN_INTEGRATION)('CSV export: formula-injection neutralization (integration)', () => {
 	it('prefixes a leading single-quote to a task title starting with =', async () => {
 		if (!ensureAuth()) return;
 

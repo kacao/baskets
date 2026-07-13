@@ -25,6 +25,11 @@ const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? 'admin-baskets-2026';
 const DEMO_EMAIL = process.env.TEST_DEMO_EMAIL ?? 'demo@baskets.local';
 const DEMO_PASSWORD = process.env.TEST_DEMO_PASSWORD ?? 'demo-baskets-2026';
 
+// Explicit opt-in: integration tests need a live, seeded dev server. When
+// RUN_INTEGRATION is unset the whole suite is SKIPPED (see describe.skipIf
+// below). When it IS set, a broken/unseeded env must FAIL loudly, not skip.
+const RUN_INTEGRATION = !!process.env.RUN_INTEGRATION;
+
 const url = (path: string) => `${BASE}${path}`;
 const ghostId = () => `ghost-${Math.random().toString(36).slice(2)}-${Date.now()}`;
 
@@ -98,10 +103,17 @@ async function createTask(cookie: string, projectId: string, title: string): Pro
 
 beforeAll(async () => {
 	serverUp = await ping();
-	if (!serverUp) return;
+	if (!serverUp) {
+		if (RUN_INTEGRATION) throw new Error(`dev server not reachable at ${BASE}`);
+		return;
+	}
 	adminCookie = await signIn(ADMIN_EMAIL, ADMIN_PASSWORD);
 	demoCookie = await signIn(DEMO_EMAIL, DEMO_PASSWORD);
-	if (!adminCookie) return;
+	if (!adminCookie) {
+		if (RUN_INTEGRATION)
+			throw new Error('admin sign-in failed — is the DB seeded (npm run db:seed)?');
+		return;
+	}
 
 	projectA = await createProject(adminCookie, `authz-A-${ghostId()}`);
 	projectB = await createProject(adminCookie, `authz-B-${ghostId()}`);
@@ -177,7 +189,7 @@ const PROJECT_GET_SUBPATHS = [
 	'/templates'
 ];
 
-describe('REST API authorization / ADR-019 (live :5173)', () => {
+describe.skipIf(!RUN_INTEGRATION)('REST API authorization / ADR-019 (live :5173)', () => {
 	describe('(A) a missing project id returns 404 on every sub-resource (admin)', () => {
 		for (const sub of PROJECT_GET_SUBPATHS) {
 			it(`GET /api/projects/:ghost${sub} → 404`, async () => {
