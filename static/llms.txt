@@ -112,9 +112,38 @@ Grant a user access to the workspace (admin or owner).
 Revoke a grant (admin or owner). Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither.
 - 204: empty body. `404`/`403` as above.
 
+## Project grants
+
+### GET /api/projects/{id}/grants
+List a project's permission grants. ADMIN only.
+- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("project"|"view"), "resourceId" }...] }`. `403 "Only admins can view project grants"` for non-admins; `404 "Project not found"` if missing.
+
+### POST /api/projects/{id}/grants
+Grant a user access to the project (or to a specific view of it). ADMIN only.
+- Body: `userId` string, required. Optional `resourceType` (`"project"` default | `"view"`) and `resourceId` (defaults to `{id}`; a `view` grant's `resourceId` must be a view of this project). Errors: `400 "Invalid grant"`, `400 "Invalid view"`, `400 "Unknown user"`. Idempotent (conflicts ignored).
+- 201: `{ "grants": [...] }` (the updated list). `403 "Only admins can grant permissions"` for non-admins; `404 "Project not found"` if missing.
+
+### DELETE /api/projects/{id}/grants
+Revoke a grant. ADMIN only. Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither; `404 "Grant not found"` if the grantId isn't part of this project's grant set.
+- 204: empty body. `403 "Only admins can revoke permissions"` for non-admins; `404 "Project not found"` if missing.
+
 ## Statuses
 
 Status definitions are table-driven and scoped (built-in app-wide / workspace / project). Create workspace statuses via `POST /api/workspaces/{id}/statuses`, project statuses via `POST /api/projects/{id}/statuses`. The endpoints below edit/delete an existing status by id.
+
+### GET /api/projects/{id}/statuses
+List the project's eligible (assignable-on-tasks) statuses, in global order. Access only.
+- 200: `{ "statuses": [<status>...] }`. `404` if inaccessible/missing.
+
+### POST /api/projects/{id}/statuses
+Create a PROJECT-scoped status (auto-eligible for this project). Needs project edit.
+- Body: `name` (required, trimmed, max 40), `description` (string|null, max 200), `category` (one of the status categories, default `backlog`; `400 "Invalid category"` otherwise), `color` (`#rrggbb` hex or null), `icon` (emoji or `iconoir:<name>`, else null). `400 "A status with that name already exists here"` if the name collides with defaults, workspace siblings, or this project's own statuses.
+- 201: `{ "status": <status> }`. `404` if inaccessible/missing; `403 "No edit permission on this project"` otherwise.
+
+### PATCH /api/projects/{id}/statuses
+Set the eligible status id set and/or reorder this project's custom statuses. Needs project edit.
+- Body: `statusIds` (array of status ids — the eligible set) and/or `order` (array of status ids — reorder this project's custom statuses; positions only). `400 "Provide statusIds and/or order"` if neither; `400` if either is not an array of strings.
+- 200: `{ "statuses": [<status>...] }`. `404` if inaccessible/missing; `403 "No edit permission on this project"` otherwise.
 
 ### PATCH /api/statuses/{id}
 Update a status. Gating depends on the status's scope:
