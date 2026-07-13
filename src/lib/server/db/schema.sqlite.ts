@@ -1,4 +1,12 @@
-import { sqliteTable, text, integer, real, primaryKey, unique } from 'drizzle-orm/sqlite-core';
+import {
+	sqliteTable,
+	text,
+	integer,
+	real,
+	primaryKey,
+	unique,
+	index
+} from 'drizzle-orm/sqlite-core';
 
 /* ------------------------------------------------------------------ */
 /* better-auth tables (email/password + twoFactor + admin plugins)     */
@@ -217,7 +225,7 @@ export const milestone = sqliteTable('milestone', {
 	position: integer('position').notNull().default(0),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-});
+}, (t) => [index('idx_milestone_project').on(t.projectId)]);
 
 // Labels and groups are workspace-scoped (no app-wide labels).
 // Name uniqueness enforced in code per workspace; workspaceId nullable only
@@ -251,7 +259,7 @@ export const location = sqliteTable('location', {
 	position: integer('position').notNull().default(0),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-});
+}, (t) => [index('idx_location_project').on(t.projectId)]);
 
 export const labelGroup = sqliteTable('label_group', {
 	id: text('id').primaryKey(),
@@ -355,7 +363,10 @@ export const task = sqliteTable('task', {
 		.references(() => user.id),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-});
+}, (t) => [
+	index('idx_task_project').on(t.projectId),
+	index('idx_task_parent').on(t.parentId)
+]);
 
 // Project-scoped custom fields on tasks. `type` is a free string from
 // CUSTOM_FIELD_TYPES ($lib/customFields); `config` is schemaless JSON whose
@@ -445,7 +456,7 @@ export const file = sqliteTable('file', {
 		.notNull()
 		.references(() => user.id),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
-});
+}, (t) => [index('idx_file_project').on(t.projectId)]);
 
 // Threaded comments on a task (BASDEV-3).
 export const comment = sqliteTable('comment', {
@@ -459,7 +470,7 @@ export const comment = sqliteTable('comment', {
 	body: text('body').notNull(),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-});
+}, (t) => [index('idx_comment_task').on(t.taskId)]);
 
 // Append-only audit trail of task/project changes (BASDEV-3).
 export const activity = sqliteTable('activity', {
@@ -474,7 +485,7 @@ export const activity = sqliteTable('activity', {
 	type: text('type').notNull(), // created | status | assignee | milestone | due | comment | ...
 	data: text('data').notNull().default('{}'), // schemaless JSON detail (from/to, etc.)
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
-});
+}, (t) => [index('idx_activity_task').on(t.taskId)]);
 
 // Per-user in-app notifications (BASDEV-4).
 export const notification = sqliteTable('notification', {
@@ -488,7 +499,7 @@ export const notification = sqliteTable('notification', {
 	body: text('body').notNull(),
 	read: integer('read', { mode: 'boolean' }).notNull().default(false),
 	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
-});
+}, (t) => [index('idx_notification_user').on(t.userId)]);
 
 // Reusable task templates, workspace- or project-scoped (BASDEV-8).
 export const template = sqliteTable('template', {

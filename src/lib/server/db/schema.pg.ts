@@ -6,7 +6,8 @@ import {
 	timestamp,
 	doublePrecision,
 	primaryKey,
-	unique
+	unique,
+	index
 } from 'drizzle-orm/pg-core';
 
 // Postgres mirror of schema.sqlite.ts (ADR-050). Table + column NAMES must stay
@@ -219,7 +220,7 @@ export const milestone = pgTable('milestone', {
 	position: integer('position').notNull().default(0),
 	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
 	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+}, (t) => [index('idx_milestone_project').on(t.projectId)]);
 
 export const milestoneDependency = pgTable(
 	'milestone_dependency',
@@ -246,7 +247,7 @@ export const location = pgTable('location', {
 	position: integer('position').notNull().default(0),
 	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
 	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+}, (t) => [index('idx_location_project').on(t.projectId)]);
 
 export const labelGroup = pgTable('label_group', {
 	id: text('id').primaryKey(),
@@ -347,7 +348,10 @@ export const task = pgTable('task', {
 		.references(() => user.id),
 	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
 	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+}, (t) => [
+	index('idx_task_project').on(t.projectId),
+	index('idx_task_parent').on(t.parentId)
+]);
 
 export const customField = pgTable('custom_field', {
 	id: text('id').primaryKey(),
@@ -418,7 +422,7 @@ export const file = pgTable('file', {
 		.notNull()
 		.references(() => user.id),
 	createdAt: timestamp('created_at', { mode: 'date' }).notNull()
-});
+}, (t) => [index('idx_file_project').on(t.projectId)]);
 
 export const comment = pgTable('comment', {
 	id: text('id').primaryKey(),
@@ -431,7 +435,7 @@ export const comment = pgTable('comment', {
 	body: text('body').notNull(),
 	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
 	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+}, (t) => [index('idx_comment_task').on(t.taskId)]);
 
 export const activity = pgTable('activity', {
 	id: text('id').primaryKey(),
@@ -445,7 +449,7 @@ export const activity = pgTable('activity', {
 	type: text('type').notNull(),
 	data: text('data').notNull().default('{}'),
 	createdAt: timestamp('created_at', { mode: 'date' }).notNull()
-});
+}, (t) => [index('idx_activity_task').on(t.taskId)]);
 
 export const notification = pgTable('notification', {
 	id: text('id').primaryKey(),
@@ -458,7 +462,7 @@ export const notification = pgTable('notification', {
 	body: text('body').notNull(),
 	read: boolean('read').notNull().default(false),
 	createdAt: timestamp('created_at', { mode: 'date' }).notNull()
-});
+}, (t) => [index('idx_notification_user').on(t.userId)]);
 
 export const template = pgTable('template', {
 	id: text('id').primaryKey(),
