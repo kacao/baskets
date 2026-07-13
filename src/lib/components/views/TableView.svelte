@@ -162,9 +162,55 @@
 			.filter((f) => fieldAppliesTo(f, false) || rollsUpToParent(f))
 			.map((f) => ({ key: `cf:${f.id}`, label: f.name, field: f }))
 	);
-	const cfOptions = (fieldId: string) => customFieldOptions.filter((o) => o.fieldId === fieldId);
-	const cfValue = (taskId: string, fieldId: string) =>
-		taskCustomValues.find((v) => v.taskId === taskId && v.fieldId === fieldId)?.value ?? null;
+	// $derived lookup maps replace per-row/per-cell full-array scans (O(1) Map.get
+	// instead of O(n) find/filter, re-run on every realtime refetch).
+	const valueByTaskField = $derived(new Map(taskCustomValues.map((v) => [`${v.taskId}:${v.fieldId}`, v.value])));
+	const optionsByField = $derived.by(() => {
+		const m = new Map<string, CustomFieldOption[]>();
+		for (const o of customFieldOptions) {
+			const arr = m.get(o.fieldId) ?? [];
+			arr.push(o);
+			m.set(o.fieldId, arr);
+		}
+		return m;
+	});
+	const userById = $derived(new Map(users.map((u) => [u.id, u])));
+	const milestoneById = $derived(new Map(milestones.map((m) => [m.id, m])));
+	const labelById = $derived(new Map(labels.map((l) => [l.id, l])));
+	// built from allTasks (the full project task list, not the view's filtered `tasks`)
+	// so a dependency/link pointing at a filtered-out task still resolves — matches
+	// `tasks={allTasks}` already passed to CustomFieldValue.
+	const taskById = $derived(new Map(allTasks.map((t) => [t.id, t])));
+	const labelIdsByTask = $derived.by(() => {
+		const m = new Map<string, string[]>();
+		for (const tl of taskLabels) {
+			const arr = m.get(tl.taskId) ?? [];
+			arr.push(tl.labelId);
+			m.set(tl.taskId, arr);
+		}
+		return m;
+	});
+	const depIdsByTask = $derived.by(() => {
+		const m = new Map<string, string[]>();
+		for (const d of taskDeps) {
+			const arr = m.get(d.taskId) ?? [];
+			arr.push(d.dependsOnId);
+			m.set(d.taskId, arr);
+		}
+		return m;
+	});
+	const filesByTask = $derived.by(() => {
+		const m = new Map<string, FileRef[]>();
+		for (const f of files) {
+			if (f.taskId == null) continue;
+			const arr = m.get(f.taskId) ?? [];
+			arr.push(f);
+			m.set(f.taskId, arr);
+		}
+		return m;
+	});
+	const cfOptions = (fieldId: string) => optionsByField.get(fieldId) ?? [];
+	const cfValue = (taskId: string, fieldId: string) => valueByTaskField.get(`${taskId}:${fieldId}`) ?? null;
 	function rollupText(taskId: string, field: { id: string; type: string; config: Record<string, unknown>; appliesTo?: string }): string | null {
 		const valueOf = (tid: string, fid: string) => {
 			const raw = cfValue(tid, fid);
@@ -270,13 +316,13 @@
 	const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'backlog';
 	const isDone = (t: Task) => cat(t.statusId) === 'completed';
 	const subsOf = (id: string) => tasks.filter((t) => t.parentId === id);
-	const userName = (id: string | null) => users.find((u) => u.id === id)?.name ?? null;
-	const milestoneName = (id: string | null) => milestones.find((m) => m.id === id)?.name ?? null;
+	const userName = (id: string | null) => (id == null ? null : (userById.get(id)?.name ?? null));
+	const milestoneName = (id: string | null) => (id == null ? null : (milestoneById.get(id)?.name ?? null));
 	const labelsOf = (taskId: string) =>
-		taskLabels.filter((l) => l.taskId === taskId).map((l) => labels.find((x) => x.id === l.labelId)).filter(Boolean);
-	const taskLabelIds = (taskId: string) => taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
+		(labelIdsByTask.get(taskId) ?? []).map((id) => labelById.get(id)).filter(Boolean);
+	const taskLabelIds = (taskId: string) => labelIdsByTask.get(taskId) ?? [];
 	const depsOf = (taskId: string) =>
-		taskDeps.filter((d) => d.taskId === taskId).map((d) => tasks.find((t) => t.id === d.dependsOnId)).filter(Boolean);
+		(depIdsByTask.get(taskId) ?? []).map((id) => taskById.get(id)).filter(Boolean);
 
 	function fmtDate(d: Date | string | null) {
 		if (!d) return null;
@@ -644,7 +690,7 @@
 										{users}
 										{locations}
 										tasks={allTasks}
-										files={files.filter((f) => f.taskId === t.id)}
+										files={filesByTask.get(t.id) ?? []}
 									/>
 								</td>
 							{/if}
@@ -700,7 +746,7 @@
 												{users}
 												{locations}
 												tasks={allTasks}
-												files={files.filter((f) => f.taskId === s.id)}
+												files={filesByTask.get(s.id) ?? []}
 											/>
 										{:else}<span class="u-muted">—</span>{/if}
 									</td>
