@@ -26,19 +26,19 @@ update your row in the table when done.
 | 005  | Collapse the bulk-permission N+1                         | P1       | S      | LOW     | —          | DONE   |
 | 006  | Validate `Origin` on the WebSocket upgrade               | P1       | S      | LOW     | —          | DONE   |
 | 007  | Scope `person` custom-field values to project members    | P1       | S      | LOW     | —          | DONE   |
-| 008  | Unlink file bytes on task/project delete                 | P2       | M      | MED     | —          | TODO   |
-| 009  | Map-based resolvers for `cfSearchByTask`                 | P2       | S      | LOW     | —          | TODO   |
-| 010  | Keyed maps for TableView per-row/cell lookups            | P2       | M      | MED     | —          | TODO   |
-| 011  | Wrap multi-write service ops in transactions             | P2       | M      | MED     | —          | TODO   |
-| 012  | Add ESLint + Prettier + editorconfig                     | P2       | S–M    | MED     | —          | TODO   |
-| 013  | Document project grants + statuses in `llms.txt`         | P2       | S      | LOW     | —          | TODO   |
-| 018  | One-command `verify` script + drop webwright scratch     | P2       | S      | LOW     | —          | TODO   |
-| 014  | Service-layer + permissions unit tests (test-DB harness) | P3       | L      | LOW–MED | —          | TODO   |
-| 015  | Component tests + coverage instrumentation               | P3       | M–L    | LOW     | —          | TODO   |
-| 016  | Consolidate duplicated view-component logic              | P3       | L      | MED     | 014 (rec.) | TODO   |
-| 017  | Coordinated toolchain major bumps                        | P3       | M      | MED     | 004 (rec.) | TODO   |
-| 019  | Investigate splitting the god files (server-load slice)  | P3       | L      | MED     | 014 (rec.) | TODO   |
-| 020  | Investigate recurrence double-spawn race                 | P3       | S      | LOW     | 011        | TODO   |
+| 008  | Unlink file bytes on task/project delete                 | P2       | M      | MED     | —          | DONE (integration test ran green) |
+| 009  | Map-based resolvers for `cfSearchByTask`                 | P2       | S      | LOW     | —          | DONE   |
+| 010  | Keyed maps for TableView per-row/cell lookups            | P2       | M      | MED     | —          | DONE (manual cell-reactivity QA pending) |
+| 011  | Wrap multi-write service ops in transactions             | P2       | M      | MED     | —          | DONE (tx-atomicity integration test deferred) |
+| 012  | Add ESLint + Prettier + editorconfig                     | P2       | S–M    | MED     | —          | DONE (0 err / 135 warn backlog) |
+| 013  | Document project grants + statuses in `llms.txt`         | P2       | S      | LOW     | —          | DONE   |
+| 018  | One-command `verify` script + drop webwright scratch     | P2       | S      | LOW     | —          | DONE   |
+| 014  | Service-layer + permissions unit tests (test-DB harness) | P3       | L      | LOW–MED | —          | DONE (`test:server` script; not yet in CI) |
+| 015  | Component tests + coverage instrumentation               | P3       | M–L    | LOW     | —          | DONE (`*.svelte.test.ts` runs via `npm test`, not `test:unit`) |
+| 016  | Consolidate duplicated view-component logic              | P3       | L      | MED     | 014 (rec.) | DONE (ADR-055 pane-behavior QA pending) |
+| 017  | Coordinated toolchain major bumps                        | P3       | M      | MED     | 004 (rec.) | DONE   |
+| 019  | Investigate splitting the god files (server-load slice)  | P3       | L      | MED     | 014 (rec.) | DONE (Step 1 shipped; Steps 2–3 = recommendations) |
+| 020  | Investigate recurrence double-spawn race                 | P3       | S      | LOW     | 011        | DONE — NOT REPRODUCED (repro test kept as guard) |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` (one-line reason) | `REJECTED` (one-line rationale).
 
