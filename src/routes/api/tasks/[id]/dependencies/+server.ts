@@ -30,10 +30,8 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	const [t] = await db.select().from(task).where(eq(task.id, params.id));
 	if (!t) return apiError(404, 'Task not found');
 	// ADR-019: inaccessible projects' tasks are indistinguishable from missing ones
-	if (!(await canAccessProject(locals.user, t.projectId)))
-		return apiError(404, 'Task not found');
-	if (!(await canEditTask(locals.user, t)))
-		return apiError(403, 'No edit permission on this task');
+	if (!(await canAccessProject(locals.user, t.projectId))) return apiError(404, 'Task not found');
+	if (!(await canEditTask(locals.user, t))) return apiError(403, 'No edit permission on this task');
 
 	const body = await readJson(request);
 	if (!body) return apiError(400, 'Invalid JSON body');
@@ -59,10 +57,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	if (createsCycle(edges, params.id, dependsOnId))
 		return apiError(400, 'That dependency would create a cycle');
 
-	await db
-		.insert(taskDependency)
-		.values({ taskId: params.id, dependsOnId })
-		.onConflictDoNothing();
+	await db.insert(taskDependency).values({ taskId: params.id, dependsOnId }).onConflictDoNothing();
 	broadcastProjectChange(t.projectId, locals.user.id);
 
 	const rows = await db
@@ -78,19 +73,15 @@ export const DELETE: RequestHandler = async ({ url, params, locals }) => {
 	const [t] = await db.select().from(task).where(eq(task.id, params.id));
 	if (!t) return apiError(404, 'Task not found');
 	// ADR-019: inaccessible projects' tasks are indistinguishable from missing ones
-	if (!(await canAccessProject(locals.user, t.projectId)))
-		return apiError(404, 'Task not found');
-	if (!(await canEditTask(locals.user, t)))
-		return apiError(403, 'No edit permission on this task');
+	if (!(await canAccessProject(locals.user, t.projectId))) return apiError(404, 'Task not found');
+	if (!(await canEditTask(locals.user, t))) return apiError(403, 'No edit permission on this task');
 
 	const dependsOnId = url.searchParams.get('dependsOnId') ?? '';
 	if (!dependsOnId) return apiError(400, 'dependsOnId query parameter is required');
 
 	await db
 		.delete(taskDependency)
-		.where(
-			and(eq(taskDependency.taskId, params.id), eq(taskDependency.dependsOnId, dependsOnId))
-		);
+		.where(and(eq(taskDependency.taskId, params.id), eq(taskDependency.dependsOnId, dependsOnId)));
 	broadcastProjectChange(t.projectId, locals.user.id);
 	return new Response(null, { status: 204 });
 };

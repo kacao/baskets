@@ -30,10 +30,35 @@
 		dueDate: Date | string | null;
 	};
 	type Status = { id: string; name: string; category: string };
-	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
-	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; position?: number };
-	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
-	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
+	type Location = {
+		id: string;
+		title: string;
+		address: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	};
+	type CustomFieldDef = {
+		id: string;
+		name: string;
+		type: string;
+		config: Record<string, unknown>;
+		position?: number;
+	};
+	type CustomFieldOption = {
+		id: string;
+		fieldId: string;
+		title: string;
+		color: string | null;
+		icon: string | null;
+	};
+	type FileRef = {
+		id: string;
+		taskId: string | null;
+		fieldId: string | null;
+		filename: string;
+		mimeType: string;
+		size: number;
+	};
 
 	let {
 		tasks,
@@ -110,14 +135,17 @@
 			.filter((l) => l.taskId === taskId)
 			.map((l) => labels.find((x) => x.id === l.labelId))
 			.filter(Boolean);
-	const taskLabelIds = (taskId: string) => taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
+	const taskLabelIds = (taskId: string) =>
+		taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
 
 	// Group by (config.groupBy): one section per group, like the table view.
 	const groupBy = $derived(typeof config.groupBy === 'string' ? (config.groupBy as string) : null);
 	// Hide empty groups (config.hideEmptyGroups, default true) — honors view filters/sort.
 	const hideEmptyGroups = $derived(config.hideEmptyGroups !== false);
 	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
-	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
+	const aggFieldIds = $derived(
+		Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []
+	);
 	type Group = { key: string; title: string; tasks: Task[] };
 
 	const groups = $derived.by((): Group[] =>
@@ -230,7 +258,13 @@
 			{:else}
 				<span class="order"></span>
 			{/if}
-			<StatusSelect taskId={t.id} statusId={t.statusId} {statuses} canEdit={canEditTask(t)} display={statusDisplay} />
+			<StatusSelect
+				taskId={t.id}
+				statusId={t.statusId}
+				{statuses}
+				canEdit={canEditTask(t)}
+				display={statusDisplay}
+			/>
 			<button
 				class="row-title"
 				class:selected={nav.selectedId === t.id}

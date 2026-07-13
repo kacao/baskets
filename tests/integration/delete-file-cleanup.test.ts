@@ -39,10 +39,7 @@ let skipReason = '';
 const createdProjectIds = new Set<string>();
 
 /** fetch wrapper that attaches the session cookie + JSON content-type. */
-async function api(
-	path: string,
-	init: RequestInit & { json?: unknown } = {}
-): Promise<Response> {
+async function api(path: string, init: RequestInit & { json?: unknown } = {}): Promise<Response> {
 	const { json: body, headers, ...rest } = init;
 	return fetch(`${BASE}${path}`, {
 		...rest,
@@ -186,7 +183,7 @@ describe.skipIf(!RUN_INTEGRATION)('file byte cleanup on delete (Plan 008)', () =
 		expect(after.length).toBe(0);
 	});
 
-	it('DELETE /api/tasks/[id] unlinks that task\'s attachment bytes', async () => {
+	it("DELETE /api/tasks/[id] unlinks that task's attachment bytes", async () => {
 		if (!ensureAuth()) return;
 		const projectId = await createProject(`itest-project-${rid()}`);
 		const taskId = await createTask(projectId, 'Task to delete');

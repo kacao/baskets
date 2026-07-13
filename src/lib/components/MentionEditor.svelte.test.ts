@@ -10,7 +10,17 @@ import MentionEditor from './MentionEditor.svelte';
 // stub), so we fill it in here rather than touching MentionEditor.svelte.
 if (!Range.prototype.getBoundingClientRect) {
 	const zeroRect = () =>
-		({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON() {} }) as DOMRect;
+		({
+			top: 0,
+			left: 0,
+			right: 0,
+			bottom: 0,
+			width: 0,
+			height: 0,
+			x: 0,
+			y: 0,
+			toJSON() {}
+		}) as DOMRect;
 	Range.prototype.getBoundingClientRect = zeroRect;
 	Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 }

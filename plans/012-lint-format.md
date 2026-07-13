@@ -52,18 +52,19 @@ reformat is a SEPARATE, explicitly-coordinated commit.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Install a dep | `npm install -D <pkg>` | exit 0 |
-| Lint | `npm run lint` | exit 0 (after config scoped so pre-existing issues are warnings) |
-| Format check | `npm run format:check` | exit 0 after the reformat commit |
-| Format write | `npm run format` | rewrites files |
-| Typecheck (unaffected) | `npm run check` | exit 0 |
-| Unit tests (unaffected) | `npm run test:unit` | all pass |
+| Purpose                 | Command                | Expected on success                                              |
+| ----------------------- | ---------------------- | ---------------------------------------------------------------- |
+| Install a dep           | `npm install -D <pkg>` | exit 0                                                           |
+| Lint                    | `npm run lint`         | exit 0 (after config scoped so pre-existing issues are warnings) |
+| Format check            | `npm run format:check` | exit 0 after the reformat commit                                 |
+| Format write            | `npm run format`       | rewrites files                                                   |
+| Typecheck (unaffected)  | `npm run check`        | exit 0                                                           |
+| Unit tests (unaffected) | `npm run test:unit`    | all pass                                                         |
 
 ## Scope
 
 **In scope** (create/modify):
+
 - `package.json` — add devDeps + `lint`, `format`, `format:check` scripts.
 - `eslint.config.js` (flat config — ESLint 9 style).
 - `.prettierrc` (or `.prettierrc.json`).
@@ -74,6 +75,7 @@ reformat is a SEPARATE, explicitly-coordinated commit.
 - The repo-wide reformat diff (Step 4) — a SEPARATE commit.
 
 **Out of scope** (do NOT touch semantics):
+
 - Any behavioral change to `src/` beyond pure formatting.
 - `tsconfig.json`, `svelte.config.js`, vite configs (unless ESLint plugin setup
   strictly requires a parser reference — keep such changes minimal and noted).
@@ -162,7 +164,16 @@ import ts from 'typescript-eslint';
 import svelte from 'eslint-plugin-svelte';
 
 export default [
-	{ ignores: ['build/', '.svelte-kit/', 'node_modules/', 'static/heroicons.svg', 'data/', 'tests/webwright/'] },
+	{
+		ignores: [
+			'build/',
+			'.svelte-kit/',
+			'node_modules/',
+			'static/heroicons.svg',
+			'data/',
+			'tests/webwright/'
+		]
+	},
 	js.configs.recommended,
 	...ts.configs.recommended,
 	...svelte.configs['flat/recommended'],
@@ -235,6 +246,7 @@ local dev ergonomics.
 ## Test plan
 
 No new automated tests. Verification is:
+
 - `npm run lint` exits 0 (warnings permitted).
 - `npm run format:check` exits 0 after the reformat commit.
 - `npm run check` and `npm run test:unit` still pass (formatting changed nothing

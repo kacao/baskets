@@ -57,36 +57,36 @@ first-party app.
 ### The upgrade handler as it exists today (`attach.js`):
 
 ```js
-	httpServer.on('upgrade', async (req, socket, head) => {
-		let pathname;
-		try {
-			pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
-		} catch {
-			return;
-		}
-		// Only claim our path — leave Vite HMR and any other upgrades untouched.
-		if (pathname !== WS_PATH) return;
+httpServer.on('upgrade', async (req, socket, head) => {
+	let pathname;
+	try {
+		pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
+	} catch {
+		return;
+	}
+	// Only claim our path — leave Vite HMR and any other upgrades untouched.
+	if (pathname !== WS_PATH) return;
 
-		const origin = baseUrl();
-		const cookie = req.headers.cookie ?? '';
+	const origin = baseUrl();
+	const cookie = req.headers.cookie ?? '';
 
-		let user = null;
-		try {
-			const res = await fetch(`${origin}/api/me`, { headers: { cookie } });
-			if (res.ok) user = (await res.json()).user ?? null;
-		} catch {
-			/* ignore */
-		}
-		if (!user) {
-			socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-			socket.destroy();
-			return;
-		}
+	let user = null;
+	try {
+		const res = await fetch(`${origin}/api/me`, { headers: { cookie } });
+		if (res.ok) user = (await res.json()).user ?? null;
+	} catch {
+		/* ignore */
+	}
+	if (!user) {
+		socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+		socket.destroy();
+		return;
+	}
 
-		wss.handleUpgrade(req, socket, head, (ws) => {
-			/* ... registers the client, subscribe/unsubscribe/ping handling ... */
-		});
+	wss.handleUpgrade(req, socket, head, (ws) => {
+		/* ... registers the client, subscribe/unsubscribe/ping handling ... */
 	});
+});
 ```
 
 Note the existing rejection idiom (write an HTTP status line, then
@@ -95,25 +95,25 @@ Note the existing rejection idiom (write an HTTP status line, then
 ### `baseUrl()` — already present, gives the server's own origin:
 
 ```js
-	let _baseUrl = null;
-	function baseUrl() {
-		if (!_baseUrl) {
-			const addr = httpServer.address();
-			// ...derives http://<own-host>:<port> from httpServer.address()...
-			_baseUrl = `http://${host}:${addr.port}`;
-		}
-		return _baseUrl;
+let _baseUrl = null;
+function baseUrl() {
+	if (!_baseUrl) {
+		const addr = httpServer.address();
+		// ...derives http://<own-host>:<port> from httpServer.address()...
+		_baseUrl = `http://${host}:${addr.port}`;
 	}
+	return _baseUrl;
+}
 ```
 
 ## Commands you will need
 
-| Purpose        | Command                     | Expected on success                    |
-|----------------|-----------------------------|----------------------------------------|
-| Typecheck      | `npm run check`             | exit 0, 0 errors, 0 warnings           |
-| Unit tests     | `npm run test:unit`         | all pass (baseline: 416 tests)         |
-| Start dev srv  | `npm run dev`               | serves on `http://localhost:5173`      |
-| Seed DB        | `npm run db:seed`           | seeds admin/demo + sample data         |
+| Purpose       | Command             | Expected on success               |
+| ------------- | ------------------- | --------------------------------- |
+| Typecheck     | `npm run check`     | exit 0, 0 errors, 0 warnings      |
+| Unit tests    | `npm run test:unit` | all pass (baseline: 416 tests)    |
+| Start dev srv | `npm run dev`       | serves on `http://localhost:5173` |
+| Seed DB       | `npm run db:seed`   | seeds admin/demo + sample data    |
 
 `attach.js` has `// @ts-nocheck` at the top, so `npm run check` will not
 type-check its body — it still must be valid ESM. The real regression check is
@@ -122,10 +122,12 @@ manual: the first-party app's realtime + presence must still connect (Step 3).
 ## Scope
 
 **In scope** (the only files you should modify):
+
 - `src/lib/server/realtime/attach.js`
 - `.env.example` (document the reused `TRUSTED_ORIGINS` also gates `/ws`)
 
 **Out of scope** (do NOT touch):
+
 - `src/lib/server/auth.ts` — it already reads `TRUSTED_ORIGINS`; do not change
   its parsing.
 - `vite.config.ts` / `server.js` — they import `attach.js` unchanged; no signature
@@ -164,27 +166,27 @@ allowed. Rules:
 Target shape:
 
 ```js
-	// CSWSH defense (ADR: Realtime): browsers always send Origin on a WS handshake,
-	// so reject any cross-origin upgrade before we touch the session cookie. A
-	// missing Origin = a non-browser client (no ambient-cookie risk) → allowed.
-	const trusted = (process.env.TRUSTED_ORIGINS ?? '')
-		.split(',')
-		.map((o) => o.trim())
-		.filter(Boolean);
+// CSWSH defense (ADR: Realtime): browsers always send Origin on a WS handshake,
+// so reject any cross-origin upgrade before we touch the session cookie. A
+// missing Origin = a non-browser client (no ambient-cookie risk) → allowed.
+const trusted = (process.env.TRUSTED_ORIGINS ?? '')
+	.split(',')
+	.map((o) => o.trim())
+	.filter(Boolean);
 
-	function originAllowed(req) {
-		const origin = req.headers.origin;
-		if (!origin) return true; // non-browser client
-		let host;
-		try {
-			host = new URL(origin).host;
-		} catch {
-			return false; // malformed Origin
-		}
-		if (origin === baseUrl()) return true;
-		if (req.headers.host && host === req.headers.host) return true;
-		return trusted.includes(origin);
+function originAllowed(req) {
+	const origin = req.headers.origin;
+	if (!origin) return true; // non-browser client
+	let host;
+	try {
+		host = new URL(origin).host;
+	} catch {
+		return false; // malformed Origin
 	}
+	if (origin === baseUrl()) return true;
+	if (req.headers.host && host === req.headers.host) return true;
+	return trusted.includes(origin);
+}
 ```
 
 Then, inside the `httpServer.on('upgrade', ...)` handler, add the check
@@ -192,17 +194,17 @@ immediately after the `if (pathname !== WS_PATH) return;` line and BEFORE the
 `/api/me` fetch:
 
 ```js
-		if (pathname !== WS_PATH) return;
+if (pathname !== WS_PATH) return;
 
-		if (!originAllowed(req)) {
-			socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-			socket.destroy();
-			return;
-		}
+if (!originAllowed(req)) {
+	socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+	socket.destroy();
+	return;
+}
 
-		const origin = baseUrl();
-		const cookie = req.headers.cookie ?? '';
-		// ...unchanged /api/me fetch...
+const origin = baseUrl();
+const cookie = req.headers.cookie ?? '';
+// ...unchanged /api/me fetch...
 ```
 
 Note: the local `const origin = baseUrl()` below is the server's own base URL for

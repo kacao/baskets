@@ -62,10 +62,7 @@ describe('groupTasks', () => {
 	});
 
 	it('groups by milestone with a _none bucket', () => {
-		const rows = [
-			task({ id: 't1', milestoneId: 'm1' }),
-			task({ id: 't2', milestoneId: null })
-		];
+		const rows = [task({ id: 't1', milestoneId: 'm1' }), task({ id: 't2', milestoneId: null })];
 		const groups = groupTasks(rows, 'milestone', baseCtx(rows), false);
 		expect(groups).toEqual([
 			{ key: 'm1', title: 'Milestone 1', tasks: [rows[0]] },
@@ -74,10 +71,7 @@ describe('groupTasks', () => {
 	});
 
 	it('groups by assignee with a _none (Unassigned) bucket', () => {
-		const rows = [
-			task({ id: 't1', assigneeId: 'u1' }),
-			task({ id: 't2', assigneeId: null })
-		];
+		const rows = [task({ id: 't1', assigneeId: 'u1' }), task({ id: 't2', assigneeId: null })];
 		const groups = groupTasks(rows, 'assignee', baseCtx(rows), false);
 		expect(groups).toEqual([
 			{ key: 'u1', title: 'Alice', tasks: [rows[0]] },

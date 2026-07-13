@@ -38,9 +38,10 @@ existing workspace-grants and workspace-statuses sections' exact style.
 ### The two undocumented routes
 
 `src/routes/api/projects/[id]/grants/+server.ts` exports GET/POST/DELETE:
+
 - **GET** — admin only (`403 "Only admins can view project grants"`); `404` if
   project missing. Returns `{ grants: [{ id, userId, userName, resourceType,
-  resourceId }...] }` (grants/grants.ts:19-26, 28-37).
+resourceId }...] }` (grants/grants.ts:19-26, 28-37).
 - **POST** — admin only (`403 "Only admins can grant permissions"`); `404` if
   missing. Body: `userId` (string, required), optional `resourceType`
   (`'project'` default | `'view'`), optional `resourceId` (defaults to the
@@ -54,17 +55,18 @@ existing workspace-grants and workspace-statuses sections' exact style.
   Returns `204` empty (grants.ts:86-121).
 
 `src/routes/api/projects/[id]/statuses/+server.ts` exports GET/POST/PATCH:
+
 - **GET** — access-gated (`404` if inaccessible/missing). Returns
   `{ statuses: [<status>...] }` = the project's eligible statuses in global
   order (statuses/statuses.ts:16-27).
 - **POST** — needs project edit (`404` if inaccessible, `403 "No edit permission
-  on this project"`). Body: `name` (required), `description` (string|null),
+on this project"`). Body: `name` (required), `description` (string|null),
   `category` (default `'backlog'`), `color`, `icon`. Returns
   `201 { status: <status> }` (statuses.ts:29-57).
 - **PATCH** — needs project edit (same 404/403). Body: `statusIds` (array of
   status ids — sets the eligible set) and/or `order` (array of status ids —
   reorders this project's CUSTOM statuses); `400 "Provide statusIds and/or
-  order"` if neither; `400` if either is not an array of strings. Returns
+order"` if neither; `400` if either is not an array of strings. Returns
   `{ statuses: [<status>...] }` (statuses.ts:63-99).
 
 ### The style to mirror (existing sections in llms.txt)
@@ -116,18 +118,20 @@ JSON shapes, error codes inline as shown above.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Confirm grants absent (before) | `grep -c "projects/{id}/grants" static/llms.txt` | `0` |
-| Confirm grants present (after) | `grep -c "projects/{id}/grants" static/llms.txt` | `3` (GET/POST/DELETE headers) |
-| Confirm project statuses block | `grep -c "/api/projects/{id}/statuses" static/llms.txt` | `≥3` |
+| Purpose                        | Command                                                 | Expected on success           |
+| ------------------------------ | ------------------------------------------------------- | ----------------------------- |
+| Confirm grants absent (before) | `grep -c "projects/{id}/grants" static/llms.txt`        | `0`                           |
+| Confirm grants present (after) | `grep -c "projects/{id}/grants" static/llms.txt`        | `3` (GET/POST/DELETE headers) |
+| Confirm project statuses block | `grep -c "/api/projects/{id}/statuses" static/llms.txt` | `≥3`                          |
 
 ## Scope
 
 **In scope** (modify only):
+
 - `static/llms.txt`
 
 **Out of scope** (do NOT touch):
+
 - The route files under `src/routes/api/projects/[id]/` — this is a docs-only
   change; you are documenting them, not changing them.
 - Any other section of llms.txt beyond inserting the two new blocks.

@@ -31,10 +31,35 @@
 		coverFileId?: string | null;
 	};
 	type Status = { id: string; name: string; category: string };
-	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
-	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; position?: number };
-	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
-	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
+	type Location = {
+		id: string;
+		title: string;
+		address: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	};
+	type CustomFieldDef = {
+		id: string;
+		name: string;
+		type: string;
+		config: Record<string, unknown>;
+		position?: number;
+	};
+	type CustomFieldOption = {
+		id: string;
+		fieldId: string;
+		title: string;
+		color: string | null;
+		icon: string | null;
+	};
+	type FileRef = {
+		id: string;
+		taskId: string | null;
+		fieldId: string | null;
+		filename: string;
+		mimeType: string;
+		size: number;
+	};
 
 	let {
 		tasks,
@@ -154,7 +179,9 @@
 	const laneTasks = (laneKey: string) => topTasks.filter((t) => inLane(t, laneKey));
 	const laneCount = (laneKey: string) => laneTasks(laneKey).length;
 	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
-	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
+	const aggFieldIds = $derived(
+		Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []
+	);
 
 	// Status columns shown (config.statusIds): absent = all, in project order.
 	const shownStatusIds = $derived(
@@ -400,194 +427,215 @@
 </script>
 
 <div class="board-wrap">
-{#each visibleLanes as lane (lane.key)}
-	{#if groupBy !== 'status'}
-		<div class="lane-head">
-			<button
-				class="lane-toggle"
-				type="button"
-				aria-expanded={!collapsedLanes[lane.key]}
-				aria-label={$t('Toggle group')}
-				onclick={() => (collapsedLanes[lane.key] = !collapsedLanes[lane.key])}
+	{#each visibleLanes as lane (lane.key)}
+		{#if groupBy !== 'status'}
+			<div class="lane-head">
+				<button
+					class="lane-toggle"
+					type="button"
+					aria-expanded={!collapsedLanes[lane.key]}
+					aria-label={$t('Toggle group')}
+					onclick={() => (collapsedLanes[lane.key] = !collapsedLanes[lane.key])}
+				>
+					<Icon name={collapsedLanes[lane.key] ? 'nav-arrow-right' : 'nav-arrow-down'} size={14} />
+				</button>
+				<span class="lane-name">{lane.name}</span>
+				<span class="lane-count">{laneCount(lane.key)}</span>
+				{#each fieldAggregations(aggFieldIds, customFields, laneTasks(lane.key), taskCustomValues, tasks) as a (a.id)}
+					<span class="lane-agg" use:tooltip={a.name}>({a.text})</span>
+				{/each}
+			</div>
+		{/if}
+		{#if !collapsedLanes[lane.key]}
+			<div class="board">
+				{#each visibleStatuses as s (s.id)}
+					{@const col = cellTasks(lane.key, s.id)}
+					<div
+						class="column"
+						class:drop-target={over?.lane === lane.key && over?.statusId === s.id}
+						role="list"
+						aria-label={$t('{name} column', { name: s.name })}
+						data-lane={lane.key}
+						data-status={s.id}
+					>
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="col-head"
+							oncontextmenu={(e) => openColMenu(e, lane.key, s.id)}
+							use:longpress={(p) => openColMenuAt(p.clientX, p.clientY, lane.key, s.id)}
+						>
+							<span class="col-glyph" class:done={s.category === 'completed'}
+								>{glyph[s.category]}</span
+							>
+							<span class="col-name">{s.name}</span>
+							<span class="col-count">{col.length}</span>
+							{#each fieldAggregations(aggFieldIds, customFields, col, taskCustomValues, tasks) as a (a.id)}
+								<span class="col-agg" use:tooltip={a.name}>({a.text})</span>
+							{/each}
+							<span class="col-spacer"></span>
+							<button
+								class="col-add"
+								aria-label={$t('Add task to {name}', { name: s.name })}
+								onclick={() => openAdd(lane.key, s.id)}
+							>
+								+
+							</button>
+						</div>
+
+						<div class="col-body">
+							{#each col as t, i (t.id)}
+								{@const editable = canEditTask(t)}
+								<div class="bcard-slot" data-index={i} animate:flip={{ duration: 220 }}>
+									{#if over?.lane === lane.key && over?.statusId === s.id && over.index === i && dragId !== t.id}
+										<div class="drop-line"></div>
+									{/if}
+									<!-- Whole card is the drag control AND clickable (pointer-based drag:
+						     touch + mouse). An inner button would swallow the pointerdown. -->
+									<div
+										class="bcard"
+										class:dragging={dragId === t.id}
+										class:grabbable={editable}
+										class:clickable={true}
+										class:selected={nav.selectedId === t.id}
+										role="button"
+										tabindex="0"
+										aria-label={t.title}
+										onpointerdown={(e) => cardPointerDown(e, t)}
+										onclick={() => !justDragged && nav.openDetail(t)}
+										onkeydown={(e) => e.key === 'Enter' && nav.openDetail(t)}
+									>
+										{#if t.coverFileId}
+											<img
+												class="bcard-cover"
+												src={`/api/files/${t.coverFileId}`}
+												alt=""
+												loading="lazy"
+											/>
+										{/if}
+										<div class="bcard-top">
+											<PriorityIcon priority={t.priority} />
+											<span class="bcard-title">{t.title}</span>
+										</div>
+										{#if labelsOf(t.id).length > 0 || t.dueDate || t.assigneeId}
+											<div class="bcard-meta">
+												{#each labelsOf(t.id) as l (l!.id)}
+													<span class="bchip">{l!.name}</span>
+												{/each}
+												{#if t.dueDate}
+													<span class="bchip mono">{fmtDate(t.dueDate)}</span>
+												{/if}
+												<span class="bcard-spacer"></span>
+												{#if userName(t.assigneeId)}
+													<span class="avatar" use:tooltip={userName(t.assigneeId)}>
+														{initials(userName(t.assigneeId)!)}
+													</span>
+												{/if}
+											</div>
+										{/if}
+									</div>
+								</div>
+							{/each}
+							{#if over?.lane === lane.key && over?.statusId === s.id && over.index >= col.length}
+								<div class="drop-line"></div>
+							{/if}
+
+							{#if addingTo === `${lane.key}|${s.id}`}
+								<form
+									method="POST"
+									action="?/createTask"
+									use:enhance={() =>
+										({ update }) => {
+											addingTo = null;
+											update();
+										}}
+									class="col-add-form"
+								>
+									<input type="hidden" name="statusId" value={s.id} />
+									{#if groupBy !== 'status' && lane.key !== '_none'}
+										<input
+											type="hidden"
+											name={groupBy === 'milestone'
+												? 'milestoneId'
+												: groupBy === 'assignee'
+													? 'assigneeId'
+													: 'labelId'}
+											value={lane.key}
+										/>
+									{/if}
+									<input
+										bind:this={addInput}
+										name="title"
+										class="input"
+										placeholder={$t('Task title…')}
+										required
+										maxlength="240"
+										autocomplete="off"
+										onkeydown={(e) => e.key === 'Escape' && (addingTo = null)}
+									/>
+								</form>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+	{/each}
+
+	{#if colMenu}
+		{@const cm = colMenu}
+		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+		<div
+			class="ctx-backdrop"
+			onclick={() => (colMenu = null)}
+			oncontextmenu={(e) => (e.preventDefault(), (colMenu = null))}
+		></div>
+		<div class="ctx-menu" style={`left:${cm.x}px; top:${cm.y}px`}>
+			{#if onNewTask}
+				<button
+					class="ctx-item"
+					type="button"
+					onclick={() => {
+						const sId = cm.statusId;
+						colMenu = null;
+						onNewTask?.({ statusId: sId, ...lanePrefill(cm.lane) });
+					}}
+				>
+					{$t('Create task…')}
+				</button>
+			{/if}
+			<button class="ctx-item" type="button" onclick={() => hideStatus(cm.statusId)}
+				>{$t('Hide')}</button
 			>
-				<Icon name={collapsedLanes[lane.key] ? 'nav-arrow-right' : 'nav-arrow-down'} size={14} />
-			</button>
-			<span class="lane-name">{lane.name}</span>
-			<span class="lane-count">{laneCount(lane.key)}</span>
-			{#each fieldAggregations(aggFieldIds, customFields, laneTasks(lane.key), taskCustomValues, tasks) as a (a.id)}
-				<span class="lane-agg" use:tooltip={a.name}>({a.text})</span>
-			{/each}
 		</div>
 	{/if}
-	{#if !collapsedLanes[lane.key]}
-	<div class="board">
-		{#each visibleStatuses as s (s.id)}
-			{@const col = cellTasks(lane.key, s.id)}
-			<div
-				class="column"
-				class:drop-target={over?.lane === lane.key && over?.statusId === s.id}
-				role="list"
-				aria-label={$t('{name} column', { name: s.name })}
-				data-lane={lane.key}
-				data-status={s.id}
-			>
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="col-head"
-					oncontextmenu={(e) => openColMenu(e, lane.key, s.id)}
-					use:longpress={(p) => openColMenuAt(p.clientX, p.clientY, lane.key, s.id)}
-				>
-					<span class="col-glyph" class:done={s.category === 'completed'}>{glyph[s.category]}</span>
-					<span class="col-name">{s.name}</span>
-					<span class="col-count">{col.length}</span>
-					{#each fieldAggregations(aggFieldIds, customFields, col, taskCustomValues, tasks) as a (a.id)}
-						<span class="col-agg" use:tooltip={a.name}>({a.text})</span>
-					{/each}
-					<span class="col-spacer"></span>
-					<button class="col-add" aria-label={$t('Add task to {name}', { name: s.name })} onclick={() => openAdd(lane.key, s.id)}>
-						+
-					</button>
-				</div>
 
-				<div class="col-body">
-					{#each col as t, i (t.id)}
-						{@const editable = canEditTask(t)}
-						<div class="bcard-slot" data-index={i} animate:flip={{ duration: 220 }}>
-						{#if over?.lane === lane.key && over?.statusId === s.id && over.index === i && dragId !== t.id}
-							<div class="drop-line"></div>
-						{/if}
-						<!-- Whole card is the drag control AND clickable (pointer-based drag:
-						     touch + mouse). An inner button would swallow the pointerdown. -->
-						<div
-							class="bcard"
-							class:dragging={dragId === t.id}
-							class:grabbable={editable}
-							class:clickable={true}
-							class:selected={nav.selectedId === t.id}
-							role="button"
-							tabindex="0"
-							aria-label={t.title}
-							onpointerdown={(e) => cardPointerDown(e, t)}
-							onclick={() => !justDragged && nav.openDetail(t)}
-							onkeydown={(e) => e.key === 'Enter' && nav.openDetail(t)}
-						>
-							{#if t.coverFileId}
-								<img class="bcard-cover" src={`/api/files/${t.coverFileId}`} alt="" loading="lazy" />
-							{/if}
-							<div class="bcard-top">
-								<PriorityIcon priority={t.priority} />
-								<span class="bcard-title">{t.title}</span>
-							</div>
-							{#if labelsOf(t.id).length > 0 || t.dueDate || t.assigneeId}
-								<div class="bcard-meta">
-									{#each labelsOf(t.id) as l (l!.id)}
-										<span class="bchip">{l!.name}</span>
-									{/each}
-									{#if t.dueDate}
-										<span class="bchip mono">{fmtDate(t.dueDate)}</span>
-									{/if}
-									<span class="bcard-spacer"></span>
-									{#if userName(t.assigneeId)}
-										<span class="avatar" use:tooltip={userName(t.assigneeId)}>
-											{initials(userName(t.assigneeId)!)}
-										</span>
-									{/if}
-								</div>
-							{/if}
-						</div>
-						</div>
-					{/each}
-					{#if over?.lane === lane.key && over?.statusId === s.id && over.index >= col.length}
-						<div class="drop-line"></div>
-					{/if}
-
-					{#if addingTo === `${lane.key}|${s.id}`}
-						<form
-							method="POST"
-							action="?/createTask"
-							use:enhance={() =>
-								({ update }) => {
-									addingTo = null;
-									update();
-								}}
-							class="col-add-form"
-						>
-							<input type="hidden" name="statusId" value={s.id} />
-							{#if groupBy !== 'status' && lane.key !== '_none'}
-								<input
-									type="hidden"
-									name={groupBy === 'milestone' ? 'milestoneId' : groupBy === 'assignee' ? 'assigneeId' : 'labelId'}
-									value={lane.key}
-								/>
-							{/if}
-							<input
-								bind:this={addInput}
-								name="title"
-								class="input"
-								placeholder={$t('Task title…')}
-								required
-								maxlength="240"
-								autocomplete="off"
-								onkeydown={(e) => e.key === 'Escape' && (addingTo = null)}
-							/>
-						</form>
-					{/if}
-				</div>
-			</div>
-		{/each}
-	</div>
+	{#if nav.selected}
+		<TaskPanel
+			task={nav.selected}
+			tasks={allTasks}
+			{users}
+			{statuses}
+			{milestones}
+			{locations}
+			{labels}
+			{taskLabels}
+			{taskDeps}
+			{customFields}
+			{customFieldOptions}
+			{taskCustomValues}
+			{files}
+			{canEditTask}
+			{templates}
+			{statusDisplay}
+			back={nav.backTask}
+			onBack={nav.navBack}
+			onClose={() => {
+				nav.selectedId = null;
+				nav.backStack = [];
+			}}
+			onSelectTask={(id) => nav.navTask(id)}
+		/>
 	{/if}
-{/each}
-
-{#if colMenu}
-	{@const cm = colMenu}
-	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-	<div class="ctx-backdrop" onclick={() => (colMenu = null)} oncontextmenu={(e) => (e.preventDefault(), (colMenu = null))}></div>
-	<div class="ctx-menu" style={`left:${cm.x}px; top:${cm.y}px`}>
-		{#if onNewTask}
-			<button
-				class="ctx-item"
-				type="button"
-				onclick={() => {
-					const sId = cm.statusId;
-					colMenu = null;
-					onNewTask?.({ statusId: sId, ...lanePrefill(cm.lane) });
-				}}
-			>
-				{$t('Create task…')}
-			</button>
-		{/if}
-		<button class="ctx-item" type="button" onclick={() => hideStatus(cm.statusId)}>{$t('Hide')}</button>
-	</div>
-{/if}
-
-{#if nav.selected}
-	<TaskPanel
-		task={nav.selected}
-		tasks={allTasks}
-		{users}
-		{statuses}
-		{milestones}
-		{locations}
-		{labels}
-		{taskLabels}
-		{taskDeps}
-		{customFields}
-		{customFieldOptions}
-		{taskCustomValues}
-		{files}
-		{canEditTask}
-		{templates}
-		{statusDisplay}
-		back={nav.backTask}
-		onBack={nav.navBack}
-		onClose={() => {
-			nav.selectedId = null;
-			nav.backStack = [];
-		}}
-		onSelectTask={(id) => nav.navTask(id)}
-	/>
-{/if}
 </div>
 
 <style>
@@ -665,7 +713,9 @@
 		padding: 2px;
 		margin-left: -2px;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.lane-toggle:hover {
@@ -872,7 +922,8 @@
 		background: var(--color-primary, var(--color-fg));
 		border-radius: 999px;
 		margin: -1px 0;
-		box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary, var(--color-fg)) 30%, transparent);
+		box-shadow: 0 0 0 1px
+			color-mix(in oklab, var(--color-primary, var(--color-fg)) 30%, transparent);
 	}
 
 	.col-add-form .input {

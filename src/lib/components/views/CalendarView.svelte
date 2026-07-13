@@ -22,10 +22,35 @@
 		dueDate: Date | string | null;
 	};
 	type Status = { id: string; name: string; category: string };
-	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
-	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; position?: number };
-	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
-	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
+	type Location = {
+		id: string;
+		title: string;
+		address: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	};
+	type CustomFieldDef = {
+		id: string;
+		name: string;
+		type: string;
+		config: Record<string, unknown>;
+		position?: number;
+	};
+	type CustomFieldOption = {
+		id: string;
+		fieldId: string;
+		title: string;
+		color: string | null;
+		icon: string | null;
+	};
+	type FileRef = {
+		id: string;
+		taskId: string | null;
+		fieldId: string | null;
+		filename: string;
+		mimeType: string;
+		size: number;
+	};
 
 	let {
 		tasks,
@@ -207,7 +232,11 @@
 								</button>
 							{/each}
 							{#if dayTasks.length > MAX_CHIPS}
-								<button class="chip more" type="button" onclick={() => nav.openDetail(dayTasks[MAX_CHIPS])}>
+								<button
+									class="chip more"
+									type="button"
+									onclick={() => nav.openDetail(dayTasks[MAX_CHIPS])}
+								>
 									{$t('+{n} more', { n: dayTasks.length - MAX_CHIPS })}
 								</button>
 							{/if}
@@ -385,7 +414,9 @@
 		cursor: pointer;
 		padding: 0 4px;
 		opacity: 0;
-		transition: opacity var(--dur) ease, color var(--dur) ease;
+		transition:
+			opacity var(--dur) ease,
+			color var(--dur) ease;
 	}
 
 	.cal-day:hover .day-add {

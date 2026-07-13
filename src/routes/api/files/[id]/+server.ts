@@ -46,7 +46,10 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 
 	// strip this fileId from any value array of its field
 	if (f.fieldId) {
-		const rows = await db.select().from(taskCustomValue).where(eq(taskCustomValue.fieldId, f.fieldId));
+		const rows = await db
+			.select()
+			.from(taskCustomValue)
+			.where(eq(taskCustomValue.fieldId, f.fieldId));
 		for (const r of rows) {
 			let ids: string[] = [];
 			try {

@@ -59,22 +59,21 @@ Two mirror sites in `src/lib/server/tasks.ts` share the same check-then-act shap
 ### Site 1 — `setTaskStatusService`:
 
 ```ts
-	await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.id, taskId));
+await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.id, taskId));
 
-	void logActivity(projectId, taskId, actor.id, 'status', { to: statusId });
+void logActivity(projectId, taskId, actor.id, 'status', { to: statusId });
 
-	// Recurring task: when it moves into a completed status, spawn the next
-	// occurrence with its due date advanced by the recurrence rule (BASDEV-8).
-	const wasCompleted =
-		eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-	if (target.category === 'completed' && !wasCompleted && existing.recurrence) {
-		const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
-		const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-		if (backlog) {
-			const spawnNow = new Date();
-			await db.insert(task).values({ /* ...next occurrence... */ });
-		}
+// Recurring task: when it moves into a completed status, spawn the next
+// occurrence with its due date advanced by the recurrence rule (BASDEV-8).
+const wasCompleted = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+if (target.category === 'completed' && !wasCompleted && existing.recurrence) {
+	const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
+	const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
+	if (backlog) {
+		const spawnNow = new Date();
+		await db.insert(task).values({/* ...next occurrence... */});
 	}
+}
 ```
 
 Note `existing` was read at the TOP of the function (via `getTask(taskId)`),
@@ -85,26 +84,27 @@ the pre-completion snapshot and each see `wasCompleted === false`.
 ### Site 2 — `updateTaskService`, inside `if (opts.completeCascade)`:
 
 ```ts
-	if (opts.completeCascade) {
-		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-		if (targetStatus?.category === 'completed' && !wasDone) {
-			if (existing.recurrence) {
-				const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
-				const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-				if (backlog) {
-					const spawnNow = new Date();
-					await db.insert(task).values({ /* ...next occurrence... */ });
-				}
+if (opts.completeCascade) {
+	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	if (targetStatus?.category === 'completed' && !wasDone) {
+		if (existing.recurrence) {
+			const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
+			const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
+			if (backlog) {
+				const spawnNow = new Date();
+				await db.insert(task).values({/* ...next occurrence... */});
 			}
-			// ...sub-task cascade update + (void) dispatchEvent...
 		}
+		// ...sub-task cascade update + (void) dispatchEvent...
 	}
+}
 ```
 
 Same structure: `existing` is a snapshot read before the task's own update; the
 spawn is gated on the snapshot's `wasDone`.
 
 The reachable completion entry points (for constructing a concurrent test):
+
 - `PATCH /api/tasks/[id]` `{ status: 'Completed' }` → `updateTaskService` with
   `completeCascade: true` (see `src/routes/api/tasks/[id]/+server.ts`).
 - Board drag form action `?/moveTask` → `moveTaskService` (only spawns after Plan
@@ -116,17 +116,18 @@ The cleanest way to fire two truly concurrent completes is two parallel
 
 ## Commands you will need
 
-| Purpose        | Command                     | Expected on success                    |
-|----------------|-----------------------------|----------------------------------------|
-| Typecheck      | `npm run check`             | exit 0, 0 errors, 0 warnings           |
-| Unit tests     | `npm run test:unit`         | all pass (baseline: 416 tests)         |
-| Integration    | `npm run test:integration`  | all pass (needs live server + seeded DB)|
-| Start dev srv  | `npm run dev`               | serves on `http://localhost:5173`      |
-| Seed DB        | `npm run db:seed`           | seeds admin/demo + sample data         |
+| Purpose       | Command                    | Expected on success                      |
+| ------------- | -------------------------- | ---------------------------------------- |
+| Typecheck     | `npm run check`            | exit 0, 0 errors, 0 warnings             |
+| Unit tests    | `npm run test:unit`        | all pass (baseline: 416 tests)           |
+| Integration   | `npm run test:integration` | all pass (needs live server + seeded DB) |
+| Start dev srv | `npm run dev`              | serves on `http://localhost:5173`        |
+| Seed DB       | `npm run db:seed`          | seeds admin/demo + sample data           |
 
 ## Scope
 
 **In scope**:
+
 - Step 1–2 (investigation): a throwaway repro test under
   `tests/integration/recurrence-race.test.ts` (create). This may be KEPT as a
   regression test if the bug reproduces, or DELETED if it does not (report which).
@@ -134,6 +135,7 @@ The cleanest way to fire two truly concurrent completes is two parallel
   two sites.
 
 **Out of scope**:
+
 - Any change to the recurrence math (`src/lib/recurrence.ts`).
 - Wrapping unrelated ops in transactions (that is Plan 011).
 - Building a distributed lock or job queue — the guard, if needed, is a single
@@ -212,9 +214,11 @@ spawned-row shape):
 ```ts
 await withTransaction(async (tx) => {
 	// re-read the CURRENT status inside the tx (not the top-of-function snapshot)
-	const [fresh] = await tx.select({ statusId: task.statusId }).from(task).where(eq(task.id, taskId));
-	const freshlyCompleted =
-		eligible.find((s) => s.id === fresh?.statusId)?.category === 'completed';
+	const [fresh] = await tx
+		.select({ statusId: task.statusId })
+		.from(task)
+		.where(eq(task.id, taskId));
+	const freshlyCompleted = eligible.find((s) => s.id === fresh?.statusId)?.category === 'completed';
 	if (freshlyCompleted) return; // another request already completed it — do not spawn
 	await tx.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.id, taskId));
 	if (target.category === 'completed' && existing.recurrence) {

@@ -9,7 +9,12 @@
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
 	import CustomFieldValue from '$lib/components/CustomFieldValue.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
-	import { fieldAppliesTo, fieldAggregations, rollsUpToParent, rollupDisplayText } from '$lib/customFields';
+	import {
+		fieldAppliesTo,
+		fieldAggregations,
+		rollsUpToParent,
+		rollupDisplayText
+	} from '$lib/customFields';
 	import { sortTasks } from '$lib/taskSort';
 	import { selection } from '$lib/selection.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -34,10 +39,36 @@
 		coverFileId?: string | null;
 	};
 	type Status = { id: string; name: string; category: string };
-	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
-	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; appliesTo?: string; position?: number };
-	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
-	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
+	type Location = {
+		id: string;
+		title: string;
+		address: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	};
+	type CustomFieldDef = {
+		id: string;
+		name: string;
+		type: string;
+		config: Record<string, unknown>;
+		appliesTo?: string;
+		position?: number;
+	};
+	type CustomFieldOption = {
+		id: string;
+		fieldId: string;
+		title: string;
+		color: string | null;
+		icon: string | null;
+	};
+	type FileRef = {
+		id: string;
+		taskId: string | null;
+		fieldId: string | null;
+		filename: string;
+		mimeType: string;
+		size: number;
+	};
 
 	let {
 		tasks,
@@ -123,7 +154,9 @@
 	);
 	// $derived lookup maps replace per-row/per-cell full-array scans (O(1) Map.get
 	// instead of O(n) find/filter, re-run on every realtime refetch).
-	const valueByTaskField = $derived(new Map(taskCustomValues.map((v) => [`${v.taskId}:${v.fieldId}`, v.value])));
+	const valueByTaskField = $derived(
+		new Map(taskCustomValues.map((v) => [`${v.taskId}:${v.fieldId}`, v.value]))
+	);
 	const optionsByField = $derived.by(() => {
 		const m = new Map<string, CustomFieldOption[]>();
 		for (const o of customFieldOptions) {
@@ -169,8 +202,12 @@
 		return m;
 	});
 	const cfOptions = (fieldId: string) => optionsByField.get(fieldId) ?? [];
-	const cfValue = (taskId: string, fieldId: string) => valueByTaskField.get(`${taskId}:${fieldId}`) ?? null;
-	function rollupText(taskId: string, field: { id: string; type: string; config: Record<string, unknown>; appliesTo?: string }): string | null {
+	const cfValue = (taskId: string, fieldId: string) =>
+		valueByTaskField.get(`${taskId}:${fieldId}`) ?? null;
+	function rollupText(
+		taskId: string,
+		field: { id: string; type: string; config: Record<string, unknown>; appliesTo?: string }
+	): string | null {
 		const valueOf = (tid: string, fid: string) => {
 			const raw = cfValue(tid, fid);
 			const n = raw == null ? null : Number(raw);
@@ -204,7 +241,14 @@
 		'actions'
 	]);
 	const COL_DEFAULTS: Record<string, number> = {
-		select: 300, title: 320, priority: 110, assignee: 140, milestone: 160, due: 120, labels: 160, actions: 44
+		select: 300,
+		title: 320,
+		priority: 110,
+		assignee: 140,
+		milestone: 160,
+		due: 120,
+		labels: 160,
+		actions: 44
 	};
 	// status is a control column: its width fits the longest status pill in the current
 	// display mode (never frozen by a resize) — so the pill always fits and Title starts
@@ -217,7 +261,10 @@
 	});
 	const colDefault = (key: string) => (key.startsWith('cf:') ? 160 : (COL_DEFAULTS[key] ?? 140));
 	const colWidths = $derived(
-		(config.colWidths && typeof config.colWidths === 'object' ? config.colWidths : {}) as Record<string, number>
+		(config.colWidths && typeof config.colWidths === 'object' ? config.colWidths : {}) as Record<
+			string,
+			number
+		>
 	);
 	let liveWidths = $state<Record<string, number>>({});
 	let resizing = $state<string | null>(null);
@@ -251,7 +298,10 @@
 		liveWidths = base;
 		resizing = key;
 		const onMove = (ev: PointerEvent) => {
-			liveWidths = { ...liveWidths, [key]: Math.max(60, Math.round(startW + (ev.clientX - startX))) };
+			liveWidths = {
+				...liveWidths,
+				[key]: Math.max(60, Math.round(startW + (ev.clientX - startX)))
+			};
 		};
 		const onUp = async () => {
 			window.removeEventListener('pointermove', onMove);
@@ -276,7 +326,8 @@
 	const isDone = (t: Task) => cat(t.statusId) === 'completed';
 	const subsOf = (id: string) => tasks.filter((t) => t.parentId === id);
 	const userName = (id: string | null) => (id == null ? null : (userById.get(id)?.name ?? null));
-	const milestoneName = (id: string | null) => (id == null ? null : (milestoneById.get(id)?.name ?? null));
+	const milestoneName = (id: string | null) =>
+		id == null ? null : (milestoneById.get(id)?.name ?? null);
 	const labelsOf = (taskId: string) =>
 		(labelIdsByTask.get(taskId) ?? []).map((id) => labelById.get(id)).filter(Boolean);
 	const taskLabelIds = (taskId: string) => labelIdsByTask.get(taskId) ?? [];
@@ -291,7 +342,9 @@
 	const hideEmptyGroups = $derived(config.hideEmptyGroups !== false);
 
 	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
-	const aggFieldIds = $derived(Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []);
+	const aggFieldIds = $derived(
+		Array.isArray(config.aggregations) ? (config.aggregations as string[]) : []
+	);
 
 	// Sort (config.sortBy): handled by the shared sortTasks helper (BASDEV-7).
 	const sortBy = $derived(typeof config.sortBy === 'string' ? (config.sortBy as string) : null);
@@ -336,345 +389,400 @@
 </script>
 
 <div class="table-view">
-{#if topTasks.length === 0}
-	<div class="empty">
-		<p class="u-muted" style="margin-bottom: var(--sp-3);">{$i18n('No tasks here.')}</p>
-		<button class="add-fab" aria-label={$i18n('New task')} onclick={() => onNewTask?.()}>
-			+
-		</button>
-		<p class="u-tiny u-muted" style="margin-top: var(--sp-2);">{$i18n('New task')}</p>
-	</div>
-{:else}
-	<div class="table-wrap">
-		<table class="table" class:cols-fixed={hasWidths} style={hasWidths ? `width:${tableWidth}px` : ''}>
-			<colgroup>
-				{#each orderedCols as key (key)}<col style={colStyle(key)} />{/each}
-			</colgroup>
-			<thead>
-				<tr>
-					<th class="col-select">
-						<input
-							type="checkbox"
-							aria-label={$i18n('Select all')}
-							checked={selection.allSelected(orderedIds)}
-							onclick={() =>
-								selection.allSelected(orderedIds)
-									? selection.clear()
-									: selection.selectAll(orderedIds)}
-						/>{@render rh('select')}
-					</th>
-					<th class="col-status">{$i18n('Status')}{@render rh('status')}</th>
-					<th class="col-title">{$i18n('Title')}{@render rh('title')}</th>
-					{#if show('priority')}<th>{$i18n('Priority')}{@render rh('priority')}</th>{/if}
-					{#if show('assignee')}<th>{$i18n('Assignee')}{@render rh('assignee')}</th>{/if}
-					{#if show('milestone')}<th>{$i18n('Milestone')}{@render rh('milestone')}</th>{/if}
-					{#if show('due')}<th>{$i18n('Due date')}{@render rh('due')}</th>{/if}
-					{#if show('labels')}<th>{$i18n('Labels')}{@render rh('labels')}</th>{/if}
-					{#each cfCols as c (c.key)}{#if show(c.key)}<th>{c.label}{@render rh(c.key)}</th>{/if}{/each}
-					<th class="col-actions">
-						{#if canEditView && viewId}
-							<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-							<div class="col-menu-wrap" onclick={(e) => e.stopPropagation()}>
-								<button
-									class="col-menu-btn"
-									aria-label={$i18n('Show or hide columns')}
-									aria-expanded={colMenuOpen}
-									onclick={() => (colMenuOpen = !colMenuOpen)}
-								>
-									<Icon name="more-horiz" size={16} />
-								</button>
-								{#if colMenuOpen}
-									<div class="col-menu" transition:popover>
-										{#if onNewTask}
-											<button
-												class="col-menu-item"
-												type="button"
-												onclick={() => {
-													colMenuOpen = false;
-													onNewTask?.();
-												}}
-											>
-												<span class="col-check">+</span>
-												{$i18n('Create task…')}
-											</button>
-											<div class="col-menu-rule"></div>
-										{/if}
-										{#each COLS as key (key)}
-											<form
-												method="POST"
-												action="?/updateView"
-												use:enhance={() => async ({ update }) => update()}
-											>
-												<input type="hidden" name="id" value={viewId} />
-												<input type="hidden" name="name" value={viewName} />
-												<input type="hidden" name="config" value={toggledConfig(key)} />
-												<button class="col-menu-item" type="submit">
-													<span class="col-check">{show(key) ? '✓' : ''}</span>
-													{$i18n(COL_LABELS[key])}
-												</button>
-											</form>
-										{/each}
-										{#each cfCols as c (c.key)}
-											<form
-												method="POST"
-												action="?/updateView"
-												use:enhance={() => async ({ update }) => update()}
-											>
-												<input type="hidden" name="id" value={viewId} />
-												<input type="hidden" name="name" value={viewName} />
-												<input type="hidden" name="config" value={toggledConfig(c.key)} />
-												<button class="col-menu-item" type="submit">
-													<span class="col-check">{show(c.key) ? '✓' : ''}</span>
-													{c.label}
-												</button>
-											</form>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						{/if}
-					</th>
-				</tr>
-			</thead>
-			{#each groups as g (g.key)}
-				<tbody>
-					{#if groupBy}
-						<tr class="group-row">
-							<td class="col-select">
-								<button
-									class="group-toggle"
-									type="button"
-									aria-expanded={!collapsed[g.key]}
-									aria-label={$i18n('Toggle group')}
-									onclick={() => (collapsed[g.key] = !collapsed[g.key])}
-								>
-									<Icon name={collapsed[g.key] ? 'nav-arrow-right' : 'nav-arrow-down'} size={14} />
-								</button>
-							</td>
-							<td colspan={colCount - 1}>
-								<div class="group-head">
-									<span class="group-title">{g.title}</span>
-									{#if showCount}<span class="group-count">{g.tasks.length}</span>{/if}
-									{#each fieldAggregations(aggFieldIds, customFields, g.tasks, taskCustomValues, tasks) as a (a.id)}
-										<span class="group-agg" use:tooltip={a.name}>({a.text})</span>
-									{/each}
-									{#if onNewTask}
-										<button
-											class="group-add"
-											aria-label={$i18n('New task')}
-											use:tooltip={$i18n('New task')}
-											onclick={() => onNewTask?.(groupPrefill(g))}
-										>
-											+
-										</button>
-									{/if}
-								</div>
-							</td>
-						</tr>
-					{/if}
-					{#if !collapsed[g.key]}{@render groupRows(g.tasks)}{/if}
-				</tbody>
-			{/each}
-		</table>
-	</div>
-{/if}
-
-{#snippet rh(key: string)}
-	{#if canEditView && viewId}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<span class="col-resize" use:tooltip={$i18n('Drag to resize')} onpointerdown={(e) => startResize(e, key)}></span>
-	{/if}
-{/snippet}
-
-{#snippet groupRows(rows: Task[])}
-				{#each rows as t (t.id)}
-					{@const subs = subsOf(t.id)}
-					{@const doneSubs = subs.filter((s) => isDone(s)).length}
-					{@const deps = depsOf(t.id)}
-					<tr class="task-row" class:is-done={isDone(t)} class:selected={nav.selectedId === t.id}>
-						<td class="col-select" onclick={(e) => e.stopPropagation()}>
+	{#if topTasks.length === 0}
+		<div class="empty">
+			<p class="u-muted" style="margin-bottom: var(--sp-3);">{$i18n('No tasks here.')}</p>
+			<button class="add-fab" aria-label={$i18n('New task')} onclick={() => onNewTask?.()}>
+				+
+			</button>
+			<p class="u-tiny u-muted" style="margin-top: var(--sp-2);">{$i18n('New task')}</p>
+		</div>
+	{:else}
+		<div class="table-wrap">
+			<table
+				class="table"
+				class:cols-fixed={hasWidths}
+				style={hasWidths ? `width:${tableWidth}px` : ''}
+			>
+				<colgroup>
+					{#each orderedCols as key (key)}<col style={colStyle(key)} />{/each}
+				</colgroup>
+				<thead>
+					<tr>
+						<th class="col-select">
 							<input
 								type="checkbox"
-								aria-label={$i18n('Select task')}
-								checked={selection.has(t.id)}
-								onclick={(e) => {
-									e.stopPropagation();
-									if ((e as MouseEvent).shiftKey) selection.range(t.id, orderedIds);
-									else selection.toggle(t.id);
-								}}
+								aria-label={$i18n('Select all')}
+								checked={selection.allSelected(orderedIds)}
+								onclick={() =>
+									selection.allSelected(orderedIds)
+										? selection.clear()
+										: selection.selectAll(orderedIds)}
+							/>{@render rh('select')}
+						</th>
+						<th class="col-status">{$i18n('Status')}{@render rh('status')}</th>
+						<th class="col-title">{$i18n('Title')}{@render rh('title')}</th>
+						{#if show('priority')}<th>{$i18n('Priority')}{@render rh('priority')}</th>{/if}
+						{#if show('assignee')}<th>{$i18n('Assignee')}{@render rh('assignee')}</th>{/if}
+						{#if show('milestone')}<th>{$i18n('Milestone')}{@render rh('milestone')}</th>{/if}
+						{#if show('due')}<th>{$i18n('Due date')}{@render rh('due')}</th>{/if}
+						{#if show('labels')}<th>{$i18n('Labels')}{@render rh('labels')}</th>{/if}
+						{#each cfCols as c (c.key)}{#if show(c.key)}<th>{c.label}{@render rh(c.key)}</th
+								>{/if}{/each}
+						<th class="col-actions">
+							{#if canEditView && viewId}
+								<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+								<div class="col-menu-wrap" onclick={(e) => e.stopPropagation()}>
+									<button
+										class="col-menu-btn"
+										aria-label={$i18n('Show or hide columns')}
+										aria-expanded={colMenuOpen}
+										onclick={() => (colMenuOpen = !colMenuOpen)}
+									>
+										<Icon name="more-horiz" size={16} />
+									</button>
+									{#if colMenuOpen}
+										<div class="col-menu" transition:popover>
+											{#if onNewTask}
+												<button
+													class="col-menu-item"
+													type="button"
+													onclick={() => {
+														colMenuOpen = false;
+														onNewTask?.();
+													}}
+												>
+													<span class="col-check">+</span>
+													{$i18n('Create task…')}
+												</button>
+												<div class="col-menu-rule"></div>
+											{/if}
+											{#each COLS as key (key)}
+												<form
+													method="POST"
+													action="?/updateView"
+													use:enhance={() =>
+														async ({ update }) =>
+															update()}
+												>
+													<input type="hidden" name="id" value={viewId} />
+													<input type="hidden" name="name" value={viewName} />
+													<input type="hidden" name="config" value={toggledConfig(key)} />
+													<button class="col-menu-item" type="submit">
+														<span class="col-check">{show(key) ? '✓' : ''}</span>
+														{$i18n(COL_LABELS[key])}
+													</button>
+												</form>
+											{/each}
+											{#each cfCols as c (c.key)}
+												<form
+													method="POST"
+													action="?/updateView"
+													use:enhance={() =>
+														async ({ update }) =>
+															update()}
+												>
+													<input type="hidden" name="id" value={viewId} />
+													<input type="hidden" name="name" value={viewName} />
+													<input type="hidden" name="config" value={toggledConfig(c.key)} />
+													<button class="col-menu-item" type="submit">
+														<span class="col-check">{show(c.key) ? '✓' : ''}</span>
+														{c.label}
+													</button>
+												</form>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</th>
+					</tr>
+				</thead>
+				{#each groups as g (g.key)}
+					<tbody>
+						{#if groupBy}
+							<tr class="group-row">
+								<td class="col-select">
+									<button
+										class="group-toggle"
+										type="button"
+										aria-expanded={!collapsed[g.key]}
+										aria-label={$i18n('Toggle group')}
+										onclick={() => (collapsed[g.key] = !collapsed[g.key])}
+									>
+										<Icon
+											name={collapsed[g.key] ? 'nav-arrow-right' : 'nav-arrow-down'}
+											size={14}
+										/>
+									</button>
+								</td>
+								<td colspan={colCount - 1}>
+									<div class="group-head">
+										<span class="group-title">{g.title}</span>
+										{#if showCount}<span class="group-count">{g.tasks.length}</span>{/if}
+										{#each fieldAggregations(aggFieldIds, customFields, g.tasks, taskCustomValues, tasks) as a (a.id)}
+											<span class="group-agg" use:tooltip={a.name}>({a.text})</span>
+										{/each}
+										{#if onNewTask}
+											<button
+												class="group-add"
+												aria-label={$i18n('New task')}
+												use:tooltip={$i18n('New task')}
+												onclick={() => onNewTask?.(groupPrefill(g))}
+											>
+												+
+											</button>
+										{/if}
+									</div>
+								</td>
+							</tr>
+						{/if}
+						{#if !collapsed[g.key]}{@render groupRows(g.tasks)}{/if}
+					</tbody>
+				{/each}
+			</table>
+		</div>
+	{/if}
+
+	{#snippet rh(key: string)}
+		{#if canEditView && viewId}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<span
+				class="col-resize"
+				use:tooltip={$i18n('Drag to resize')}
+				onpointerdown={(e) => startResize(e, key)}
+			></span>
+		{/if}
+	{/snippet}
+
+	{#snippet groupRows(rows: Task[])}
+		{#each rows as t (t.id)}
+			{@const subs = subsOf(t.id)}
+			{@const doneSubs = subs.filter((s) => isDone(s)).length}
+			{@const deps = depsOf(t.id)}
+			<tr class="task-row" class:is-done={isDone(t)} class:selected={nav.selectedId === t.id}>
+				<td class="col-select" onclick={(e) => e.stopPropagation()}>
+					<input
+						type="checkbox"
+						aria-label={$i18n('Select task')}
+						checked={selection.has(t.id)}
+						onclick={(e) => {
+							e.stopPropagation();
+							if ((e as MouseEvent).shiftKey) selection.range(t.id, orderedIds);
+							else selection.toggle(t.id);
+						}}
+					/>
+				</td>
+				<td class="col-status">
+					<StatusSelect
+						taskId={t.id}
+						statusId={t.statusId}
+						{statuses}
+						canEdit={canEditTask(t)}
+						display={statusDisplay}
+					/>
+				</td>
+				<td>
+					<div class="title-cell">
+						{#if subs.length > 0}
+							<button
+								class="chev"
+								onclick={() => (expanded[t.id] = !expanded[t.id])}
+								aria-expanded={expanded[t.id] ?? false}
+								aria-label={$i18n('Toggle sub-tasks')}
+							>
+								{#if expanded[t.id]}<Icon name="nav-arrow-down" size={12} />{:else}<Icon
+										name="nav-arrow-right"
+										size={12}
+									/>{/if}
+							</button>
+						{:else}
+							<span class="chev-spacer" aria-hidden="true"></span>
+						{/if}
+						<button
+							class="task-title"
+							class:selected={nav.selectedId === t.id}
+							onclick={() => nav.openDetail(t)}
+						>
+							{#if t.coverFileId}<img
+									class="row-cover"
+									src={`/api/files/${t.coverFileId}`}
+									alt=""
+									loading="lazy"
+								/>{/if}
+							<span class="title-text">{t.title}</span>
+						</button>
+						{#if deps.length > 0}
+							<span
+								class="badge badge-sm"
+								use:tooltip={$i18n('Blocked by {names}', {
+									names: deps.map((d) => d!.title).join(', ')
+								})}
+							>
+								⛓ {deps.length}
+							</span>
+						{/if}
+						{#if subs.length > 0}
+							<span class="badge badge-sm">{doneSubs}/{subs.length}</span>
+						{/if}
+					</div>
+				</td>
+				{#if show('priority')}
+					<td><PriorityBadge priority={t.priority} /></td>
+				{/if}
+				{#if show('assignee')}
+					<td>
+						{#if userName(t.assigneeId)}
+							<span class="badge badge-neutral badge-sm">{userName(t.assigneeId)}</span>
+						{:else}<span class="u-muted">—</span>{/if}
+					</td>
+				{/if}
+				{#if show('milestone')}
+					<td>
+						{#if milestoneName(t.milestoneId)}{milestoneName(t.milestoneId)}{:else}<span
+								class="u-muted">—</span
+							>{/if}
+					</td>
+				{/if}
+				{#if show('due')}
+					<td class="mono">{fmtDate(t.dueDate) ?? '—'}</td>
+				{/if}
+				{#if show('labels')}
+					<td>
+						<div class="cell-labels">
+							{#each labelsOf(t.id) as l (l!.id)}
+								<LabelChip label={l!} size={11} />
+							{:else}
+								<span class="u-muted">—</span>
+							{/each}
+						</div>
+					</td>
+				{/if}
+				{#each cfCols as c (c.key)}
+					{#if show(c.key)}
+						<td>
+							<CustomFieldValue
+								field={c.field}
+								options={cfOptions(c.field.id)}
+								value={cfValue(t.id, c.field.id)}
+								rollupText={rollupText(t.id, c.field)}
+								mode="cell"
+								{users}
+								{locations}
+								tasks={allTasks}
+								files={filesByTask.get(t.id) ?? []}
 							/>
 						</td>
-						<td class="col-status">
-							<StatusSelect taskId={t.id} statusId={t.statusId} {statuses} canEdit={canEditTask(t)} display={statusDisplay} />
-						</td>
+					{/if}
+				{/each}
+				<td class="col-actions"></td>
+			</tr>
+
+			{#each expanded[t.id] ? subs : [] as s (s.id)}
+				<tr class="sub-row-tr" class:is-done={isDone(s)} class:selected={nav.selectedId === s.id}>
+					<td class="col-select"></td>
+					<td class="col-status">
+						<StatusSelect
+							taskId={s.id}
+							statusId={s.statusId}
+							{statuses}
+							canEdit={canEditTask(s)}
+							display={statusDisplay}
+						/>
+					</td>
+					<td>
+						<div class="title-cell">
+							<span class="chev-spacer" aria-hidden="true"></span>
+							<button
+								class="task-title"
+								class:selected={nav.selectedId === s.id}
+								onclick={() => nav.openDetail(s)}
+							>
+								<span class="title-text">{s.title}</span>
+							</button>
+						</div>
+					</td>
+					{#if show('priority')}
+						<td><PriorityBadge priority={s.priority} /></td>
+					{/if}
+					{#if show('assignee')}
 						<td>
-							<div class="title-cell">
-								{#if subs.length > 0}
-									<button
-										class="chev"
-										onclick={() => (expanded[t.id] = !expanded[t.id])}
-										aria-expanded={expanded[t.id] ?? false}
-										aria-label={$i18n('Toggle sub-tasks')}
-									>
-										{#if expanded[t.id]}<Icon name="nav-arrow-down" size={12} />{:else}<Icon name="nav-arrow-right" size={12} />{/if}
-									</button>
-								{:else}
-									<span class="chev-spacer" aria-hidden="true"></span>
-								{/if}
-								<button
-									class="task-title"
-									class:selected={nav.selectedId === t.id}
-									onclick={() => nav.openDetail(t)}
-								>
-									{#if t.coverFileId}<img class="row-cover" src={`/api/files/${t.coverFileId}`} alt="" loading="lazy" />{/if}
-									<span class="title-text">{t.title}</span>
-								</button>
-								{#if deps.length > 0}
-									<span class="badge badge-sm" use:tooltip={$i18n('Blocked by {names}', { names: deps.map((d) => d!.title).join(', ') })}>
-										⛓ {deps.length}
-									</span>
-								{/if}
-								{#if subs.length > 0}
-									<span class="badge badge-sm">{doneSubs}/{subs.length}</span>
-								{/if}
+							{#if userName(s.assigneeId)}<span class="badge badge-neutral badge-sm"
+									>{userName(s.assigneeId)}</span
+								>{:else}<span class="u-muted">—</span>{/if}
+						</td>
+					{/if}
+					{#if show('milestone')}
+						<td
+							>{#if milestoneName(s.milestoneId)}{milestoneName(s.milestoneId)}{:else}<span
+									class="u-muted">—</span
+								>{/if}</td
+						>
+					{/if}
+					{#if show('due')}
+						<td class="mono">{fmtDate(s.dueDate) ?? '—'}</td>
+					{/if}
+					{#if show('labels')}
+						<td>
+							<div class="cell-labels">
+								{#each labelsOf(s.id) as l (l!.id)}<LabelChip label={l!} size={11} />{:else}<span
+										class="u-muted">—</span
+									>{/each}
 							</div>
 						</td>
-						{#if show('priority')}
-							<td><PriorityBadge priority={t.priority} /></td>
-						{/if}
-						{#if show('assignee')}
+					{/if}
+					{#each cfCols as c (c.key)}
+						{#if show(c.key)}
 							<td>
-								{#if userName(t.assigneeId)}
-									<span class="badge badge-neutral badge-sm">{userName(t.assigneeId)}</span>
-								{:else}<span class="u-muted">—</span>{/if}
-							</td>
-						{/if}
-						{#if show('milestone')}
-							<td>
-								{#if milestoneName(t.milestoneId)}{milestoneName(t.milestoneId)}{:else}<span class="u-muted">—</span>{/if}
-							</td>
-						{/if}
-						{#if show('due')}
-							<td class="mono">{fmtDate(t.dueDate) ?? '—'}</td>
-						{/if}
-						{#if show('labels')}
-							<td>
-								<div class="cell-labels">
-									{#each labelsOf(t.id) as l (l!.id)}
-										<LabelChip label={l!} size={11} />
-									{:else}
-										<span class="u-muted">—</span>
-									{/each}
-								</div>
-							</td>
-						{/if}
-						{#each cfCols as c (c.key)}
-							{#if show(c.key)}
-								<td>
+								{#if fieldAppliesTo(c.field, true)}
 									<CustomFieldValue
 										field={c.field}
 										options={cfOptions(c.field.id)}
-										value={cfValue(t.id, c.field.id)}
-										rollupText={rollupText(t.id, c.field)}
+										value={cfValue(s.id, c.field.id)}
+										rollupText={rollupText(s.id, c.field)}
 										mode="cell"
 										{users}
 										{locations}
 										tasks={allTasks}
-										files={filesByTask.get(t.id) ?? []}
+										files={filesByTask.get(s.id) ?? []}
 									/>
-								</td>
-							{/if}
-						{/each}
-						<td class="col-actions"></td>
-					</tr>
-
-					{#each expanded[t.id] ? subs : [] as s (s.id)}
-						<tr class="sub-row-tr" class:is-done={isDone(s)} class:selected={nav.selectedId === s.id}>
-							<td class="col-select"></td>
-							<td class="col-status">
-								<StatusSelect taskId={s.id} statusId={s.statusId} {statuses} canEdit={canEditTask(s)} display={statusDisplay} />
+								{:else}<span class="u-muted">—</span>{/if}
 							</td>
-							<td>
-								<div class="title-cell">
-									<span class="chev-spacer" aria-hidden="true"></span>
-									<button class="task-title" class:selected={nav.selectedId === s.id} onclick={() => nav.openDetail(s)}>
-										<span class="title-text">{s.title}</span>
-									</button>
-								</div>
-							</td>
-							{#if show('priority')}
-								<td><PriorityBadge priority={s.priority} /></td>
-							{/if}
-							{#if show('assignee')}
-								<td>
-									{#if userName(s.assigneeId)}<span class="badge badge-neutral badge-sm">{userName(s.assigneeId)}</span>{:else}<span class="u-muted">—</span>{/if}
-								</td>
-							{/if}
-							{#if show('milestone')}
-								<td>{#if milestoneName(s.milestoneId)}{milestoneName(s.milestoneId)}{:else}<span class="u-muted">—</span>{/if}</td>
-							{/if}
-							{#if show('due')}
-								<td class="mono">{fmtDate(s.dueDate) ?? '—'}</td>
-							{/if}
-							{#if show('labels')}
-								<td>
-									<div class="cell-labels">
-										{#each labelsOf(s.id) as l (l!.id)}<LabelChip label={l!} size={11} />{:else}<span class="u-muted">—</span>{/each}
-									</div>
-								</td>
-							{/if}
-							{#each cfCols as c (c.key)}
-								{#if show(c.key)}
-									<td>
-										{#if fieldAppliesTo(c.field, true)}
-											<CustomFieldValue
-												field={c.field}
-												options={cfOptions(c.field.id)}
-												value={cfValue(s.id, c.field.id)}
-												rollupText={rollupText(s.id, c.field)}
-												mode="cell"
-												{users}
-												{locations}
-												tasks={allTasks}
-												files={filesByTask.get(s.id) ?? []}
-											/>
-										{:else}<span class="u-muted">—</span>{/if}
-									</td>
-								{/if}
-							{/each}
-							<td class="col-actions"></td>
-						</tr>
+						{/if}
 					{/each}
-				{/each}
-{/snippet}
+					<td class="col-actions"></td>
+				</tr>
+			{/each}
+		{/each}
+	{/snippet}
 
-{#if nav.selected}
-	<TaskPanel
-		task={nav.selected}
-		tasks={allTasks}
-		{users}
-		{statuses}
-		{milestones}
-		{locations}
-		{labels}
-		{taskLabels}
-		{taskDeps}
-		{customFields}
-		{customFieldOptions}
-		{taskCustomValues}
-		{files}
-		{canEditTask}
-		{templates}
-		{statusDisplay}
-		back={nav.backTask}
-		onBack={nav.navBack}
-		onClose={() => {
-			nav.selectedId = null;
-			nav.backStack = [];
-		}}
-		onSelectTask={(id) => nav.navTask(id)}
-	/>
-{/if}
+	{#if nav.selected}
+		<TaskPanel
+			task={nav.selected}
+			tasks={allTasks}
+			{users}
+			{statuses}
+			{milestones}
+			{locations}
+			{labels}
+			{taskLabels}
+			{taskDeps}
+			{customFields}
+			{customFieldOptions}
+			{taskCustomValues}
+			{files}
+			{canEditTask}
+			{templates}
+			{statusDisplay}
+			back={nav.backTask}
+			onBack={nav.navBack}
+			onClose={() => {
+				nav.selectedId = null;
+				nav.backStack = [];
+			}}
+			onSelectTask={(id) => nav.navTask(id)}
+		/>
+	{/if}
 </div>
 
 <svelte:window onclick={() => (colMenuOpen = false)} />
@@ -762,7 +870,6 @@
 		padding-right: var(--sp-3);
 	}
 
-
 	.group-head {
 		display: flex;
 		align-items: center;
@@ -779,7 +886,9 @@
 		cursor: pointer;
 		padding: 2px 0;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.group-toggle:hover {

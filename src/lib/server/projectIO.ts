@@ -69,7 +69,13 @@ export type ProjectExport = {
 		config: string;
 		appliesTo: string;
 		position: number;
-		options: { id: string; title: string; color: string | null; icon: string | null; position: number }[];
+		options: {
+			id: string;
+			title: string;
+			color: string | null;
+			icon: string | null;
+			position: number;
+		}[];
 	}[];
 	tasks: {
 		id: string;
@@ -123,7 +129,9 @@ export async function buildProjectExport(projectId: string): Promise<ProjectExpo
 			listProjectCustomFields(projectId)
 		]);
 
-	const statusName = new Map((allStatuses as { id: string; name: string }[]).map((s) => [s.id, s.name]));
+	const statusName = new Map(
+		(allStatuses as { id: string; name: string }[]).map((s) => [s.id, s.name])
+	);
 
 	const fieldIds = customFields.map((f) => f.id);
 	const taskIds = tasks.map((t) => t.id);
@@ -230,7 +238,10 @@ export async function importProjectFromExport(
 	const d = doc as Partial<ProjectExport>;
 	assert(d.version === 1, 'Unsupported export version');
 	assert(d.project && typeof d.project === 'object', 'Invalid file: missing project');
-	assert(typeof d.project.name === 'string' && d.project.name.trim(), 'Invalid file: missing project name');
+	assert(
+		typeof d.project.name === 'string' && d.project.name.trim(),
+		'Invalid file: missing project name'
+	);
 
 	const statuses = Array.isArray(d.statuses) ? d.statuses : [];
 	const milestones = Array.isArray(d.milestones) ? d.milestones : [];

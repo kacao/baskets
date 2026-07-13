@@ -17,7 +17,8 @@ export function isPreviewableImage(mime: string | null | undefined): boolean {
 	return !!mime && mime.startsWith('image/') && mime !== 'image/svg+xml';
 }
 
-const DOC_MIME = /(pdf|word|excel|spreadsheet|presentation|powerpoint|csv|text\/|json|zip|rtf|opendocument)/i;
+const DOC_MIME =
+	/(pdf|word|excel|spreadsheet|presentation|powerpoint|csv|text\/|json|zip|rtf|opendocument)/i;
 
 /** Coarse category used by the Files page type filter. */
 export function fileKind(mime: string | null | undefined): FileKind {

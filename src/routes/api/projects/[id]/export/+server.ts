@@ -47,7 +47,8 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 	if (format !== 'csv' && format !== 'json')
 		return apiError(400, 'Unsupported format (csv or json)');
 
-	const safeName = (proj.name || 'project').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 60) || 'project';
+	const safeName =
+		(proj.name || 'project').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 60) || 'project';
 
 	if (format === 'json') {
 		const doc = await buildProjectExport(params.id);
@@ -103,7 +104,8 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 		if (f.type === 'person' || f.type === 'files') {
 			try {
 				const arr = JSON.parse(r.value);
-				if (Array.isArray(arr)) for (const id of arr) (f.type === 'person' ? userIds : fileIds).add(String(id));
+				if (Array.isArray(arr))
+					for (const id of arr) (f.type === 'person' ? userIds : fileIds).add(String(id));
 			} catch {
 				/* ignore malformed */
 			}
@@ -114,10 +116,16 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 
 	const [users, files] = await Promise.all([
 		userIds.size
-			? db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, [...userIds]))
+			? db
+					.select({ id: user.id, name: user.name })
+					.from(user)
+					.where(inArray(user.id, [...userIds]))
 			: Promise.resolve([] as { id: string; name: string }[]),
 		fileIds.size
-			? db.select({ id: file.id, filename: file.filename }).from(file).where(inArray(file.id, [...fileIds]))
+			? db
+					.select({ id: file.id, filename: file.filename })
+					.from(file)
+					.where(inArray(file.id, [...fileIds]))
 			: Promise.resolve([] as { id: string; filename: string }[])
 	]);
 	const userName = new Map(users.map((u) => [u.id, u.name]));

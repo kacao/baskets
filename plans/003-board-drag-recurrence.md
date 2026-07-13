@@ -67,43 +67,42 @@ import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
 ### Site A — `setTaskStatusService` (spawns correctly today). Current excerpt:
 
 ```ts
-	void logActivity(projectId, taskId, actor.id, 'status', { to: statusId });
+void logActivity(projectId, taskId, actor.id, 'status', { to: statusId });
 
-	// Recurring task: when it moves into a completed status, spawn the next
-	// occurrence with its due date advanced by the recurrence rule (BASDEV-8).
-	const wasCompleted =
-		eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-	if (target.category === 'completed' && !wasCompleted && existing.recurrence) {
-		const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
-		const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-		if (backlog) {
-			const spawnNow = new Date();
-			await db.insert(task).values({
-				id: crypto.randomUUID(),
-				projectId: existing.projectId,
-				parentId: existing.parentId,
-				title: existing.title,
-				description: existing.description,
-				priority: existing.priority,
-				statusId: backlog.id,
-				assigneeId: existing.assigneeId,
-				milestoneId: existing.milestoneId,
-				locationId: existing.locationId,
-				startDate: existing.startDate,
-				dueDate: nextDue,
-				recurrence: existing.recurrence,
-				createdBy: actor.id,
-				position: spawnNow.getTime(),
-				createdAt: spawnNow,
-				updatedAt: spawnNow
-			});
-		}
+// Recurring task: when it moves into a completed status, spawn the next
+// occurrence with its due date advanced by the recurrence rule (BASDEV-8).
+const wasCompleted = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+if (target.category === 'completed' && !wasCompleted && existing.recurrence) {
+	const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
+	const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
+	if (backlog) {
+		const spawnNow = new Date();
+		await db.insert(task).values({
+			id: crypto.randomUUID(),
+			projectId: existing.projectId,
+			parentId: existing.parentId,
+			title: existing.title,
+			description: existing.description,
+			priority: existing.priority,
+			statusId: backlog.id,
+			assigneeId: existing.assigneeId,
+			milestoneId: existing.milestoneId,
+			locationId: existing.locationId,
+			startDate: existing.startDate,
+			dueDate: nextDue,
+			recurrence: existing.recurrence,
+			createdBy: actor.id,
+			position: spawnNow.getTime(),
+			createdAt: spawnNow,
+			updatedAt: spawnNow
+		});
 	}
+}
 
-	// Completing a parent completes its sub-tasks
-	if (target.category === 'completed') {
-		await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.parentId, taskId));
-	}
+// Completing a parent completes its sub-tasks
+if (target.category === 'completed') {
+	await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.parentId, taskId));
+}
 ```
 
 ### Site B — `moveTaskService` (THE BUG — no spawn). Current excerpt (the tail, after the position write):
@@ -136,44 +135,44 @@ import { isValidRecurrence, nextDueDate } from '$lib/recurrence';
 ### Site C — `updateTaskService`, inside `if (opts.completeCascade) { ... }` (spawns correctly today). Current excerpt:
 
 ```ts
-	// Completing a parent completes its sub-tasks + recurrence spawn (REST PATCH).
-	if (opts.completeCascade) {
-		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-		if (targetStatus?.category === 'completed' && !wasDone) {
-			if (existing.recurrence) {
-				const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
-				const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-				if (backlog) {
-					const spawnNow = new Date();
-					await db.insert(task).values({
-						id: crypto.randomUUID(),
-						projectId: existing.projectId,
-						parentId: existing.parentId,
-						title: existing.title,
-						description: existing.description,
-						priority: existing.priority,
-						statusId: backlog.id,
-						assigneeId: existing.assigneeId,
-						milestoneId: existing.milestoneId,
-						locationId: existing.locationId,
-						startDate: existing.startDate,
-						dueDate: nextDue,
-						recurrence: existing.recurrence,
-						createdBy: actor.id,
-						position: spawnNow.getTime(),
-						createdAt: spawnNow,
-						updatedAt: spawnNow
-					});
-				}
+// Completing a parent completes its sub-tasks + recurrence spawn (REST PATCH).
+if (opts.completeCascade) {
+	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	if (targetStatus?.category === 'completed' && !wasDone) {
+		if (existing.recurrence) {
+			const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
+			const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
+			if (backlog) {
+				const spawnNow = new Date();
+				await db.insert(task).values({
+					id: crypto.randomUUID(),
+					projectId: existing.projectId,
+					parentId: existing.parentId,
+					title: existing.title,
+					description: existing.description,
+					priority: existing.priority,
+					statusId: backlog.id,
+					assigneeId: existing.assigneeId,
+					milestoneId: existing.milestoneId,
+					locationId: existing.locationId,
+					startDate: existing.startDate,
+					dueDate: nextDue,
+					recurrence: existing.recurrence,
+					createdBy: actor.id,
+					position: spawnNow.getTime(),
+					createdAt: spawnNow,
+					updatedAt: spawnNow
+				});
 			}
-
-			await db
-				.update(task)
-				.set({ statusId: targetStatus.id, updatedAt: new Date() })
-				.where(eq(task.parentId, taskId));
-			// ... dispatchEvent(task.completed) ...
 		}
+
+		await db
+			.update(task)
+			.set({ statusId: targetStatus.id, updatedAt: new Date() })
+			.where(eq(task.parentId, taskId));
+		// ... dispatchEvent(task.completed) ...
 	}
+}
 ```
 
 Note Sites A and C insert **byte-identical** `task` value objects. The only inputs
@@ -182,13 +181,13 @@ condition. That is exactly what makes a shared helper safe.
 
 ## Commands you will need
 
-| Purpose        | Command                     | Expected on success                    |
-|----------------|-----------------------------|----------------------------------------|
-| Typecheck      | `npm run check`             | exit 0, 0 errors, 0 warnings           |
-| Unit tests     | `npm run test:unit`         | all pass (baseline: 416 tests)         |
-| Integration    | `npm run test:integration`  | all pass (needs live server — see below)|
-| Start dev srv  | `npm run dev`               | serves on `http://localhost:5173`      |
-| Seed DB        | `npm run db:seed`           | seeds admin/demo + sample data         |
+| Purpose       | Command                    | Expected on success                      |
+| ------------- | -------------------------- | ---------------------------------------- |
+| Typecheck     | `npm run check`            | exit 0, 0 errors, 0 warnings             |
+| Unit tests    | `npm run test:unit`        | all pass (baseline: 416 tests)           |
+| Integration   | `npm run test:integration` | all pass (needs live server — see below) |
+| Start dev srv | `npm run dev`              | serves on `http://localhost:5173`        |
+| Seed DB       | `npm run db:seed`          | seeds admin/demo + sample data           |
 
 Integration + Playwright tests require a running dev server on `:5173` AND a
 seeded DB. In one terminal run `npm run dev`; in another run `npm run db:seed`
@@ -197,10 +196,12 @@ once, then the test command.
 ## Scope
 
 **In scope** (the only files you should modify):
+
 - `src/lib/server/tasks.ts`
 - `tests/integration/board-recurrence.test.ts` (create)
 
 **Out of scope** (do NOT touch):
+
 - `src/lib/recurrence.ts` — the spawn math is already correct; reuse it.
 - The in-progress milestone-inheritance edits in `createTaskService` /
   `updateTaskService` re-parent branch — leave them exactly as you find them.
@@ -274,14 +275,13 @@ block (the whole `const nextDue ... }` shown in Site A) with a single call. Keep
 the existing `wasCompleted` computation and the sub-task cascade that follows:
 
 ```ts
-	const wasCompleted =
-		eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-	await spawnRecurrenceIfCompleting(existing, eligible, target.category, wasCompleted, actor);
+const wasCompleted = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+await spawnRecurrenceIfCompleting(existing, eligible, target.category, wasCompleted, actor);
 
-	// Completing a parent completes its sub-tasks
-	if (target.category === 'completed') {
-		await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.parentId, taskId));
-	}
+// Completing a parent completes its sub-tasks
+if (target.category === 'completed') {
+	await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.parentId, taskId));
+}
 ```
 
 **Verify**: `npm run check` → exit 0. `npm run test:unit` → all pass.
@@ -293,16 +293,16 @@ replace the inner `if (existing.recurrence) { ... }` block (the whole insert sho
 in Site C) with a call. `wasDone` and `targetStatus` are already in scope here:
 
 ```ts
-		if (targetStatus?.category === 'completed' && !wasDone) {
-			await spawnRecurrenceIfCompleting(existing, eligible, targetStatus.category, wasDone, actor);
+if (targetStatus?.category === 'completed' && !wasDone) {
+	await spawnRecurrenceIfCompleting(existing, eligible, targetStatus.category, wasDone, actor);
 
-			await db
-				.update(task)
-				.set({ statusId: targetStatus.id, updatedAt: new Date() })
-				.where(eq(task.parentId, taskId));
+	await db
+		.update(task)
+		.set({ statusId: targetStatus.id, updatedAt: new Date() })
+		.where(eq(task.parentId, taskId));
 
-			// ...leave the existing dispatchEvent(task.completed) block unchanged...
-		}
+	// ...leave the existing dispatchEvent(task.completed) block unchanged...
+}
 ```
 
 **Verify**: `npm run check` → exit 0. `npm run test:unit` → all pass.
@@ -314,20 +314,17 @@ the existing `const wasDone = ...` line, add the spawn call BEFORE the sub-task
 cascade. Final shape of that tail:
 
 ```ts
-	await db
-		.update(task)
-		.set({ statusId, position, updatedAt: new Date() })
-		.where(eq(task.id, taskId));
+await db.update(task).set({ statusId, position, updatedAt: new Date() }).where(eq(task.id, taskId));
 
-	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-	await spawnRecurrenceIfCompleting(existing, eligible, target.category, wasDone, actor);
-	if (target.category === 'completed') {
-		await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.parentId, taskId));
-	}
-	if (target.category === 'completed' && !wasDone) {
-		const [proj] = await db.select().from(project).where(eq(project.id, projectId));
-		void dispatchEvent({ /* ...unchanged... */ });
-	}
+const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+await spawnRecurrenceIfCompleting(existing, eligible, target.category, wasDone, actor);
+if (target.category === 'completed') {
+	await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.parentId, taskId));
+}
+if (target.category === 'completed' && !wasDone) {
+	const [proj] = await db.select().from(project).where(eq(project.id, projectId));
+	void dispatchEvent({/* ...unchanged... */});
+}
 ```
 
 **Verify**: `npm run check` → exit 0. `grep -c "await db.insert(task).values" src/lib/server/tasks.ts`

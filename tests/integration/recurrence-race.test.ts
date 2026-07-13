@@ -36,10 +36,7 @@ let skipReason = '';
 const createdProjectIds = new Set<string>();
 
 /** fetch wrapper that attaches the session cookie + JSON content-type. */
-async function api(
-	path: string,
-	init: RequestInit & { json?: unknown } = {}
-): Promise<Response> {
+async function api(path: string, init: RequestInit & { json?: unknown } = {}): Promise<Response> {
 	const { json: body, headers, ...rest } = init;
 	return fetch(`${BASE}${path}`, {
 		...rest,
@@ -162,35 +159,39 @@ async function countByTitle(projectId: string, title: string): Promise<number> {
 
 const rid = () => crypto.randomUUID();
 
-describe.skipIf(!RUN_INTEGRATION)('recurrence spawn race on concurrent completes (Plan 020)', () => {
-	it('firing two concurrent PATCH .../Completed on a recurring task spawns exactly ONE next occurrence, every iteration', async () => {
-		if (!ensureAuth()) return;
+describe.skipIf(!RUN_INTEGRATION)(
+	'recurrence spawn race on concurrent completes (Plan 020)',
+	() => {
+		it('firing two concurrent PATCH .../Completed on a recurring task spawns exactly ONE next occurrence, every iteration', async () => {
+			if (!ensureAuth()) return;
 
-		const projectId = await createProject(`Recurrence race ${rid()}`);
-		expect(projectId).toBeTruthy();
+			const projectId = await createProject(`Recurrence race ${rid()}`);
+			expect(projectId).toBeTruthy();
 
-		const ITERATIONS = 12;
-		const counts: number[] = [];
+			const ITERATIONS = 12;
+			const counts: number[] = [];
 
-		for (let i = 0; i < ITERATIONS; i++) {
-			const title = `race-task-${rid()}`;
-			const taskId = await createRecurringTask(projectId, title);
+			for (let i = 0; i < ITERATIONS; i++) {
+				const title = `race-task-${rid()}`;
+				const taskId = await createRecurringTask(projectId, title);
 
-			const [a, b] = await Promise.all([
-				api(`/api/tasks/${taskId}`, { method: 'PATCH', json: { status: 'Completed' } }),
-				api(`/api/tasks/${taskId}`, { method: 'PATCH', json: { status: 'Completed' } })
-			]);
-			expect([a.status, b.status]).toEqual([200, 200]);
+				const [a, b] = await Promise.all([
+					api(`/api/tasks/${taskId}`, { method: 'PATCH', json: { status: 'Completed' } }),
+					api(`/api/tasks/${taskId}`, { method: 'PATCH', json: { status: 'Completed' } })
+				]);
+				expect([a.status, b.status]).toEqual([200, 200]);
 
-			const count = await countByTitle(projectId, title);
-			counts.push(count);
-		}
+				const count = await countByTitle(projectId, title);
+				counts.push(count);
+			}
 
-		// eslint-disable-next-line no-console
-		console.log('[recurrence-race] per-iteration task counts (expect 2 always):', counts);
+			// eslint-disable-next-line no-console
+			console.log('[recurrence-race] per-iteration task counts (expect 2 always):', counts);
 
-		expect(counts.every((c) => c === 2), `expected every iteration to be 2, got: ${counts.join(',')}`).toBe(
-			true
-		);
-	});
-});
+			expect(
+				counts.every((c) => c === 2),
+				`expected every iteration to be 2, got: ${counts.join(',')}`
+			).toBe(true);
+		});
+	}
+);

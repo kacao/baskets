@@ -213,19 +213,23 @@ export const permission = sqliteTable(
 	(t) => [unique().on(t.userId, t.resourceType, t.resourceId)]
 );
 
-export const milestone = sqliteTable('milestone', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	name: text('name').notNull(),
-	description: text('description'),
-	startDate: integer('start_date', { mode: 'timestamp' }),
-	targetDate: integer('target_date', { mode: 'timestamp' }),
-	position: integer('position').notNull().default(0),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-}, (t) => [index('idx_milestone_project').on(t.projectId)]);
+export const milestone = sqliteTable(
+	'milestone',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		description: text('description'),
+		startDate: integer('start_date', { mode: 'timestamp' }),
+		targetDate: integer('target_date', { mode: 'timestamp' }),
+		position: integer('position').notNull().default(0),
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [index('idx_milestone_project').on(t.projectId)]
+);
 
 // Labels and groups are workspace-scoped (no app-wide labels).
 // Name uniqueness enforced in code per workspace; workspaceId nullable only
@@ -247,19 +251,23 @@ export const milestoneDependency = sqliteTable(
 
 // Saved places (project-scoped), pickable on tasks (task.locationId) and plotted
 // by map views. Title + optional address + coordinates.
-export const location = sqliteTable('location', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	title: text('title').notNull(),
-	address: text('address'),
-	latitude: real('latitude'),
-	longitude: real('longitude'),
-	position: integer('position').notNull().default(0),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-}, (t) => [index('idx_location_project').on(t.projectId)]);
+export const location = sqliteTable(
+	'location',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		title: text('title').notNull(),
+		address: text('address'),
+		latitude: real('latitude'),
+		longitude: real('longitude'),
+		position: integer('position').notNull().default(0),
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [index('idx_location_project').on(t.projectId)]
+);
 
 export const labelGroup = sqliteTable('label_group', {
 	id: text('id').primaryKey(),
@@ -336,37 +344,38 @@ export const taskDependency = sqliteTable(
 	(t) => [primaryKey({ columns: [t.taskId, t.dependsOnId] })]
 );
 
-export const task = sqliteTable('task', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	parentId: text('parent_id'), // self-reference: null = top-level task
-	title: text('title').notNull(),
-	description: text('description'),
-	statusId: text('status_id')
-		.notNull()
-		.references(() => status.id),
-	priority: text('priority').notNull().default('none'), // none | low | medium | high | urgent
-	assigneeId: text('assignee_id').references(() => user.id),
-	milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
-	locationId: text('location_id').references(() => location.id, { onDelete: 'set null' }),
-	location: text('location'), // legacy freeform "lat, lng" (map fallback when no locationId)
-	order: integer('task_order'), // user-assigned rank for list views; null = unranked
-	position: integer('position').notNull().default(0),
-	startDate: integer('start_date', { mode: 'timestamp' }), // timeline/calendar bar start (BASDEV-5/11)
-	dueDate: integer('due_date', { mode: 'timestamp' }),
-	recurrence: text('recurrence'), // simple repeat rule e.g. "weekly:1" (BASDEV-8); null = one-off
-	coverFileId: text('cover_file_id'), // optional cover image (BASDEV-12)
-	createdBy: text('created_by')
-		.notNull()
-		.references(() => user.id),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-}, (t) => [
-	index('idx_task_project').on(t.projectId),
-	index('idx_task_parent').on(t.parentId)
-]);
+export const task = sqliteTable(
+	'task',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		parentId: text('parent_id'), // self-reference: null = top-level task
+		title: text('title').notNull(),
+		description: text('description'),
+		statusId: text('status_id')
+			.notNull()
+			.references(() => status.id),
+		priority: text('priority').notNull().default('none'), // none | low | medium | high | urgent
+		assigneeId: text('assignee_id').references(() => user.id),
+		milestoneId: text('milestone_id').references(() => milestone.id, { onDelete: 'set null' }),
+		locationId: text('location_id').references(() => location.id, { onDelete: 'set null' }),
+		location: text('location'), // legacy freeform "lat, lng" (map fallback when no locationId)
+		order: integer('task_order'), // user-assigned rank for list views; null = unranked
+		position: integer('position').notNull().default(0),
+		startDate: integer('start_date', { mode: 'timestamp' }), // timeline/calendar bar start (BASDEV-5/11)
+		dueDate: integer('due_date', { mode: 'timestamp' }),
+		recurrence: text('recurrence'), // simple repeat rule e.g. "weekly:1" (BASDEV-8); null = one-off
+		coverFileId: text('cover_file_id'), // optional cover image (BASDEV-12)
+		createdBy: text('created_by')
+			.notNull()
+			.references(() => user.id),
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [index('idx_task_project').on(t.projectId), index('idx_task_parent').on(t.parentId)]
+);
 
 // Project-scoped custom fields on tasks. `type` is a free string from
 // CUSTOM_FIELD_TYPES ($lib/customFields); `config` is schemaless JSON whose
@@ -441,65 +450,81 @@ export const projectCustomValue = sqliteTable(
 // Uploaded files (Files & media custom fields). Bytes live on local disk under
 // UPLOADS_DIR (default ./data/uploads); storagePath is relative and NEVER sent
 // to the client — files are served only via the access-gated /api/files/[id].
-export const file = sqliteTable('file', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	fieldId: text('field_id').references(() => customField.id, { onDelete: 'set null' }),
-	taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
-	filename: text('filename').notNull(),
-	mimeType: text('mime_type').notNull(),
-	size: integer('size').notNull(),
-	storagePath: text('storage_path').notNull(),
-	createdBy: text('created_by')
-		.notNull()
-		.references(() => user.id),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
-}, (t) => [index('idx_file_project').on(t.projectId)]);
+export const file = sqliteTable(
+	'file',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		fieldId: text('field_id').references(() => customField.id, { onDelete: 'set null' }),
+		taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
+		filename: text('filename').notNull(),
+		mimeType: text('mime_type').notNull(),
+		size: integer('size').notNull(),
+		storagePath: text('storage_path').notNull(),
+		createdBy: text('created_by')
+			.notNull()
+			.references(() => user.id),
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [index('idx_file_project').on(t.projectId)]
+);
 
 // Threaded comments on a task (BASDEV-3).
-export const comment = sqliteTable('comment', {
-	id: text('id').primaryKey(),
-	taskId: text('task_id')
-		.notNull()
-		.references(() => task.id, { onDelete: 'cascade' }),
-	authorId: text('author_id')
-		.notNull()
-		.references(() => user.id),
-	body: text('body').notNull(),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-	updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-}, (t) => [index('idx_comment_task').on(t.taskId)]);
+export const comment = sqliteTable(
+	'comment',
+	{
+		id: text('id').primaryKey(),
+		taskId: text('task_id')
+			.notNull()
+			.references(() => task.id, { onDelete: 'cascade' }),
+		authorId: text('author_id')
+			.notNull()
+			.references(() => user.id),
+		body: text('body').notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [index('idx_comment_task').on(t.taskId)]
+);
 
 // Append-only audit trail of task/project changes (BASDEV-3).
-export const activity = sqliteTable('activity', {
-	id: text('id').primaryKey(),
-	projectId: text('project_id')
-		.notNull()
-		.references(() => project.id, { onDelete: 'cascade' }),
-	taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
-	actorId: text('actor_id')
-		.notNull()
-		.references(() => user.id),
-	type: text('type').notNull(), // created | status | assignee | milestone | due | comment | ...
-	data: text('data').notNull().default('{}'), // schemaless JSON detail (from/to, etc.)
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
-}, (t) => [index('idx_activity_task').on(t.taskId)]);
+export const activity = sqliteTable(
+	'activity',
+	{
+		id: text('id').primaryKey(),
+		projectId: text('project_id')
+			.notNull()
+			.references(() => project.id, { onDelete: 'cascade' }),
+		taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
+		actorId: text('actor_id')
+			.notNull()
+			.references(() => user.id),
+		type: text('type').notNull(), // created | status | assignee | milestone | due | comment | ...
+		data: text('data').notNull().default('{}'), // schemaless JSON detail (from/to, etc.)
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [index('idx_activity_task').on(t.taskId)]
+);
 
 // Per-user in-app notifications (BASDEV-4).
-export const notification = sqliteTable('notification', {
-	id: text('id').primaryKey(),
-	userId: text('user_id')
-		.notNull()
-		.references(() => user.id, { onDelete: 'cascade' }),
-	type: text('type').notNull(), // assigned | mention | due_soon | overdue | ...
-	projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
-	taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
-	body: text('body').notNull(),
-	read: integer('read', { mode: 'boolean' }).notNull().default(false),
-	createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
-}, (t) => [index('idx_notification_user').on(t.userId)]);
+export const notification = sqliteTable(
+	'notification',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		type: text('type').notNull(), // assigned | mention | due_soon | overdue | ...
+		projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
+		taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
+		body: text('body').notNull(),
+		read: integer('read', { mode: 'boolean' }).notNull().default(false),
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+	},
+	(t) => [index('idx_notification_user').on(t.userId)]
+);
 
 // Reusable task templates, workspace- or project-scoped (BASDEV-8).
 export const template = sqliteTable('template', {

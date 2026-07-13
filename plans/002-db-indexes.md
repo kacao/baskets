@@ -43,7 +43,7 @@ the single biggest cheap scaling win available.
   unique constraints (see below) — the exact same callback is where indexes go.
 - `src/lib/server/db/schema.pg.ts` — Postgres **mirror**. Table + column NAMES
   must stay byte-identical to the sqlite file; only column TYPES differ. Its
-  header comment (lines 12–16) says: *"Keep the two files in lockstep."* You
+  header comment (lines 12–16) says: _"Keep the two files in lockstep."_ You
   MUST edit BOTH files identically for this change.
 - `src/lib/server/db/schema.ts` — thin facade re-exporting the active dialect's
   tables; **do not touch it**.
@@ -69,6 +69,7 @@ returned from the table's third-arg callback in the SAME array as existing
 the callback pattern (copy this exact structure):
 
 `schema.sqlite.ts:158–169` (`project_status`):
+
 ```ts
 export const projectStatus = sqliteTable(
 	'project_status',
@@ -86,17 +87,21 @@ export const projectStatus = sqliteTable(
 
 `schema.sqlite.ts:191–206` (`permission`) already has a `.unique().on(...)`
 inside the callback:
+
 ```ts
-	(t) => [unique().on(t.userId, t.resourceType, t.resourceId)]
+(t) => [unique().on(t.userId, t.resourceType, t.resourceId)];
 ```
 
 ### Current imports (top of each file)
 
 `schema.sqlite.ts:1`:
+
 ```ts
 import { sqliteTable, text, integer, real, primaryKey, unique } from 'drizzle-orm/sqlite-core';
 ```
+
 `schema.pg.ts:1–10`:
+
 ```ts
 import {
 	pgTable,
@@ -109,29 +114,30 @@ import {
 	unique
 } from 'drizzle-orm/pg-core';
 ```
+
 You must add `index` to BOTH import lists.
 
 ### Columns to index (target set)
 
 Priority columns (add these — they are hit on every project-page load):
 
-| Table (const)              | sqlite table name       | Column (prop → db col)          |
-|----------------------------|-------------------------|---------------------------------|
-| `task`                     | `task`                  | `projectId` → `project_id`      |
-| `task`                     | `task`                  | `parentId` → `parent_id`        |
-| `taskCustomValue`          | `task_custom_value`     | `taskId` → `task_id`            |
-| `taskLabel`                | `task_label`            | `taskId` → `task_id`            |
+| Table (const)     | sqlite table name   | Column (prop → db col)     |
+| ----------------- | ------------------- | -------------------------- |
+| `task`            | `task`              | `projectId` → `project_id` |
+| `task`            | `task`              | `parentId` → `parent_id`   |
+| `taskCustomValue` | `task_custom_value` | `taskId` → `task_id`       |
+| `taskLabel`       | `task_label`        | `taskId` → `task_id`       |
 
 Secondary columns (add these too — same rationale, other hot lists):
 
-| Table (const)              | sqlite table name       | Column (prop → db col)          |
-|----------------------------|-------------------------|---------------------------------|
-| `file`                     | `file`                  | `projectId` → `project_id`      |
-| `location`                 | `location`              | `projectId` → `project_id`      |
-| `milestone`                | `milestone`             | `projectId` → `project_id`      |
-| `comment`                  | `comment`               | `taskId` → `task_id`            |
-| `activity`                 | `activity`              | `taskId` → `task_id`            |
-| `notification`             | `notification`          | `userId` → `user_id`            |
+| Table (const)  | sqlite table name | Column (prop → db col)     |
+| -------------- | ----------------- | -------------------------- |
+| `file`         | `file`            | `projectId` → `project_id` |
+| `location`     | `location`        | `projectId` → `project_id` |
+| `milestone`    | `milestone`       | `projectId` → `project_id` |
+| `comment`      | `comment`         | `taskId` → `task_id`       |
+| `activity`     | `activity`        | `taskId` → `task_id`       |
+| `notification` | `notification`    | `userId` → `user_id`       |
 
 **STOP-check before adding each index**: skip any column that is already the
 LEADING column of an existing composite `primaryKey(...)` / `.unique().on(...)`
@@ -139,6 +145,7 @@ in that table's callback — that composite already provides a usable index and 
 duplicate is wasteful.
 
 Verified NOT covered (safe to add, these are the ones in the tables above):
+
 - `task.projectId`, `task.parentId` — `task` has no callback / no composite. ADD.
 - `file.projectId`, `location.projectId`, `milestone.projectId` — those tables
   have no composite PK (single `id` PK). ADD.
@@ -159,21 +166,23 @@ Net indexes to actually create (8): `task.projectId`, `task.parentId`,
 
 ## Commands you will need
 
-| Purpose        | Command                        | Expected on success                          |
-|----------------|--------------------------------|----------------------------------------------|
-| Typecheck      | `npm run check`                | exit 0, 0 errors / 0 warnings                |
-| Apply schema   | `npm run db:push`              | prints "Changes applied" (or "No changes")   |
-| Count indexes  | `grep -c "index(" src/lib/server/db/schema.sqlite.ts` | > 0               |
-| Count indexes  | `grep -c "index(" src/lib/server/db/schema.pg.ts`     | > 0               |
-| Unit tests     | `npm run test:unit`            | all pass (416 tests)                         |
+| Purpose       | Command                                               | Expected on success                        |
+| ------------- | ----------------------------------------------------- | ------------------------------------------ |
+| Typecheck     | `npm run check`                                       | exit 0, 0 errors / 0 warnings              |
+| Apply schema  | `npm run db:push`                                     | prints "Changes applied" (or "No changes") |
+| Count indexes | `grep -c "index(" src/lib/server/db/schema.sqlite.ts` | > 0                                        |
+| Count indexes | `grep -c "index(" src/lib/server/db/schema.pg.ts`     | > 0                                        |
+| Unit tests    | `npm run test:unit`                                   | all pass (416 tests)                       |
 
 ## Scope
 
 **In scope** (the only files you should modify):
+
 - `src/lib/server/db/schema.sqlite.ts`
 - `src/lib/server/db/schema.pg.ts`
 
 **Out of scope** (do NOT touch):
+
 - `src/lib/server/db/schema.ts` — facade; re-exports only.
 - Any query code in `src/lib/server/*.ts` — indexes are transparent to callers;
   no query changes are needed or wanted.
@@ -193,9 +202,19 @@ Net indexes to actually create (8): `task.projectId`, `task.parentId`,
 ### Step 1: Add `index` to both import statements
 
 In `src/lib/server/db/schema.sqlite.ts:1`, add `index` to the named imports:
+
 ```ts
-import { sqliteTable, text, integer, real, primaryKey, unique, index } from 'drizzle-orm/sqlite-core';
+import {
+	sqliteTable,
+	text,
+	integer,
+	real,
+	primaryKey,
+	unique,
+	index
+} from 'drizzle-orm/sqlite-core';
 ```
+
 In `src/lib/server/db/schema.pg.ts:1–10`, add `index` to the named import list
 (e.g. after `doublePrecision,`).
 
@@ -226,6 +245,7 @@ Do NOT add anything to `taskCustomValue` or `taskLabel` (composite PK covers
 their `taskId`).
 
 **Verify**:
+
 - `grep -c "index(" src/lib/server/db/schema.sqlite.ts` → `8`
 - `npm run check` → exit 0, 0 errors / 0 warnings
 
@@ -237,6 +257,7 @@ but the column props (`t.projectId`, `t.parentId`, `t.taskId`, `t.userId`) have
 the same names, so the callback bodies are byte-identical to Step 2.
 
 **Verify**:
+
 - `grep -c "index(" src/lib/server/db/schema.pg.ts` → `8`
 - `grep -o "idx_[a-z_]*" src/lib/server/db/schema.sqlite.ts | sort` **equals**
   `grep -o "idx_[a-z_]*" src/lib/server/db/schema.pg.ts | sort`
@@ -247,10 +268,13 @@ the same names, so the callback bodies are byte-identical to Step 2.
 
 The active dialect is read from `.env` (`DB_DIALECT`, default `sqlite`, DB file
 `./data/baskets.db`). Back up the DB file first if it exists:
+
 ```
 cp ./data/baskets.db ./data/baskets.db.bak 2>/dev/null || true
 ```
+
 Then:
+
 ```
 npm run db:push
 ```
@@ -263,6 +287,7 @@ apply here. If `db:push` errors, see STOP conditions.
 ### Step 5: Full check + unit tests
 
 **Verify**:
+
 - `npm run check` → exit 0, 0 errors / 0 warnings
 - `npm run test:unit` → all pass (416 tests). (These are pure-module tests; they
   do not touch the DB, so they should be unaffected — this is a regression gate.)

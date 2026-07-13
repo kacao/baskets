@@ -37,7 +37,9 @@
 <svelte:head><title>{data.workspace.name} — {$t('Settings')} — Baskets</title></svelte:head>
 
 <p class="u-tiny" style="margin-bottom: var(--sp-2);">
-	<a href="/workspaces" class="u-flex" style="gap: 4px;"><Icon name="arrow-left" size={12} /> {$t('Workspaces')}</a>
+	<a href="/workspaces" class="u-flex" style="gap: 4px;"
+		><Icon name="arrow-left" size={12} /> {$t('Workspaces')}</a
+	>
 </p>
 
 <h2 style="margin-bottom: var(--sp-4);">{$t('Workspace settings')}</h2>
@@ -52,7 +54,14 @@
 	<form method="POST" action="?/updateWorkspace" use:enhance>
 		<div class="field">
 			<label class="label" for="wname">{$t('Name')}</label>
-			<input id="wname" name="name" class="input" value={data.workspace.name} required maxlength="120" />
+			<input
+				id="wname"
+				name="name"
+				class="input"
+				value={data.workspace.name}
+				required
+				maxlength="120"
+			/>
 		</div>
 		<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">
 			{$t('Owner')}: {userName(data.workspace.ownerId)}
@@ -65,17 +74,25 @@
 <div class="card section">
 	<h4 style="margin-bottom: var(--sp-2);">{$t('Statuses')}</h4>
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
-		{$t('The five default statuses are fixed. Statuses added here are available to every project in this workspace.')}
+		{$t(
+			'The five default statuses are fixed. Statuses added here are available to every project in this workspace.'
+		)}
 	</p>
 
-	<StatusEditor categories={data.categories} inherited={data.defaults} statuses={data.customStatuses} />
+	<StatusEditor
+		categories={data.categories}
+		inherited={data.defaults}
+		statuses={data.customStatuses}
+	/>
 </div>
 
 <!-- Labels -->
 <div class="card section">
 	<h4 style="margin-bottom: var(--sp-2);">{$t('Labels')}</h4>
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
-		{$t('Labels can be attached to projects and tasks in this workspace. A label may belong to a group, but doesn’t have to.')}
+		{$t(
+			'Labels can be attached to projects and tasks in this workspace. A label may belong to a group, but doesn’t have to.'
+		)}
 	</p>
 
 	{#each grouped as section (section.group?.id ?? 'ungrouped')}
@@ -96,7 +113,11 @@
 					<span style="flex: 1;"></span>
 					<Popover ariaLabel={$t('Label color')}>
 						{#snippet trigger()}
-							<span class="cp-swatch" style="--c: {l.color ?? 'var(--color-border-subtle)'}" aria-hidden="true"></span>
+							<span
+								class="cp-swatch"
+								style="--c: {l.color ?? 'var(--color-border-subtle)'}"
+								aria-hidden="true"
+							></span>
 						{/snippet}
 						{#snippet panel(close)}
 							<ColorPicker
@@ -114,7 +135,10 @@
 					</Popover>
 					<Popover ariaLabel={$t('Label icon')}>
 						{#snippet trigger()}
-							{#if l.icon}<EntityIcon value={l.icon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
+							{#if l.icon}<EntityIcon value={l.icon} size={16} />{:else}<Icon
+									name="plus"
+									size={14}
+								/>{/if}
 						{/snippet}
 						{#snippet panel(close)}
 							<IconPicker
@@ -144,15 +168,23 @@
 	<form
 		method="POST"
 		action="?/createLabel"
-		use:enhance={() => async ({ update }) => {
-			newLabelIcon = '';
-			newLabelColor = '#71717a';
-			await update();
-		}}
+		use:enhance={() =>
+			async ({ update }) => {
+				newLabelIcon = '';
+				newLabelColor = '#71717a';
+				await update();
+			}}
 		class="u-flex label-create"
 		style="flex-wrap: wrap; margin-bottom: var(--sp-2);"
 	>
-		<input name="name" class="input name-in" style="width: 200px; max-width: 100%;" placeholder={$t('New label…')} required maxlength="40" />
+		<input
+			name="name"
+			class="input name-in"
+			style="width: 200px; max-width: 100%;"
+			placeholder={$t('New label…')}
+			required
+			maxlength="40"
+		/>
 		<Popover ariaLabel={$t('Label color')}>
 			{#snippet trigger()}
 				<span class="cp-swatch" style="--c: {newLabelColor}" aria-hidden="true"></span>
@@ -170,7 +202,10 @@
 		<input type="hidden" name="color" value={newLabelColor} />
 		<Popover ariaLabel={$t('Label icon')}>
 			{#snippet trigger()}
-				{#if newLabelIcon}<EntityIcon value={newLabelIcon} size={16} />{:else}<Icon name="plus" size={14} />{/if}
+				{#if newLabelIcon}<EntityIcon value={newLabelIcon} size={16} />{:else}<Icon
+						name="plus"
+						size={14}
+					/>{/if}
 			{/snippet}
 			{#snippet panel(close)}
 				<IconPicker
@@ -195,8 +230,20 @@
 		</select>
 		<button class="btn btn-sm btn-primary" type="submit">{$t('Add')}</button>
 	</form>
-	<form method="POST" action="?/createGroup" use:enhance class="u-flex group-create" style="flex-wrap: wrap;">
-		<input name="name" class="input" style="flex: 1; min-width: 140px;" placeholder={$t('New group…')} required />
+	<form
+		method="POST"
+		action="?/createGroup"
+		use:enhance
+		class="u-flex group-create"
+		style="flex-wrap: wrap;"
+	>
+		<input
+			name="name"
+			class="input"
+			style="flex: 1; min-width: 140px;"
+			placeholder={$t('New group…')}
+			required
+		/>
 		<button class="btn btn-sm" type="submit">{$t('Add group')}</button>
 	</form>
 </div>
@@ -232,7 +279,13 @@
 		{:else}
 			<p class="u-tiny u-muted" style="margin-bottom: var(--sp-1);">{$t('No grants yet.')}</p>
 		{/each}
-		<form method="POST" action="?/grantPermission" use:enhance class="u-flex grant-form" style="flex-wrap: wrap;">
+		<form
+			method="POST"
+			action="?/grantPermission"
+			use:enhance
+			class="u-flex grant-form"
+			style="flex-wrap: wrap;"
+		>
 			<select class="select" name="userId" required style="width: auto; flex: 1; min-width: 140px;">
 				<option value="">{$t('user…')}</option>
 				{#each data.users.filter((u) => u.id !== data.workspace.ownerId) as u (u.id)}

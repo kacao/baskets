@@ -37,7 +37,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	const ws = await getWorkspace(params.id);
 	if (!ws) return apiError(404, 'Workspace not found');
 	// ADR-019: don't confirm existence to users who can't access — 404, not 403
-	if (!(await canAccessWorkspace(locals.user, params.id))) return apiError(404, 'Workspace not found');
+	if (!(await canAccessWorkspace(locals.user, params.id)))
+		return apiError(404, 'Workspace not found');
 	if (!canManage(locals.user, ws.ownerId))
 		return apiError(403, 'Only admins or the owner can view workspace grants');
 
@@ -50,7 +51,8 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	const ws = await getWorkspace(params.id);
 	if (!ws) return apiError(404, 'Workspace not found');
 	// ADR-019: don't confirm existence to users who can't access — 404, not 403
-	if (!(await canAccessWorkspace(locals.user, params.id))) return apiError(404, 'Workspace not found');
+	if (!(await canAccessWorkspace(locals.user, params.id)))
+		return apiError(404, 'Workspace not found');
 	if (!canManage(locals.user, ws.ownerId))
 		return apiError(403, 'Only admins or the owner can grant permissions');
 
@@ -84,7 +86,8 @@ export const DELETE: RequestHandler = async ({ request, params, url, locals }) =
 	const ws = await getWorkspace(params.id);
 	if (!ws) return apiError(404, 'Workspace not found');
 	// ADR-019: don't confirm existence to users who can't access — 404, not 403
-	if (!(await canAccessWorkspace(locals.user, params.id))) return apiError(404, 'Workspace not found');
+	if (!(await canAccessWorkspace(locals.user, params.id)))
+		return apiError(404, 'Workspace not found');
 	if (!canManage(locals.user, ws.ownerId))
 		return apiError(403, 'Only admins or the owner can revoke permissions');
 

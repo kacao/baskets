@@ -82,11 +82,41 @@ await db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.i
 console.log('Creating default statuses…');
 const now = new Date();
 const statuses = [
-	{ id: 'status-backlog', name: 'Backlog', category: 'backlog', color: '#71717a', icon: 'iconoir:circle' },
-	{ id: 'status-planned', name: 'Planned', category: 'planned', color: '#3b82f6', icon: 'iconoir:clock' },
-	{ id: 'status-in-progress', name: 'In progress', category: 'in-progress', color: '#f59e0b', icon: 'iconoir:half-moon' },
-	{ id: 'status-completed', name: 'Completed', category: 'completed', color: '#16a34a', icon: 'iconoir:check-circle' },
-	{ id: 'status-canceled', name: 'Canceled', category: 'canceled', color: '#a1a1aa', icon: 'iconoir:xmark-circle' }
+	{
+		id: 'status-backlog',
+		name: 'Backlog',
+		category: 'backlog',
+		color: '#71717a',
+		icon: 'iconoir:circle'
+	},
+	{
+		id: 'status-planned',
+		name: 'Planned',
+		category: 'planned',
+		color: '#3b82f6',
+		icon: 'iconoir:clock'
+	},
+	{
+		id: 'status-in-progress',
+		name: 'In progress',
+		category: 'in-progress',
+		color: '#f59e0b',
+		icon: 'iconoir:half-moon'
+	},
+	{
+		id: 'status-completed',
+		name: 'Completed',
+		category: 'completed',
+		color: '#16a34a',
+		icon: 'iconoir:check-circle'
+	},
+	{
+		id: 'status-canceled',
+		name: 'Canceled',
+		category: 'canceled',
+		color: '#a1a1aa',
+		icon: 'iconoir:xmark-circle'
+	}
 ];
 await db
 	.insert(schema.status)
@@ -132,11 +162,11 @@ await db.insert(schema.project).values([
 ]);
 
 console.log('Creating views, statuses, milestones, labels…');
-await db.insert(schema.projectStatus).values(
-	[pid(1), pid(2)].flatMap((projectId) =>
-		statuses.map((s) => ({ projectId, statusId: s.id }))
-	)
-);
+await db
+	.insert(schema.projectStatus)
+	.values(
+		[pid(1), pid(2)].flatMap((projectId) => statuses.map((s) => ({ projectId, statusId: s.id })))
+	);
 
 await db.insert(schema.view).values(
 	[pid(1), pid(2)].map((projectId, i) => ({
@@ -171,9 +201,30 @@ await db.insert(schema.labelGroup).values({
 	createdAt: now
 });
 await db.insert(schema.label).values([
-	{ id: 'seed-label-1', name: 'design', workspaceId: WORKSPACE_ID, groupId: 'seed-label-group-1', position: 0, createdAt: now },
-	{ id: 'seed-label-2', name: 'engineering', workspaceId: WORKSPACE_ID, groupId: 'seed-label-group-1', position: 1, createdAt: now },
-	{ id: 'seed-label-3', name: 'urgent-review', workspaceId: WORKSPACE_ID, groupId: null, position: 2, createdAt: now }
+	{
+		id: 'seed-label-1',
+		name: 'design',
+		workspaceId: WORKSPACE_ID,
+		groupId: 'seed-label-group-1',
+		position: 0,
+		createdAt: now
+	},
+	{
+		id: 'seed-label-2',
+		name: 'engineering',
+		workspaceId: WORKSPACE_ID,
+		groupId: 'seed-label-group-1',
+		position: 1,
+		createdAt: now
+	},
+	{
+		id: 'seed-label-3',
+		name: 'urgent-review',
+		workspaceId: WORKSPACE_ID,
+		groupId: null,
+		position: 2,
+		createdAt: now
+	}
 ]);
 
 // Demo user can edit project 1 (admins implicitly edit everything)
@@ -241,13 +292,53 @@ await db.insert(schema.projectLabel).values([{ projectId: pid(1), labelId: 'seed
 
 // Sample custom fields on project 1: a Select (Severity) + a currency Number (Estimate).
 await db.insert(schema.customField).values([
-	{ id: 'seed-cf-1', projectId: pid(1), name: 'Severity', type: 'select', config: JSON.stringify({ multi: false, displayOption: 'text-icon' }), position: 0, createdAt: now },
-	{ id: 'seed-cf-2', projectId: pid(1), name: 'Estimate', type: 'number', config: JSON.stringify({ numberFormat: 'currency', currencyCode: 'USD' }), position: 10, createdAt: now }
+	{
+		id: 'seed-cf-1',
+		projectId: pid(1),
+		name: 'Severity',
+		type: 'select',
+		config: JSON.stringify({ multi: false, displayOption: 'text-icon' }),
+		position: 0,
+		createdAt: now
+	},
+	{
+		id: 'seed-cf-2',
+		projectId: pid(1),
+		name: 'Estimate',
+		type: 'number',
+		config: JSON.stringify({ numberFormat: 'currency', currencyCode: 'USD' }),
+		position: 10,
+		createdAt: now
+	}
 ]);
 await db.insert(schema.customFieldOption).values([
-	{ id: 'seed-cfo-1', fieldId: 'seed-cf-1', title: 'Low', color: '#16a34a', icon: 'iconoir:circle', position: 0, createdAt: now },
-	{ id: 'seed-cfo-2', fieldId: 'seed-cf-1', title: 'Medium', color: '#f59e0b', icon: 'iconoir:half-moon', position: 10, createdAt: now },
-	{ id: 'seed-cfo-3', fieldId: 'seed-cf-1', title: 'High', color: '#dc2626', icon: 'iconoir:fire-flame', position: 20, createdAt: now }
+	{
+		id: 'seed-cfo-1',
+		fieldId: 'seed-cf-1',
+		title: 'Low',
+		color: '#16a34a',
+		icon: 'iconoir:circle',
+		position: 0,
+		createdAt: now
+	},
+	{
+		id: 'seed-cfo-2',
+		fieldId: 'seed-cf-1',
+		title: 'Medium',
+		color: '#f59e0b',
+		icon: 'iconoir:half-moon',
+		position: 10,
+		createdAt: now
+	},
+	{
+		id: 'seed-cfo-3',
+		fieldId: 'seed-cf-1',
+		title: 'High',
+		color: '#dc2626',
+		icon: 'iconoir:fire-flame',
+		position: 20,
+		createdAt: now
+	}
 ]);
 await db.insert(schema.taskCustomValue).values([
 	{ taskId: tid(1), fieldId: 'seed-cf-1', value: JSON.stringify(['seed-cfo-3']) },

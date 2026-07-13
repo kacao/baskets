@@ -67,7 +67,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				kind: 'field',
 				fieldName: fieldName.get(r.fieldId) ?? 'Custom field',
 				taskId: r.taskId,
-				taskTitle: r.taskId ? taskTitle.get(r.taskId) ?? null : null
+				taskTitle: r.taskId ? (taskTitle.get(r.taskId) ?? null) : null
 			};
 		} else if (r.taskId) {
 			source = { kind: 'task', taskId: r.taskId, taskTitle: taskTitle.get(r.taskId) ?? 'Task' };
@@ -82,7 +82,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			mimeType: r.mimeType,
 			size: r.size,
 			createdAt: r.createdAt,
-			uploaderName: r.createdBy ? userName.get(r.createdBy) ?? null : null,
+			uploaderName: r.createdBy ? (userName.get(r.createdBy) ?? null) : null,
 			source
 		};
 	});

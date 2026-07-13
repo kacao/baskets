@@ -58,8 +58,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 
 	if (!userId || !['project', 'view'].includes(resourceType) || !resourceId)
 		return apiError(400, 'Invalid grant');
-	if (resourceType === 'project' && resourceId !== params.id)
-		return apiError(400, 'Invalid grant');
+	if (resourceType === 'project' && resourceId !== params.id) return apiError(400, 'Invalid grant');
 	if (resourceType === 'view') {
 		const [v] = await db.select().from(view).where(eq(view.id, resourceId));
 		if (!v || v.projectId !== params.id) return apiError(400, 'Invalid view');

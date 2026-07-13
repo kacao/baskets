@@ -92,7 +92,11 @@ export function groupTasks<T extends GroupableTask>(
 				title: l.name,
 				tasks: rows.filter((t) => ctx.labelIdsOf(t.id).includes(l.id))
 			})),
-			{ key: '_none', title: ctx.t('No label'), tasks: rows.filter((t) => ctx.labelIdsOf(t.id).length === 0) }
+			{
+				key: '_none',
+				title: ctx.t('No label'),
+				tasks: rows.filter((t) => ctx.labelIdsOf(t.id).length === 0)
+			}
 		];
 	} else {
 		return [{ key: '_all', title: '', tasks: rows }];

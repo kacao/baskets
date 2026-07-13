@@ -79,22 +79,29 @@ All line numbers are from `src/lib/components/views/TableView.svelte` at commit
 ### The linear-scan helpers (lines 165–167, 270–279)
 
 ```ts
-	const cfOptions = (fieldId: string) => customFieldOptions.filter((o) => o.fieldId === fieldId);
-	const cfValue = (taskId: string, fieldId: string) =>
-		taskCustomValues.find((v) => v.taskId === taskId && v.fieldId === fieldId)?.value ?? null;
+const cfOptions = (fieldId: string) => customFieldOptions.filter((o) => o.fieldId === fieldId);
+const cfValue = (taskId: string, fieldId: string) =>
+	taskCustomValues.find((v) => v.taskId === taskId && v.fieldId === fieldId)?.value ?? null;
 ```
 
 ```ts
-	const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'backlog';
-	const isDone = (t: Task) => cat(t.statusId) === 'completed';
-	const subsOf = (id: string) => tasks.filter((t) => t.parentId === id);
-	const userName = (id: string | null) => users.find((u) => u.id === id)?.name ?? null;
-	const milestoneName = (id: string | null) => milestones.find((m) => m.id === id)?.name ?? null;
-	const labelsOf = (taskId: string) =>
-		taskLabels.filter((l) => l.taskId === taskId).map((l) => labels.find((x) => x.id === l.labelId)).filter(Boolean);
-	const taskLabelIds = (taskId: string) => taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
-	const depsOf = (taskId: string) =>
-		taskDeps.filter((d) => d.taskId === taskId).map((d) => tasks.find((t) => t.id === d.dependsOnId)).filter(Boolean);
+const cat = (id: string) => statuses.find((s) => s.id === id)?.category ?? 'backlog';
+const isDone = (t: Task) => cat(t.statusId) === 'completed';
+const subsOf = (id: string) => tasks.filter((t) => t.parentId === id);
+const userName = (id: string | null) => users.find((u) => u.id === id)?.name ?? null;
+const milestoneName = (id: string | null) => milestones.find((m) => m.id === id)?.name ?? null;
+const labelsOf = (taskId: string) =>
+	taskLabels
+		.filter((l) => l.taskId === taskId)
+		.map((l) => labels.find((x) => x.id === l.labelId))
+		.filter(Boolean);
+const taskLabelIds = (taskId: string) =>
+	taskLabels.filter((l) => l.taskId === taskId).map((l) => l.labelId);
+const depsOf = (taskId: string) =>
+	taskDeps
+		.filter((d) => d.taskId === taskId)
+		.map((d) => tasks.find((t) => t.id === d.dependsOnId))
+		.filter(Boolean);
 ```
 
 `cfValue` is also consumed inside `rollupText` (line 168–181) via a local
@@ -104,24 +111,25 @@ correct automatically.
 ### The per-cell render call sites (parent row: lines 635–648; sub-row: 690–708)
 
 Parent-row custom-field cell:
+
 ```svelte
-						{#each cfCols as c (c.key)}
-							{#if show(c.key)}
-								<td>
-									<CustomFieldValue
-										field={c.field}
-										options={cfOptions(c.field.id)}
-										value={cfValue(t.id, c.field.id)}
-										rollupText={rollupText(t.id, c.field)}
-										mode="cell"
-										{users}
-										{locations}
-										tasks={allTasks}
-										files={files.filter((f) => f.taskId === t.id)}
-									/>
-								</td>
-							{/if}
-						{/each}
+{#each cfCols as c (c.key)}
+	{#if show(c.key)}
+		<td>
+			<CustomFieldValue
+				field={c.field}
+				options={cfOptions(c.field.id)}
+				value={cfValue(t.id, c.field.id)}
+				rollupText={rollupText(t.id, c.field)}
+				mode="cell"
+				{users}
+				{locations}
+				tasks={allTasks}
+				files={files.filter((f) => f.taskId === t.id)}
+			/>
+		</td>
+	{/if}
+{/each}
 ```
 
 Sub-row uses the same shape with `s.id` (lines 697, 703) and
@@ -144,24 +152,26 @@ that is the failure mode to catch (see STOP conditions).
 
 ## Commands you will need
 
-| Purpose     | Command                | Expected on success        |
-|-------------|------------------------|----------------------------|
-| Typecheck   | `npm run check`        | exit 0, 0 errors/warnings  |
-| Unit tests  | `npm run test:unit`    | all pass (416 tests)       |
-| Dev server  | `npm run dev`          | serves on :5173 (manual QA)|
+| Purpose    | Command             | Expected on success         |
+| ---------- | ------------------- | --------------------------- |
+| Typecheck  | `npm run check`     | exit 0, 0 errors/warnings   |
+| Unit tests | `npm run test:unit` | all pass (416 tests)        |
+| Dev server | `npm run dev`       | serves on :5173 (manual QA) |
 
 ## Scope
 
 **In scope**:
+
 - `src/lib/components/views/TableView.svelte` — the only file to modify.
 
 **Out of scope** (do NOT touch — list as follow-ups only):
+
 - `src/lib/components/views/ListView.svelte` and
   `src/lib/components/views/BoardView.svelte` — they share the same
   linear-scan shape but render far fewer rows; a separate follow-up plan can
   apply the identical treatment. Do NOT change them here.
 - `src/lib/customFields.ts` and `CustomFieldValue.svelte` — the cell component's
-  props stay identical; you only change how TableView *computes* the values it
+  props stay identical; you only change how TableView _computes_ the values it
   passes.
 - Any change to what CustomFieldValue receives (same `field`/`options`/`value`/
   `rollupText`/`users`/`locations`/`tasks`/`files` props) — output must be
@@ -184,63 +194,63 @@ Near the existing helpers (after `cfCols`, ~line 164, and before/around the
 current `cfValue`/`userName` definitions), add:
 
 ```ts
-	// O(1) lookup maps (must be $derived so they invalidate on data change).
-	const valueByTaskField = $derived(
-		new Map(taskCustomValues.map((v) => [`${v.taskId}:${v.fieldId}`, v.value]))
-	);
-	const optionsByField = $derived.by(() => {
-		const m = new Map<string, CustomFieldOption[]>();
-		for (const o of customFieldOptions) {
-			const arr = m.get(o.fieldId) ?? [];
-			arr.push(o);
-			m.set(o.fieldId, arr);
-		}
-		return m;
-	});
-	const userById = $derived(new Map(users.map((u) => [u.id, u])));
-	const milestoneById = $derived(new Map(milestones.map((m) => [m.id, m])));
-	const labelById = $derived(new Map(labels.map((l) => [l.id, l])));
-	const taskById = $derived(new Map(allTasks.map((t) => [t.id, t])));
-	const labelsByTask = $derived.by(() => {
-		const m = new Map<string, typeof labels>();
-		for (const tl of taskLabels) {
-			const lab = labels.find; // placeholder — replaced below
-		}
-		return m;
-	});
+// O(1) lookup maps (must be $derived so they invalidate on data change).
+const valueByTaskField = $derived(
+	new Map(taskCustomValues.map((v) => [`${v.taskId}:${v.fieldId}`, v.value]))
+);
+const optionsByField = $derived.by(() => {
+	const m = new Map<string, CustomFieldOption[]>();
+	for (const o of customFieldOptions) {
+		const arr = m.get(o.fieldId) ?? [];
+		arr.push(o);
+		m.set(o.fieldId, arr);
+	}
+	return m;
+});
+const userById = $derived(new Map(users.map((u) => [u.id, u])));
+const milestoneById = $derived(new Map(milestones.map((m) => [m.id, m])));
+const labelById = $derived(new Map(labels.map((l) => [l.id, l])));
+const taskById = $derived(new Map(allTasks.map((t) => [t.id, t])));
+const labelsByTask = $derived.by(() => {
+	const m = new Map<string, typeof labels>();
+	for (const tl of taskLabels) {
+		const lab = labels.find; // placeholder — replaced below
+	}
+	return m;
+});
 ```
 
 Do NOT keep the broken `labelsByTask` placeholder above — write it correctly as:
 
 ```ts
-	const labelIdsByTask = $derived.by(() => {
-		const m = new Map<string, string[]>();
-		for (const tl of taskLabels) {
-			const arr = m.get(tl.taskId) ?? [];
-			arr.push(tl.labelId);
-			m.set(tl.taskId, arr);
-		}
-		return m;
-	});
-	const depIdsByTask = $derived.by(() => {
-		const m = new Map<string, string[]>();
-		for (const d of taskDeps) {
-			const arr = m.get(d.taskId) ?? [];
-			arr.push(d.dependsOnId);
-			m.set(d.taskId, arr);
-		}
-		return m;
-	});
-	const filesByTask = $derived.by(() => {
-		const m = new Map<string, FileRef[]>();
-		for (const f of files) {
-			if (f.taskId == null) continue;
-			const arr = m.get(f.taskId) ?? [];
-			arr.push(f);
-			m.set(f.taskId, arr);
-		}
-		return m;
-	});
+const labelIdsByTask = $derived.by(() => {
+	const m = new Map<string, string[]>();
+	for (const tl of taskLabels) {
+		const arr = m.get(tl.taskId) ?? [];
+		arr.push(tl.labelId);
+		m.set(tl.taskId, arr);
+	}
+	return m;
+});
+const depIdsByTask = $derived.by(() => {
+	const m = new Map<string, string[]>();
+	for (const d of taskDeps) {
+		const arr = m.get(d.taskId) ?? [];
+		arr.push(d.dependsOnId);
+		m.set(d.taskId, arr);
+	}
+	return m;
+});
+const filesByTask = $derived.by(() => {
+	const m = new Map<string, FileRef[]>();
+	for (const f of files) {
+		if (f.taskId == null) continue;
+		const arr = m.get(f.taskId) ?? [];
+		arr.push(f);
+		m.set(f.taskId, arr);
+	}
+	return m;
+});
 ```
 
 (`FileRef`, `CustomFieldOption` are already imported/typed in this file — reuse
@@ -256,16 +266,17 @@ Replace the linear-scan helper bodies (keep the same names + signatures so no
 call site needs renaming):
 
 ```ts
-	const cfOptions = (fieldId: string) => optionsByField.get(fieldId) ?? [];
-	const cfValue = (taskId: string, fieldId: string) =>
-		valueByTaskField.get(`${taskId}:${fieldId}`) ?? null;
-	const userName = (id: string | null) => (id == null ? null : userById.get(id)?.name ?? null);
-	const milestoneName = (id: string | null) => (id == null ? null : milestoneById.get(id)?.name ?? null);
-	const labelsOf = (taskId: string) =>
-		(labelIdsByTask.get(taskId) ?? []).map((id) => labelById.get(id)).filter(Boolean);
-	const taskLabelIds = (taskId: string) => labelIdsByTask.get(taskId) ?? [];
-	const depsOf = (taskId: string) =>
-		(depIdsByTask.get(taskId) ?? []).map((id) => taskById.get(id)).filter(Boolean);
+const cfOptions = (fieldId: string) => optionsByField.get(fieldId) ?? [];
+const cfValue = (taskId: string, fieldId: string) =>
+	valueByTaskField.get(`${taskId}:${fieldId}`) ?? null;
+const userName = (id: string | null) => (id == null ? null : (userById.get(id)?.name ?? null));
+const milestoneName = (id: string | null) =>
+	id == null ? null : (milestoneById.get(id)?.name ?? null);
+const labelsOf = (taskId: string) =>
+	(labelIdsByTask.get(taskId) ?? []).map((id) => labelById.get(id)).filter(Boolean);
+const taskLabelIds = (taskId: string) => labelIdsByTask.get(taskId) ?? [];
+const depsOf = (taskId: string) =>
+	(depIdsByTask.get(taskId) ?? []).map((id) => taskById.get(id)).filter(Boolean);
 ```
 
 Leave `cat`, `isDone`, `subsOf` as they are (statuses/subs are small and/or
@@ -288,12 +299,15 @@ and note it.
 At the parent-row cell (line 647) and sub-row cell (line 703), replace
 `files={files.filter((f) => f.taskId === t.id)}` /
 `files={files.filter((f) => f.taskId === s.id)}` with:
+
 ```svelte
-	files={filesByTask.get(t.id) ?? []}
+files={filesByTask.get(t.id) ?? []}
 ```
+
 and
+
 ```svelte
-	files={filesByTask.get(s.id) ?? []}
+files={filesByTask.get(s.id) ?? []}
 ```
 
 The `cfValue(...)`, `cfOptions(...)`, `userName(...)`, `milestoneName(...)`,
@@ -301,6 +315,7 @@ The `cfValue(...)`, `cfOptions(...)`, `userName(...)`, `milestoneName(...)`,
 the same-named helpers you rewrote in Step 2.
 
 **Verify**:
+
 - `npm run check` → exit 0, 0 errors/warnings.
 - `grep -n "\.find(" src/lib/components/views/TableView.svelte` → the cf/user/
   milestone/label/dep resolution `.find(`s are gone (a residual `.find` in
@@ -315,6 +330,7 @@ custom fields (at least one `select`/`person`/`task` field with a column shown),
 labels on tasks, assignees, milestones, and a task with a file attachment.
 
 Confirm:
+
 1. Every cell renders the same values as before (custom fields, assignee names,
    milestone names, label chips, dependency badges, file counts).
 2. **Edit a task** (change status/assignee/a custom-field value from the pane or

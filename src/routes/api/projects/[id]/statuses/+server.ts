@@ -89,7 +89,11 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	if (hasStatusIds) {
 		if (!Array.isArray(body.statusIds) || !body.statusIds.every((v) => typeof v === 'string'))
 			return apiError(400, 'statusIds must be an array of status ids');
-		const res = await setProjectEligibleStatuses(params.id, body.statusIds as string[], locals.user);
+		const res = await setProjectEligibleStatuses(
+			params.id,
+			body.statusIds as string[],
+			locals.user
+		);
 		if (!res.ok) return apiError(res.status, res.message);
 	}
 

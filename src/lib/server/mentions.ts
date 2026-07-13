@@ -14,7 +14,13 @@ import { extractRefs } from '$lib/mentions';
 
 /** Unique user ids referenced via `@[…](person:id)` in the text. */
 export function mentionedUserIds(text: string | null | undefined): string[] {
-	return [...new Set(extractRefs(text).filter((r) => r.kind === 'person').map((r) => r.id))];
+	return [
+		...new Set(
+			extractRefs(text)
+				.filter((r) => r.kind === 'person')
+				.map((r) => r.id)
+		)
+	];
 }
 
 export async function notifyMentions(opts: {

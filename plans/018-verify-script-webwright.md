@@ -64,9 +64,10 @@ tests/webwright/outputs/
 tests/webwright/final_script_log.txt
 ```
 
-  So `final_runs/`, `screenshots/`, `outputs/`, and the log are already ignored;
-  the three SOURCE scratch files (`README.md`, `final_script.py`, `plan.md`) are
-  NOT ignored and remain tracked.
+So `final_runs/`, `screenshots/`, `outputs/`, and the log are already ignored;
+the three SOURCE scratch files (`README.md`, `final_script.py`, `plan.md`) are
+NOT ignored and remain tracked.
+
 - `tests/integration/**` and `tests/e2e/**` both require a live seeded server on
   `:5173` (integration via `vitest.integration.config.ts`; e2e via
   `playwright.config.ts`, which does NOT start a server) — so they must NOT be
@@ -76,16 +77,17 @@ Repo convention: conventional commits; branch `dev` is default.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Run the new gate | `npm run verify` | runs check THEN unit; exit 0 |
-| Confirm untracked | `git ls-files tests/webwright/` | fewer / zero entries |
-| Typecheck alone | `npm run check` | exit 0 |
-| Unit alone | `npm run test:unit` | all pass |
+| Purpose           | Command                         | Expected on success          |
+| ----------------- | ------------------------------- | ---------------------------- |
+| Run the new gate  | `npm run verify`                | runs check THEN unit; exit 0 |
+| Confirm untracked | `git ls-files tests/webwright/` | fewer / zero entries         |
+| Typecheck alone   | `npm run check`                 | exit 0                       |
+| Unit alone        | `npm run test:unit`             | all pass                     |
 
 ## Scope
 
 **In scope** (modify):
+
 - `package.json` — add a `verify` script.
 - `.gitignore` — add the three webwright scratch source files (so they stay
   untracked after removal).
@@ -96,6 +98,7 @@ Repo convention: conventional commits; branch `dev` is default.
   one solely for this.
 
 **Out of scope** (do NOT touch):
+
 - The webwright files' CONTENTS — untrack, don't edit or delete from disk.
 - `tests/integration/` and `tests/e2e/` — the verify gate deliberately excludes
   them (they need a live server).
@@ -143,6 +146,7 @@ git rm --cached tests/webwright/README.md tests/webwright/final_script.py tests/
 ```
 
 **Verify**:
+
 - `git ls-files tests/webwright/` → returns NOTHING (all three untracked).
 - `ls tests/webwright/` → the three files STILL EXIST on disk (only untracked).
 - `git status` → shows the three as deletions-from-index + `.gitignore` modified,
@@ -187,7 +191,7 @@ Stop and report back (do not improvise) if:
 - `npm run check` or `npm run test:unit` fails for pre-existing reasons —
   report the failure; do NOT weaken the `verify` script to hide it.
 - The tracked webwright file set differs from the excerpt (drift) — `git rm
-  --cached` only the files that are actually tracked; report the difference.
+--cached` only the files that are actually tracked; report the difference.
 - `git rm --cached` would remove a file another change depends on (unexpected) —
   STOP.
 

@@ -74,9 +74,14 @@
 						<input type="hidden" name="id" value={taskId} />
 						<input type="hidden" name="statusId" value={s.id} />
 						<button class="status-opt" class:active={s.id === statusId} style="--c: {colorOf(s)}">
-							{#if s.icon}<EntityIcon value={s.icon} size={14} />{:else}<span class="dot" aria-hidden="true"></span>{/if}
+							{#if s.icon}<EntityIcon value={s.icon} size={14} />{:else}<span
+									class="dot"
+									aria-hidden="true"
+								></span>{/if}
 							<span class="opt-name">{s.name}</span>
-							{#if s.id === statusId}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
+							{#if s.id === statusId}<span class="check" aria-hidden="true"
+									><Icon name="check" size={14} /></span
+								>{/if}
 						</button>
 					</form>
 				{/each}

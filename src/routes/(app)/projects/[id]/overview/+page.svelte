@@ -31,7 +31,8 @@
 
 <div class="ov-page">
 	<a href="/projects/{data.project.id}" class="ov-back u-flex">
-		<Icon name="arrow-left" size={12} /> {data.project.name}
+		<Icon name="arrow-left" size={12} />
+		{data.project.name}
 	</a>
 
 	{#if form?.message}
@@ -42,7 +43,9 @@
 		<form
 			method="POST"
 			action="?/updateProject"
-			use:enhance={() => async ({ update }) => update({ reset: false })}
+			use:enhance={() =>
+				async ({ update }) =>
+					update({ reset: false })}
 		>
 			<input
 				class="ov-title"

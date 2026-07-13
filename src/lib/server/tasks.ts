@@ -1,6 +1,15 @@
 import { and, count, eq, inArray, isNull, asc } from 'drizzle-orm';
 import { db, withTransaction, type DB } from '$lib/server/db';
-import { file, label, location, milestone, project, task, taskLabel, user } from '$lib/server/db/schema';
+import {
+	file,
+	label,
+	location,
+	milestone,
+	project,
+	task,
+	taskLabel,
+	user
+} from '$lib/server/db/schema';
 import { PRIORITIES } from '$lib/server/api';
 import { dispatchEvent } from '$lib/server/integrations';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
@@ -16,11 +25,14 @@ import { deleteFilesForTasks } from '$lib/server/uploads';
 export type Actor = { id: string; name?: string | null };
 
 export type ServiceResult<T> =
-	| { ok: true; data: T }
-	| { ok: false; status: number; message: string };
+	{ ok: true; data: T } | { ok: false; status: number; message: string };
 
 const ok = <T>(data: T): ServiceResult<T> => ({ ok: true, data });
-const err = (status: number, message: string): ServiceResult<never> => ({ ok: false, status, message });
+const err = (status: number, message: string): ServiceResult<never> => ({
+	ok: false,
+	status,
+	message
+});
 
 /** Custom-field entries (`{ fieldId, raw }`) passed straight to writeTaskCustomValues. */
 type CfEntry = { fieldId: string; raw: string | null };
@@ -105,8 +117,7 @@ export async function createTaskService(
 	actor: Actor
 ): Promise<ServiceResult<typeof task.$inferSelect>> {
 	const { projectId } = input;
-	if (!(await canAccessProject(actor, projectId)))
-		return err(403, 'No access to this project');
+	if (!(await canAccessProject(actor, projectId))) return err(403, 'No access to this project');
 
 	const title = input.title.trim();
 	const parentId = input.parentId ?? null;
@@ -242,8 +253,7 @@ export async function setTaskStatusService(
 
 	// Recurring task: when it moves into a completed status, spawn the next
 	// occurrence with its due date advanced by the recurrence rule (BASDEV-8).
-	const wasCompleted =
-		eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	const wasCompleted = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
 	await spawnRecurrenceIfCompleting(existing, eligible, target.category, wasCompleted, actor);
 
 	// Completing a parent completes its sub-tasks
@@ -442,8 +452,7 @@ export async function updateTaskService(
 		const milestoneId = input.milestoneId ?? null;
 		if (milestoneId) {
 			const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-			if (!m || m.projectId !== projectId)
-				return err(400, 'Milestone must belong to this project');
+			if (!m || m.projectId !== projectId) return err(400, 'Milestone must belong to this project');
 		}
 		set.milestoneId = milestoneId;
 	}
@@ -451,8 +460,7 @@ export async function updateTaskService(
 		const locationId = input.locationId ?? null;
 		if (locationId) {
 			const [l] = await db.select().from(location).where(eq(location.id, locationId));
-			if (!l || l.projectId !== projectId)
-				return err(400, 'Location must belong to this project');
+			if (!l || l.projectId !== projectId) return err(400, 'Location must belong to this project');
 		}
 		set.locationId = locationId;
 	}
@@ -503,7 +511,9 @@ export async function updateTaskService(
 
 	// Completing a parent completes its sub-tasks + recurrence spawn (REST PATCH).
 	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-	const didCascade = Boolean(opts.completeCascade && targetStatus?.category === 'completed' && !wasDone);
+	const didCascade = Boolean(
+		opts.completeCascade && targetStatus?.category === 'completed' && !wasDone
+	);
 
 	// CF write, task update, and (on a completing transition) the recurrence spawn
 	// + sub-task cascade all happen atomically (ADR-057) — a CF validation error
@@ -529,7 +539,14 @@ export async function updateTaskService(
 				.returning();
 
 			if (didCascade && targetStatus) {
-				await spawnRecurrenceIfCompleting(existing, eligible, targetStatus.category, wasDone, actor, tx);
+				await spawnRecurrenceIfCompleting(
+					existing,
+					eligible,
+					targetStatus.category,
+					wasDone,
+					actor,
+					tx
+				);
 
 				await tx
 					.update(task)
@@ -657,7 +674,9 @@ export type BulkSet = {
 	parentId?: string | null;
 	addLabelIds?: string[];
 	removeLabelIds?: string[];
-	has: (key: 'statusId' | 'statusName' | 'assigneeId' | 'milestoneId' | 'priority' | 'parentId') => boolean;
+	has: (
+		key: 'statusId' | 'statusName' | 'assigneeId' | 'milestoneId' | 'priority' | 'parentId'
+	) => boolean;
 };
 
 export async function bulkUpdateTasks(
@@ -679,9 +698,7 @@ export async function bulkUpdateTasks(
 			if (!set.statusId) return err(400, 'Invalid status');
 			target = eligible.find((s) => s.id === set.statusId);
 		} else {
-			target = eligible.find(
-				(s) => s.name.toLowerCase() === (set.statusName ?? '').toLowerCase()
-			);
+			target = eligible.find((s) => s.name.toLowerCase() === (set.statusName ?? '').toLowerCase());
 		}
 		if (!target) return err(400, 'Status not eligible for this project');
 		updates.statusId = target.id;
@@ -699,8 +716,7 @@ export async function bulkUpdateTasks(
 		const milestoneId = set.milestoneId ?? null;
 		if (milestoneId) {
 			const [m] = await db.select().from(milestone).where(eq(milestone.id, milestoneId));
-			if (!m || m.projectId !== projectId)
-				return err(400, 'Milestone must belong to this project');
+			if (!m || m.projectId !== projectId) return err(400, 'Milestone must belong to this project');
 		}
 		updates.milestoneId = milestoneId;
 	}

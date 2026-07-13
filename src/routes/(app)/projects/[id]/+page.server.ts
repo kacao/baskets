@@ -25,12 +25,7 @@ import {
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { deleteFilesForProject } from '$lib/server/uploads';
 import { notifyMentions } from '$lib/server/mentions';
-import {
-	createComment,
-	updateComment,
-	deleteComment,
-	getComment
-} from '$lib/server/comments';
+import { createComment, updateComment, deleteComment, getComment } from '$lib/server/comments';
 import {
 	listTemplatesForProject,
 	createTemplate,
@@ -117,7 +112,9 @@ async function getTask(id: string) {
 }
 
 /** Parse the optional latitude/longitude form fields (blank ⇒ null), range-checked. */
-function parseCoords(form: FormData): { lat: number | null; lng: number | null } | { error: string } {
+function parseCoords(
+	form: FormData
+): { lat: number | null; lng: number | null } | { error: string } {
 	const latRaw = String(form.get('latitude') ?? '').trim();
 	const lngRaw = String(form.get('longitude') ?? '').trim();
 	let lat: number | null = null;
@@ -160,7 +157,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.from(task)
 			.where(eq(task.projectId, params.id))
 			.orderBy(asc(task.position), asc(task.createdAt)),
-		db.select({ id: user.id, name: user.name, email: user.email }).from(user).orderBy(asc(user.name)),
+		db
+			.select({ id: user.id, name: user.name, email: user.email })
+			.from(user)
+			.orderBy(asc(user.name)),
 		db
 			.select()
 			.from(view)
@@ -315,9 +315,16 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	let projectRollupText: Record<string, string> = {};
 	if (projRollups.length > 0) {
 		const [rollupTasks, rollupValues] = await Promise.all([
-			db.select({ id: task.id, parentId: task.parentId }).from(task).where(eq(task.projectId, params.id)),
 			db
-				.select({ taskId: taskCustomValue.taskId, fieldId: taskCustomValue.fieldId, value: taskCustomValue.value })
+				.select({ id: task.id, parentId: task.parentId })
+				.from(task)
+				.where(eq(task.projectId, params.id)),
+			db
+				.select({
+					taskId: taskCustomValue.taskId,
+					fieldId: taskCustomValue.fieldId,
+					value: taskCustomValue.value
+				})
 				.from(taskCustomValue)
 				.innerJoin(task, eq(taskCustomValue.taskId, task.id))
 				.where(eq(task.projectId, params.id))
@@ -450,13 +457,14 @@ export const actions: Actions = {
 			const raw = String(form.get('dueDate') ?? '');
 			input.dueDate = raw ? new Date(raw + 'T00:00:00') : null;
 		}
-		if (form.has('recurrence')) input.recurrence = String(form.get('recurrence') ?? '').trim() || null;
+		if (form.has('recurrence'))
+			input.recurrence = String(form.get('recurrence') ?? '').trim() || null;
 		if (form.has('parentId')) input.parentId = String(form.get('parentId') ?? '') || null;
 		const cf = cfEntries(form);
 		if (cf.length > 0) input.cf = cf;
 
 		const res = await updateTaskService(id, params.id, input, locals.user, {
-			has: (key) => key === 'cf' ? cf.length > 0 : key in input,
+			has: (key) => (key === 'cf' ? cf.length > 0 : key in input),
 			logActivity: true,
 			notifyMentionsOnDescription: true
 		});
@@ -565,7 +573,9 @@ export const actions: Actions = {
 			params.id,
 			{
 				statusId: form.has('statusId') ? String(form.get('statusId') ?? '') : undefined,
-				assigneeId: form.has('assigneeId') ? String(form.get('assigneeId') ?? '') || null : undefined,
+				assigneeId: form.has('assigneeId')
+					? String(form.get('assigneeId') ?? '') || null
+					: undefined,
 				milestoneId: form.has('milestoneId')
 					? String(form.get('milestoneId') ?? '') || null
 					: undefined,
@@ -624,7 +634,6 @@ export const actions: Actions = {
 		return { success: true, updated: res.data.updated };
 	},
 
-
 	/* ------------------------ templates + recurring (BASDEV-8) ------------------------ */
 
 	saveTaskAsTemplate: async ({ request, params, locals }) => {
@@ -639,8 +648,7 @@ export const actions: Actions = {
 		const scope = String(form.get('scope') ?? 'project') === 'workspace' ? 'workspace' : 'project';
 
 		const parent = await getTask(taskId);
-		if (!parent || parent.projectId !== params.id)
-			return fail(400, { message: 'Invalid task' });
+		if (!parent || parent.projectId !== params.id) return fail(400, { message: 'Invalid task' });
 
 		const [proj] = await db
 			.select({ workspaceId: project.workspaceId })
@@ -762,14 +770,10 @@ export const actions: Actions = {
 			const [f] = await db.select().from(file).where(eq(file.id, coverFileId));
 			if (!f || f.taskId !== id || f.projectId !== params.id)
 				return fail(400, { message: 'Cover must be a file attached to this task' });
-			if (!f.mimeType.startsWith('image/'))
-				return fail(400, { message: 'Cover must be an image' });
+			if (!f.mimeType.startsWith('image/')) return fail(400, { message: 'Cover must be an image' });
 		}
 
-		await db
-			.update(task)
-			.set({ coverFileId, updatedAt: new Date() })
-			.where(eq(task.id, id));
+		await db.update(task).set({ coverFileId, updatedAt: new Date() }).where(eq(task.id, id));
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
@@ -844,10 +848,7 @@ export const actions: Actions = {
 		if (createsCycle(edges, taskId, dependsOnId))
 			return fail(400, { message: 'That dependency would create a cycle' });
 
-		await db
-			.insert(taskDependency)
-			.values({ taskId, dependsOnId })
-			.onConflictDoNothing();
+		await db.insert(taskDependency).values({ taskId, dependsOnId }).onConflictDoNothing();
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},
@@ -928,9 +929,16 @@ export const actions: Actions = {
 		const configRaw = form.get('config');
 		const res = await updateViewById(
 			String(form.get('id') ?? ''),
-			{ name: String(form.get('name') ?? ''), config: configRaw === null ? undefined : String(configRaw) },
+			{
+				name: String(form.get('name') ?? ''),
+				config: configRaw === null ? undefined : String(configRaw)
+			},
 			locals.user,
-			{ has: (key) => (key === 'name' ? true : key === 'config' ? configRaw !== null : false), owner: { projectId: params.id }, broadcast: true }
+			{
+				has: (key) => (key === 'name' ? true : key === 'config' ? configRaw !== null : false),
+				owner: { projectId: params.id },
+				broadcast: true
+			}
 		);
 		if (!res.ok) return fail(res.status, { message: res.message });
 		return { success: true };
@@ -982,10 +990,7 @@ export const actions: Actions = {
 			icon = raw.slice(0, 8) || null; // emoji or legacy glyph
 		}
 
-		await db
-			.update(project)
-			.set({ icon, updatedAt: new Date() })
-			.where(eq(project.id, params.id));
+		await db.update(project).set({ icon, updatedAt: new Date() }).where(eq(project.id, params.id));
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},

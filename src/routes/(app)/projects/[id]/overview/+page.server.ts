@@ -48,7 +48,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.select({ id: project.id, name: project.name, workspaceId: project.workspaceId })
 			.from(project)
 			.orderBy(asc(project.name)),
-		db.select({ id: user.id, name: user.name, email: user.email }).from(user).orderBy(asc(user.name))
+		db
+			.select({ id: user.id, name: user.name, email: user.email })
+			.from(user)
+			.orderBy(asc(user.name))
 	]);
 
 	// ADR-019: the @-project picker offers only accessible projects.

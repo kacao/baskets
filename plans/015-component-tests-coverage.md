@@ -60,8 +60,9 @@ export default defineConfig({
 });
 ```
 
-  Note the `include` matches `*.{test,spec}.ts` — a `*.svelte.test.ts` file DOES
-  match `*.test.ts`, so no include change is needed to pick up the new file.
+Note the `include` matches `*.{test,spec}.ts` — a `*.svelte.test.ts` file DOES
+match `*.test.ts`, so no include change is needed to pick up the new file.
+
 - `tests/setup.ts` (verbatim): `import '@testing-library/jest-dom/vitest';`
 - Relevant devDeps present: `@testing-library/svelte ^5.2.6`,
   `@testing-library/jest-dom ^6.6.3`, `jsdom ^25.0.1`, `svelte ^5.28.0`,
@@ -107,35 +108,38 @@ let {
 } = $props();
 ```
 
-  Behavior relevant to a DOM test: it renders a `contenteditable` editor;
-  typing `@` opens a caret-anchored picker (`query` bound to a search input,
-  see MentionEditor.svelte:603); selecting a candidate inserts a token
-  `@[label](kind:id)` into `value`; a hidden `<input name={name} value={value}>`
-  is emitted when `name` is set (MentionEditor.svelte:588); paste is forced to
-  plain text; `value` serializes the DOM. `value` uses the plain-text token
-  format `@[label](kind:id)`.
+Behavior relevant to a DOM test: it renders a `contenteditable` editor;
+typing `@` opens a caret-anchored picker (`query` bound to a search input,
+see MentionEditor.svelte:603); selecting a candidate inserts a token
+`@[label](kind:id)` into `value`; a hidden `<input name={name} value={value}>`
+is emitted when `name` is set (MentionEditor.svelte:588); paste is forced to
+plain text; `value` serializes the DOM. `value` uses the plain-text token
+format `@[label](kind:id)`.
+
 - Testing rules (repo): Arrange-Act-Assert; test behavior not implementation;
   sentence-style test names.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Install coverage dep | `npm install -D @vitest/coverage-v8` | exit 0 |
-| Coverage run | `npm run test:coverage` | produces a coverage report, exit 0 |
-| Run the component test | `npx vitest run src/lib/components/MentionEditor.svelte.test.ts` | pass |
-| Full unit suite | `npm run test:unit` | all pass |
-| Typecheck | `npm run check` | exit 0 |
+| Purpose                | Command                                                          | Expected on success                |
+| ---------------------- | ---------------------------------------------------------------- | ---------------------------------- |
+| Install coverage dep   | `npm install -D @vitest/coverage-v8`                             | exit 0                             |
+| Coverage run           | `npm run test:coverage`                                          | produces a coverage report, exit 0 |
+| Run the component test | `npx vitest run src/lib/components/MentionEditor.svelte.test.ts` | pass                               |
+| Full unit suite        | `npm run test:unit`                                              | all pass                           |
+| Typecheck              | `npm run check`                                                  | exit 0                             |
 
 ## Scope
 
 **In scope** (create/modify):
+
 - `package.json` — add `@vitest/coverage-v8` devDep + a `test:coverage` script.
 - `vitest.config.ts` — add a `coverage` block.
 - `src/lib/components/MentionEditor.svelte.test.ts` — the first component test.
 - `.gitignore` — add `coverage/` if not already ignored.
 
 **Out of scope** (do NOT modify):
+
 - `MentionEditor.svelte` itself — this plan TESTS it, does not change it. If a
   test can't drive it without a source change, STOP and report.
 - The e2e tests / TaskPanel / project page — later, larger work.
@@ -212,6 +216,7 @@ describe('MentionEditor', () => {
 
 Then add DOM-interaction cases that exercise the `@`-picker (the layer the pure
 unit tests can't reach). Cover at least:
+
 - Typing `@` (dispatch an input event on the contenteditable, or use
   `user-event`) opens the picker — assert the search `<input>` (bound to
   `query`) becomes visible/in the document.

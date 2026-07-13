@@ -63,7 +63,9 @@
 					<div class="tpl-main">
 						<span class="tpl-name">{tpl.name}</span>
 						<span class="tpl-meta">
-							<span class="scope-tag">{tpl.scope === 'workspace' ? $t('Workspace') : $t('Project')}</span>
+							<span class="scope-tag"
+								>{tpl.scope === 'workspace' ? $t('Workspace') : $t('Project')}</span
+							>
 							{#if summarize(tpl.payload)}
 								<span class="sub-count">{summarize(tpl.payload)}</span>
 							{/if}
@@ -73,10 +75,11 @@
 						<form
 							method="POST"
 							action="?/createFromTemplate"
-							use:enhance={() => async ({ update }) => {
-								await update();
-								onClose();
-							}}
+							use:enhance={() =>
+								async ({ update }) => {
+									await update();
+									onClose();
+								}}
 						>
 							<input type="hidden" name="templateId" value={tpl.id} />
 							<button class="btn btn-primary btn-sm" type="submit">
@@ -87,7 +90,9 @@
 						<form
 							method="POST"
 							action="?/deleteTemplate"
-							use:enhance={() => async ({ update }) => update()}
+							use:enhance={() =>
+								async ({ update }) =>
+									update()}
 						>
 							<input type="hidden" name="templateId" value={tpl.id} />
 							<button

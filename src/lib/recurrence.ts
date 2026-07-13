@@ -45,7 +45,10 @@ export function isValidRecurrence(rule: string | null | undefined): boolean {
  * + 1 month) the date clamps to the last day of the target month. Returns null
  * when the rule is invalid or `from` is null.
  */
-export function nextDueDate(from: Date | null | undefined, rule: string | null | undefined): Date | null {
+export function nextDueDate(
+	from: Date | null | undefined,
+	rule: string | null | undefined
+): Date | null {
 	const rec = parseRecurrence(rule);
 	if (!rec || !from) return null;
 	const base = new Date(from.getTime());

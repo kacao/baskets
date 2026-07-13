@@ -11,8 +11,25 @@ export const UPLOADS_DIR = env.UPLOADS_DIR ?? './data/uploads';
 // Extensions never accepted — executables AND active markup (SVG/HTML/XML can
 // carry <script>; served from our own origin they'd be stored XSS).
 export const BLOCKED_EXT = new Set([
-	'exe', 'sh', 'bat', 'cmd', 'com', 'msi', 'dll', 'scr', 'jar', 'app',
-	'svg', 'svgz', 'html', 'htm', 'xhtml', 'xml', 'mhtml', 'js', 'mjs'
+	'exe',
+	'sh',
+	'bat',
+	'cmd',
+	'com',
+	'msi',
+	'dll',
+	'scr',
+	'jar',
+	'app',
+	'svg',
+	'svgz',
+	'html',
+	'htm',
+	'xhtml',
+	'xml',
+	'mhtml',
+	'js',
+	'mjs'
 ]);
 
 // Server-derived Content-Type allowlist (we do NOT trust the client's blob.type).

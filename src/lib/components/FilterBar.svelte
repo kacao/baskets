@@ -56,9 +56,7 @@
 	// and a facet is active only when its key is present. An absent key = inactive
 	// (everything shown, every option rendered checked). New views have no filters.
 	const filters = $derived(
-		(config.filters && typeof config.filters === 'object'
-			? config.filters
-			: {}) as TaskFilters
+		(config.filters && typeof config.filters === 'object' ? config.filters : {}) as TaskFilters
 	);
 
 	const isActive = (key: keyof TaskFilters): boolean => Array.isArray(filters[key]);
@@ -66,10 +64,9 @@
 		Array.isArray(filters[key]) ? (filters[key] as string[]) : [];
 
 	const activeCount = $derived(
-		(['statusIds', 'assigneeIds', 'milestoneIds', 'labelIds', 'priorities', 'dueBuckets'] as const).reduce(
-			(n, k) => n + (isActive(k) ? 1 : 0),
-			0
-		)
+		(
+			['statusIds', 'assigneeIds', 'milestoneIds', 'labelIds', 'priorities', 'dueBuckets'] as const
+		).reduce((n, k) => n + (isActive(k) ? 1 : 0), 0)
 	);
 	const anyActive = $derived(hasActiveFilters(filters, searchText));
 
@@ -152,8 +149,16 @@
 		</button>
 		{#if filtersOpen}
 			<div class="filter-pop" role="dialog" transition:popover>
-				{@render facet('statusIds', $i18n('Status'), statuses.map((s) => [s.id, s.name]))}
-				{@render facet('priorities', $i18n('Priority'), PRIORITIES.map(([v, l]) => [v, $i18n(l)]))}
+				{@render facet(
+					'statusIds',
+					$i18n('Status'),
+					statuses.map((s) => [s.id, s.name])
+				)}
+				{@render facet(
+					'priorities',
+					$i18n('Priority'),
+					PRIORITIES.map(([v, l]) => [v, $i18n(l)])
+				)}
 				{@render facet('assigneeIds', $i18n('Assignee'), [
 					['_none', $i18n('Unassigned')],
 					...users.map((u) => [u.id, u.name] as [string, string])
@@ -166,7 +171,11 @@
 					['_none', $i18n('No label')],
 					...labels.map((l) => [l.id, l.name] as [string, string])
 				])}
-				{@render facet('dueBuckets', $i18n('Due'), DUE_BUCKETS.map(([v, l]) => [v, $i18n(l)]))}
+				{@render facet(
+					'dueBuckets',
+					$i18n('Due'),
+					DUE_BUCKETS.map(([v, l]) => [v, $i18n(l)])
+				)}
 
 				{#if anyActive}
 					<button class="clear-btn" type="button" onclick={clearAll}>
@@ -184,28 +193,35 @@
 	{@const checked = sel(key)}
 	{@const hidden = on ? opts.length - checked.length : 0}
 	<span class="facet" class:facet--on={on}>
-	<Popover ariaLabel={label}>
-		{#snippet trigger()}
-			{label}{#if hidden > 0}<span class="facet-count">{hidden}</span>{/if}
-		{/snippet}
-		{#snippet panel()}
-			{#each opts as [val, lbl] (val)}
-				{@const checkedOpt = !on || checked.includes(val)}
-				<button
-					class="opt"
-					class:opt--on={checkedOpt}
-					type="button"
-					disabled={!canEditView}
-					onclick={() => toggle(key, val, opts.map((o) => o[0]))}
-				>
-					<span class="opt-check">{#if checkedOpt}<Icon name="check" size={13} />{/if}</span>
-					{lbl}
-				</button>
-			{:else}
-				<span class="opt-empty">{$i18n('No options')}</span>
-			{/each}
-		{/snippet}
-	</Popover>
+		<Popover ariaLabel={label}>
+			{#snippet trigger()}
+				{label}{#if hidden > 0}<span class="facet-count">{hidden}</span>{/if}
+			{/snippet}
+			{#snippet panel()}
+				{#each opts as [val, lbl] (val)}
+					{@const checkedOpt = !on || checked.includes(val)}
+					<button
+						class="opt"
+						class:opt--on={checkedOpt}
+						type="button"
+						disabled={!canEditView}
+						onclick={() =>
+							toggle(
+								key,
+								val,
+								opts.map((o) => o[0])
+							)}
+					>
+						<span class="opt-check"
+							>{#if checkedOpt}<Icon name="check" size={13} />{/if}</span
+						>
+						{lbl}
+					</button>
+				{:else}
+					<span class="opt-empty">{$i18n('No options')}</span>
+				{/each}
+			{/snippet}
+		</Popover>
 	</span>
 {/snippet}
 
@@ -353,7 +369,9 @@
 		padding: 2px 6px;
 		cursor: pointer;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.clear-btn:hover {

@@ -22,7 +22,9 @@
 	);
 	const mProjects = $derived((page.data.allProjects as { id: string; name: string }[]) ?? []);
 	const mProjectId = $derived((page.params as { id?: string }).id);
-	const mCanEdit = $derived((page.data.perm as { project?: boolean } | undefined)?.project ?? false);
+	const mCanEdit = $derived(
+		(page.data.perm as { project?: boolean } | undefined)?.project ?? false
+	);
 
 	type Comment = {
 		id: string;
@@ -43,9 +45,7 @@
 		data: Record<string, unknown>;
 		createdAt: string;
 	};
-	type FeedItem =
-		| ({ kind: 'comment' } & Comment)
-		| ({ kind: 'activity' } & Activity);
+	type FeedItem = ({ kind: 'comment' } & Comment) | ({ kind: 'activity' } & Activity);
 
 	const currentUserId = $derived((page.data.user as { id?: string } | undefined)?.id ?? null);
 	const isAdmin = $derived((page.data.user as { role?: string } | undefined)?.role === 'admin');
@@ -144,7 +144,12 @@
 	}
 
 	async function removeComment(id: string) {
-		if (!(await confirmDialog($t('Delete this comment?'), { confirmLabel: $t('Delete'), danger: true })))
+		if (
+			!(await confirmDialog($t('Delete this comment?'), {
+				confirmLabel: $t('Delete'),
+				danger: true
+			}))
+		)
 			return;
 		try {
 			const res = await fetch(`/api/comments/${id}`, { method: 'DELETE' });
@@ -232,10 +237,20 @@
 								{#if canManage(item.authorId)}
 									<span class="spacer"></span>
 									{#if editingId !== item.id}
-										<button class="icon-btn" type="button" aria-label={$t('Edit')} onclick={() => startEdit(item)}>
+										<button
+											class="icon-btn"
+											type="button"
+											aria-label={$t('Edit')}
+											onclick={() => startEdit(item)}
+										>
 											<Icon name="edit-pencil" size={13} />
 										</button>
-										<button class="icon-btn" type="button" aria-label={$t('Delete')} onclick={() => removeComment(item.id)}>
+										<button
+											class="icon-btn"
+											type="button"
+											aria-label={$t('Delete')}
+											onclick={() => removeComment(item.id)}
+										>
 											<Icon name="trash" size={13} />
 										</button>
 									{/if}
@@ -257,8 +272,14 @@
 									excludeTaskId={taskId}
 								/>
 								<div class="edit-actions">
-									<button class="btn btn-sm" type="button" onclick={cancelEdit}>{$t('Cancel')}</button>
-									<button class="btn btn-sm btn-primary" type="button" onclick={() => saveEdit(item.id)}>{$t('Save')}</button>
+									<button class="btn btn-sm" type="button" onclick={cancelEdit}
+										>{$t('Cancel')}</button
+									>
+									<button
+										class="btn btn-sm btn-primary"
+										type="button"
+										onclick={() => saveEdit(item.id)}>{$t('Save')}</button
+									>
 								</div>
 							{:else}
 								<p class="cmt-text">
@@ -282,7 +303,9 @@
 							<strong>{item.actorName ?? $t('Someone')}</strong>
 							{activityText(item)}
 						</span>
-						<span class="time" use:tooltip={new Date(item.createdAt).toLocaleString()}>{relTime(item.createdAt)}</span>
+						<span class="time" use:tooltip={new Date(item.createdAt).toLocaleString()}
+							>{relTime(item.createdAt)}</span
+						>
 					</div>
 				{/if}
 			{:else}

@@ -59,9 +59,9 @@ export const db = createDb();
  */
 export async function withTransaction<T>(fn: (tx: DB) => Promise<T>): Promise<T> {
 	if (DIALECT === 'postgres') {
-		return (db as unknown as { transaction: (f: (tx: DB) => Promise<T>) => Promise<T> }).transaction(
-			(tx) => fn(tx)
-		);
+		return (
+			db as unknown as { transaction: (f: (tx: DB) => Promise<T>) => Promise<T> }
+		).transaction((tx) => fn(tx));
 	}
 	await db.run(sql`BEGIN IMMEDIATE`);
 	try {

@@ -44,10 +44,7 @@ let skipReason = '';
 const createdProjectIds = new Set<string>();
 
 /** fetch wrapper that attaches the session cookie + JSON content-type. */
-async function api(
-	path: string,
-	init: RequestInit & { json?: unknown } = {}
-): Promise<Response> {
+async function api(path: string, init: RequestInit & { json?: unknown } = {}): Promise<Response> {
 	const { json: body, headers, ...rest } = init;
 	return fetch(`${BASE}${path}`, {
 		...rest,
@@ -188,95 +185,98 @@ async function findOtherWorkspaceId(excludeWs: string): Promise<string | null> {
 	return null;
 }
 
-describe.skipIf(!RUN_INTEGRATION)('templates: cross-scope instantiation is rejected (regression)', () => {
-	it('does not copy project A’s template tasks into a different project B', async () => {
-		if (!ensureAuth()) return;
+describe.skipIf(!RUN_INTEGRATION)(
+	'templates: cross-scope instantiation is rejected (regression)',
+	() => {
+		it('does not copy project A’s template tasks into a different project B', async () => {
+			if (!ensureAuth()) return;
 
-		// Project A + a project-scoped template that carries a recognisable task.
-		const a = await createProject(`itest-tmpl-A-${rid()}`);
-		expect(a.id).toBeTruthy();
+			// Project A + a project-scoped template that carries a recognisable task.
+			const a = await createProject(`itest-tmpl-A-${rid()}`);
+			expect(a.id).toBeTruthy();
 
-		const tplPayload = {
-			task: { title: 'LEAKED-FROM-A', description: 'should never appear in B', priority: 'high' },
-			subtasks: [{ title: 'LEAKED-SUB-A' }]
-		};
-		const createTpl = await api(`/api/projects/${a.id}/templates`, {
-			method: 'POST',
-			json: { name: `itest-tmpl-${rid()}`, scope: 'project', payload: tplPayload }
-		});
-		expect(createTpl.status).toBe(201);
-		const templateId = (await createTpl.json()).id as string;
-		expect(templateId).toBeTruthy();
+			const tplPayload = {
+				task: { title: 'LEAKED-FROM-A', description: 'should never appear in B', priority: 'high' },
+				subtasks: [{ title: 'LEAKED-SUB-A' }]
+			};
+			const createTpl = await api(`/api/projects/${a.id}/templates`, {
+				method: 'POST',
+				json: { name: `itest-tmpl-${rid()}`, scope: 'project', payload: tplPayload }
+			});
+			expect(createTpl.status).toBe(201);
+			const templateId = (await createTpl.json()).id as string;
+			expect(templateId).toBeTruthy();
 
-		// Project B — in a DIFFERENT workspace if one is reachable, else same.
-		const otherWs = a.workspaceId ? await findOtherWorkspaceId(a.workspaceId) : null;
-		const crossWorkspace = !!otherWs;
-		const b = await createProject(`itest-tmpl-B-${rid()}`, otherWs ?? undefined);
-		expect(b.id).toBeTruthy();
-		if (crossWorkspace) {
-			expect(b.workspaceId).toBe(otherWs);
-			expect(b.workspaceId).not.toBe(a.workspaceId);
-		}
-
-		const before = await taskCount(b.id);
-		expect(before).toBeGreaterThanOrEqual(0);
-
-		// Instantiate A's template against B — must be REJECTED, not copied.
-		const inst = await api(`/api/projects/${b.id}/templates`, {
-			method: 'POST',
-			json: { templateId, instantiate: true }
-		});
-		expect(inst.ok).toBe(false);
-		expect([400, 404]).toContain(inst.status);
-
-		// And B must be untouched — none of A's tasks leaked in.
-		const after = await taskCount(b.id);
-		expect(after).toBe(before);
-
-		const bState = await (await api(`/api/projects/${b.id}`)).json();
-		const titles = (bState.tasks ?? []).map((t: any) => t.title);
-		expect(titles).not.toContain('LEAKED-FROM-A');
-		expect(titles).not.toContain('LEAKED-SUB-A');
-	});
-
-	it('still instantiates a template into its OWN project (in-scope success)', async () => {
-		if (!ensureAuth()) return;
-
-		const p = await createProject(`itest-tmpl-own-${rid()}`);
-		expect(p.id).toBeTruthy();
-
-		const title = `itest-in-scope-${rid()}`;
-		const subTitle = `itest-in-scope-sub-${rid()}`;
-		const createTpl = await api(`/api/projects/${p.id}/templates`, {
-			method: 'POST',
-			json: {
-				name: `itest-tmpl-${rid()}`,
-				scope: 'project',
-				payload: { task: { title }, subtasks: [{ title: subTitle }] }
+			// Project B — in a DIFFERENT workspace if one is reachable, else same.
+			const otherWs = a.workspaceId ? await findOtherWorkspaceId(a.workspaceId) : null;
+			const crossWorkspace = !!otherWs;
+			const b = await createProject(`itest-tmpl-B-${rid()}`, otherWs ?? undefined);
+			expect(b.id).toBeTruthy();
+			if (crossWorkspace) {
+				expect(b.workspaceId).toBe(otherWs);
+				expect(b.workspaceId).not.toBe(a.workspaceId);
 			}
+
+			const before = await taskCount(b.id);
+			expect(before).toBeGreaterThanOrEqual(0);
+
+			// Instantiate A's template against B — must be REJECTED, not copied.
+			const inst = await api(`/api/projects/${b.id}/templates`, {
+				method: 'POST',
+				json: { templateId, instantiate: true }
+			});
+			expect(inst.ok).toBe(false);
+			expect([400, 404]).toContain(inst.status);
+
+			// And B must be untouched — none of A's tasks leaked in.
+			const after = await taskCount(b.id);
+			expect(after).toBe(before);
+
+			const bState = await (await api(`/api/projects/${b.id}`)).json();
+			const titles = (bState.tasks ?? []).map((t: any) => t.title);
+			expect(titles).not.toContain('LEAKED-FROM-A');
+			expect(titles).not.toContain('LEAKED-SUB-A');
 		});
-		expect(createTpl.status).toBe(201);
-		const templateId = (await createTpl.json()).id as string;
 
-		const before = await taskCount(p.id);
-		const inst = await api(`/api/projects/${p.id}/templates`, {
-			method: 'POST',
-			json: { templateId, instantiate: true }
+		it('still instantiates a template into its OWN project (in-scope success)', async () => {
+			if (!ensureAuth()) return;
+
+			const p = await createProject(`itest-tmpl-own-${rid()}`);
+			expect(p.id).toBeTruthy();
+
+			const title = `itest-in-scope-${rid()}`;
+			const subTitle = `itest-in-scope-sub-${rid()}`;
+			const createTpl = await api(`/api/projects/${p.id}/templates`, {
+				method: 'POST',
+				json: {
+					name: `itest-tmpl-${rid()}`,
+					scope: 'project',
+					payload: { task: { title }, subtasks: [{ title: subTitle }] }
+				}
+			});
+			expect(createTpl.status).toBe(201);
+			const templateId = (await createTpl.json()).id as string;
+
+			const before = await taskCount(p.id);
+			const inst = await api(`/api/projects/${p.id}/templates`, {
+				method: 'POST',
+				json: { templateId, instantiate: true }
+			});
+			expect(inst.status).toBe(201);
+			const { taskId } = await inst.json();
+			expect(taskId).toBeTruthy();
+
+			// The parent + sub-task now exist in this project.
+			const after = await taskCount(p.id);
+			expect(after).toBe(before + 2);
+
+			const state = await (await api(`/api/projects/${p.id}`)).json();
+			const titles = (state.tasks ?? []).map((t: any) => t.title);
+			expect(titles).toContain(title);
+			expect(titles).toContain(subTitle);
+
+			const parent = (state.tasks ?? []).find((t: any) => t.id === taskId);
+			expect(parent?.parentId).toBeNull();
 		});
-		expect(inst.status).toBe(201);
-		const { taskId } = await inst.json();
-		expect(taskId).toBeTruthy();
-
-		// The parent + sub-task now exist in this project.
-		const after = await taskCount(p.id);
-		expect(after).toBe(before + 2);
-
-		const state = await (await api(`/api/projects/${p.id}`)).json();
-		const titles = (state.tasks ?? []).map((t: any) => t.title);
-		expect(titles).toContain(title);
-		expect(titles).toContain(subTitle);
-
-		const parent = (state.tasks ?? []).find((t: any) => t.id === taskId);
-		expect(parent?.parentId).toBeNull();
-	});
-});
+	}
+);

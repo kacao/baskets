@@ -26,10 +26,7 @@ let skipReason = '';
 const createdProjectIds = new Set<string>();
 
 /** fetch wrapper that attaches the session cookie + JSON content-type. */
-async function api(
-	path: string,
-	init: RequestInit & { json?: unknown } = {}
-): Promise<Response> {
+async function api(path: string, init: RequestInit & { json?: unknown } = {}): Promise<Response> {
 	const { json: body, headers, ...rest } = init;
 	return fetch(`${BASE}${path}`, {
 		...rest,
@@ -182,9 +179,7 @@ describe.skipIf(!RUN_INTEGRATION)('board drag recurrence spawn (regression)', ()
 		expect(spawned).toBeTruthy();
 		expect(spawned.recurrence).toBe('weekly:1');
 		expect(spawned.dueDate?.slice(0, 10)).toBe('2026-01-08');
-		const spawnedStatus = after.statuses.find(
-			(s: { id: string }) => s.id === spawned.statusId
-		);
+		const spawnedStatus = after.statuses.find((s: { id: string }) => s.id === spawned.statusId);
 		expect(spawnedStatus?.category).toBe('backlog');
 	});
 });

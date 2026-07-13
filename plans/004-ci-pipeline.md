@@ -71,20 +71,22 @@ Repo convention: conventional commits (see `git log`); branch `dev` is default,
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Install (CI) | `npm ci` | exit 0 |
-| Icons sprite | `npm run icons:build` | exit 0, writes `static/heroicons.svg` |
-| Typecheck | `npm run check` | exit 0, no errors |
-| Unit tests | `npm run test:unit` | all pass |
-| Validate workflow YAML | `npx --yes @action-validator/cli .github/workflows/ci.yml` (optional; skip if offline) | exit 0 |
+| Purpose                | Command                                                                                | Expected on success                   |
+| ---------------------- | -------------------------------------------------------------------------------------- | ------------------------------------- |
+| Install (CI)           | `npm ci`                                                                               | exit 0                                |
+| Icons sprite           | `npm run icons:build`                                                                  | exit 0, writes `static/heroicons.svg` |
+| Typecheck              | `npm run check`                                                                        | exit 0, no errors                     |
+| Unit tests             | `npm run test:unit`                                                                    | all pass                              |
+| Validate workflow YAML | `npx --yes @action-validator/cli .github/workflows/ci.yml` (optional; skip if offline) | exit 0                                |
 
 ## Scope
 
 **In scope** (create these):
+
 - `.github/workflows/ci.yml`
 
 **Out of scope** (do NOT touch):
+
 - `package.json` — the scripts already exist; do not rename or add scripts here.
 - `playwright.config.ts` / `vitest.integration.config.ts` — no changes.
 - Any secret material — the workflow references env var NAMES only.
@@ -137,6 +139,7 @@ Use the exact script names from the "Current state" excerpt — do not invent
 `lint`/`build` steps (no lint script exists yet; that is Plan 012).
 
 **Verify locally (proves the steps are valid before CI ever runs)**:
+
 - `npm ci` → exit 0
 - `npm run icons:build` → exit 0
 - `npm run check` → exit 0
@@ -151,6 +154,7 @@ has landed. Otherwise SKIP this step and instead add the follow-up note below.
 
 If Plan 001 is present, append a SECOND job that boots a seeded SQLite app and
 runs integration tests. It must:
+
 1. Write a CI `.env` (`DB_DIALECT=sqlite`, `DATABASE_URL=./data/ci.db`,
    `SEED_ADMIN_PASSWORD=${{ secrets.SEED_ADMIN_PASSWORD }}` — a repo secret,
    NOT a literal).

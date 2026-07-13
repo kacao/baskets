@@ -8,10 +8,12 @@
 > so, skip it).
 >
 > **Drift check (run first)**:
+>
 > ```bash
 > git diff --stat 3958dd6..HEAD -- \
 >   src/lib/components/views/ src/lib/components/TaskPanel.svelte
 > ```
+>
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
@@ -60,6 +62,7 @@ builder only.
 ## Current state
 
 Files (roles):
+
 - `src/lib/components/views/TableView.svelte` — table view; has `fmtDate`, back-stack, and the group-by builder
 - `src/lib/components/views/BoardView.svelte` — board/swimlane view; `fmtDate` (DIFFERENT format), back-stack, swimlane group builder
 - `src/lib/components/views/ListView.svelte` — list view; `fmtDate`, back-stack, group-by builder
@@ -76,20 +79,20 @@ Four are byte-identical. `TaskPanel.svelte:289`, `TableView.svelte:281`,
 `ListView.svelte:153`, `DashboardView.svelte:43` all read:
 
 ```ts
-	function fmtDate(d: Date | string | null) {
-		if (!d) return null;
-		return new Date(d).toISOString().slice(0, 10);
-	}
+function fmtDate(d: Date | string | null) {
+	if (!d) return null;
+	return new Date(d).toISOString().slice(0, 10);
+}
 ```
 
 `BoardView.svelte:253` is **different** — it slices `(5, 10)` for a compact
 `MM-DD`:
 
 ```ts
-	function fmtDate(d: Date | string | null) {
-		if (!d) return null;
-		return new Date(d).toISOString().slice(5, 10); // MM-DD, Linear-compact
-	}
+function fmtDate(d: Date | string | null) {
+	if (!d) return null;
+	return new Date(d).toISOString().slice(5, 10); // MM-DD, Linear-compact
+}
 ```
 
 So the shared util must support BOTH forms (see Step 1 — do not "fix" Board to
@@ -101,47 +104,47 @@ the long form; that would change its visible output).
 the same block plus the extra board state interleaved):
 
 ```ts
-	// split pane: ?task= deep-links a task open
-	let selectedId = $state<string | null>(page.url.searchParams.get('task'));
-	// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
-	// the top is the "← back" target, reset on any fresh open from outside the pane
-	let backStack = $state<string[]>([]);
-	// keep the pane in sync with browser back/forward to a ?task= link, without
-	// fighting user clicks (effect tracks the URL only, never selectedId)
-	let lastTaskParam = $state(page.url.searchParams.get('task'));
-	$effect(() => {
-		const fromUrl = readPaneParam('task');
-		if (fromUrl !== untrack(() => lastTaskParam)) {
-			lastTaskParam = fromUrl;
-			selectedId = fromUrl;
-			backStack = [];
-		}
-	});
-	$effect(() => {
-		const id = selectedId;
-		if (id !== untrack(() => lastTaskParam)) {
-			lastTaskParam = id;
-			setPaneUrl({ task: id });
-		}
-	});
-	const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
-
-	function openDetail(t: Task) {
-		selectedId = selectedId === t.id ? null : t.id;
+// split pane: ?task= deep-links a task open
+let selectedId = $state<string | null>(page.url.searchParams.get('task'));
+// nav history for in-pane task→task navigation (sub-task/cf link/dep/mention);
+// the top is the "← back" target, reset on any fresh open from outside the pane
+let backStack = $state<string[]>([]);
+// keep the pane in sync with browser back/forward to a ?task= link, without
+// fighting user clicks (effect tracks the URL only, never selectedId)
+let lastTaskParam = $state(page.url.searchParams.get('task'));
+$effect(() => {
+	const fromUrl = readPaneParam('task');
+	if (fromUrl !== untrack(() => lastTaskParam)) {
+		lastTaskParam = fromUrl;
+		selectedId = fromUrl;
 		backStack = [];
 	}
-	function navTask(id: string) {
-		if (id === selectedId) return;
-		if (selectedId) backStack = [...backStack, selectedId];
-		selectedId = id;
+});
+$effect(() => {
+	const id = selectedId;
+	if (id !== untrack(() => lastTaskParam)) {
+		lastTaskParam = id;
+		setPaneUrl({ task: id });
 	}
-	function navBack() {
-		selectedId = backStack[backStack.length - 1] ?? null;
-		backStack = backStack.slice(0, -1);
-	}
-	const backTask = $derived(
-		backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
-	);
+});
+const selected = $derived(allTasks.find((t) => t.id === selectedId) ?? null);
+
+function openDetail(t: Task) {
+	selectedId = selectedId === t.id ? null : t.id;
+	backStack = [];
+}
+function navTask(id: string) {
+	if (id === selectedId) return;
+	if (selectedId) backStack = [...backStack, selectedId];
+	selectedId = id;
+}
+function navBack() {
+	selectedId = backStack[backStack.length - 1] ?? null;
+	backStack = backStack.slice(0, -1);
+}
+const backTask = $derived(
+	backStack.length ? (allTasks.find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
+);
 ```
 
 All six views `import { setPaneUrl, readPaneParam } from '$lib/paneUrl';` and
@@ -162,30 +165,33 @@ TableView.svelte:355-399 (the `groups` derived) and ListView.svelte:164-215
 the `due` buckets:
 
 ```ts
-	type Group = { key: string; title: string; tasks: Task[] };
+type Group = { key: string; title: string; tasks: Task[] };
 
-	function dueBuckets(rows: Task[]): Group[] {
-		const start = new Date();
-		start.setHours(0, 0, 0, 0);
-		const today = start.getTime();
-		const week = today + 7 * 86400000;
-		const b: Record<string, Task[]> = { overdue: [], today: [], week: [], later: [], none: [] };
-		for (const t of rows) {
-			if (!t.dueDate) { b.none.push(t); continue; }
-			const ts = new Date(new Date(t.dueDate).setHours(0, 0, 0, 0)).getTime();
-			if (ts < today) b.overdue.push(t);
-			else if (ts === today) b.today.push(t);
-			else if (ts < week) b.week.push(t);
-			else b.later.push(t);
+function dueBuckets(rows: Task[]): Group[] {
+	const start = new Date();
+	start.setHours(0, 0, 0, 0);
+	const today = start.getTime();
+	const week = today + 7 * 86400000;
+	const b: Record<string, Task[]> = { overdue: [], today: [], week: [], later: [], none: [] };
+	for (const t of rows) {
+		if (!t.dueDate) {
+			b.none.push(t);
+			continue;
 		}
-		return [
-			{ key: 'overdue', title: $i18n('Overdue'), tasks: b.overdue },
-			{ key: 'today', title: $i18n('Today'), tasks: b.today },
-			{ key: 'week', title: $i18n('Next 7 days'), tasks: b.week },
-			{ key: 'later', title: $i18n('Later'), tasks: b.later },
-			{ key: 'none', title: $i18n('No due date'), tasks: b.none }
-		];
+		const ts = new Date(new Date(t.dueDate).setHours(0, 0, 0, 0)).getTime();
+		if (ts < today) b.overdue.push(t);
+		else if (ts === today) b.today.push(t);
+		else if (ts < week) b.week.push(t);
+		else b.later.push(t);
 	}
+	return [
+		{ key: 'overdue', title: $i18n('Overdue'), tasks: b.overdue },
+		{ key: 'today', title: $i18n('Today'), tasks: b.today },
+		{ key: 'week', title: $i18n('Next 7 days'), tasks: b.week },
+		{ key: 'later', title: $i18n('Later'), tasks: b.later },
+		{ key: 'none', title: $i18n('No due date'), tasks: b.none }
+	];
+}
 ```
 
 ListView.svelte:192-215 and TableView.svelte:355-399 both build the same
@@ -193,12 +199,12 @@ status/milestone/assignee/label/`_none` groups with the SAME strings
 (`'No milestone'`, `'Unassigned'`, `'No label'`) and end with
 `hideEmptyGroups ? g.filter((x) => x.tasks.length > 0) : g`.
 
-**The DRIFT to reconcile**: BoardView builds *swimlanes* (BoardView.svelte:87-126)
+**The DRIFT to reconcile**: BoardView builds _swimlanes_ (BoardView.svelte:87-126)
 over `milestone | assignee | label | status` only — it has **no `due` bucket**
 and, for `label`, its cross-lane drag changes status/position only (labels are
 multi-value). BoardView's shape is `{ key, name }` (a `name` field, not
 `title`) and it plots lanes differently (`inLane` predicate). So BoardView is
-only *partially* unifiable — see the STOP condition and Step 2 scope note.
+only _partially_ unifiable — see the STOP condition and Step 2 scope note.
 
 ### Conventions that apply
 
@@ -206,7 +212,7 @@ only *partially* unifiable — see the STOP condition and Step 2 scope note.
   `export let` / `$:`. Shared pure helpers live in `$lib` (client-safe TS
   modules), imported by the components.
 - i18n: user-facing strings go through `$t(...)` / the `$i18n` store alias in
-  these components. A pure helper in `$lib` that produces group *titles* must
+  these components. A pure helper in `$lib` that produces group _titles_ must
   NOT bake in translations — return stable string keys and let the component
   wrap them with `$i18n(...)`, OR accept a `t` function argument. (Grep each
   view for how it imports the translate fn: some alias it as `$i18n`, some as
@@ -217,14 +223,14 @@ only *partially* unifiable — see the STOP condition and Step 2 scope note.
 
 ## Commands you will need
 
-| Purpose        | Command                     | Expected on success            |
-|----------------|-----------------------------|--------------------------------|
-| Typecheck/lint | `npm run check`             | exit 0, 0 errors, 0 warnings   |
-| Unit tests     | `npm run test:unit`         | all pass                       |
-| Integration    | `npm run test:integration`  | all pass (needs dev server)    |
-| E2E            | `npx playwright test`       | all pass (needs :5173 + seed)  |
-| Seed DB        | `npm run db:seed`           | "seeded" / idempotent          |
-| Dev server     | `npm run dev`               | serves on :5173                |
+| Purpose        | Command                    | Expected on success           |
+| -------------- | -------------------------- | ----------------------------- |
+| Typecheck/lint | `npm run check`            | exit 0, 0 errors, 0 warnings  |
+| Unit tests     | `npm run test:unit`        | all pass                      |
+| Integration    | `npm run test:integration` | all pass (needs dev server)   |
+| E2E            | `npx playwright test`      | all pass (needs :5173 + seed) |
+| Seed DB        | `npm run db:seed`          | "seeded" / idempotent         |
+| Dev server     | `npm run dev`              | serves on :5173               |
 
 Integration/e2e need a dev server on `:5173` and `npm run db:seed` run first.
 
@@ -236,6 +242,7 @@ Integration/e2e need a dev server on `:5173` and `npm run db:seed` run first.
 ## Scope
 
 **In scope** (modify only these):
+
 - `src/lib/date.ts` (create — Step 1)
 - `src/lib/taskGroups.ts` (create — Step 2)
 - `src/lib/paneNav.svelte.ts` (create — Step 3; `.svelte.ts` so it may use runes)
@@ -251,6 +258,7 @@ Integration/e2e need a dev server on `:5173` and `npm run db:seed` run first.
 - `tests/unit/taskGroups.test.ts` (create)
 
 **Out of scope** (do NOT touch, even though they look related):
+
 - The three ADR-049-deferred extractions: `viewConfig` mutators in
   `src/routes/(app)/projects/[id]/+page.svelte`, the rollup-resolver closure
   shared by TaskPanel/TableView, and the view-tab drag→`use:sortable`. These
@@ -302,6 +310,7 @@ optionally stop here if time-boxed.
    `'YYYY-MM-DD'` for `fmtDate` and `'MM-DD'` for `fmtDateShort`.
 
 **Verify**:
+
 - `grep -rn "function fmtDate" src/lib/components/` → **no matches**
 - `npm run check` → exit 0, 0 errors, 0 warnings
 - `npm run test:unit` → all pass, including the new `date.test.ts`
@@ -329,14 +338,19 @@ manual per-view verification) in place.
    	now?: () => number; // injectable for deterministic `due` tests
    }
 
-   export function groupTasks<T extends {
-   	id: string; statusId: string; milestoneId: string | null;
-   	assigneeId: string | null; dueDate: Date | string | null;
-   }>(rows: T[], groupBy: GroupBy | null, ctx: GroupCtx<T>, hideEmpty: boolean): TaskGroup<T>[]
+   export function groupTasks<
+   	T extends {
+   		id: string;
+   		statusId: string;
+   		milestoneId: string | null;
+   		assigneeId: string | null;
+   		dueDate: Date | string | null;
+   	}
+   >(rows: T[], groupBy: GroupBy | null, ctx: GroupCtx<T>, hideEmpty: boolean): TaskGroup<T>[];
    ```
    - Reproduce the `_none` buckets and the exact titles: `'No milestone'`,
      `'Unassigned'`, `'No label'`, and the due titles `'Overdue' / 'Today' /
-     'Next 7 days' / 'Later' / 'No due date'` — passed through `ctx.t(...)`.
+'Next 7 days' / 'Later' / 'No due date'` — passed through `ctx.t(...)`.
    - `null` groupBy → `[{ key: '_all', title: '', tasks: rows }]`.
    - End with `hideEmpty ? g.filter((x) => x.tasks.length > 0) : g`.
    - Use `ctx.now?.() ?? Date.now()` for the `due` reference time.
@@ -354,6 +368,7 @@ manual per-view verification) in place.
    groups case, and the five `due` buckets (inject `now` for determinism).
 
 **Verify**:
+
 - `npm run check` → exit 0, 0 errors, 0 warnings
 - `npm run test:unit` → all pass, including new `taskGroups.test.ts`
 - Manually (or via plan-014 tests): open a project, switch a Table view and a
@@ -380,24 +395,37 @@ manual per-view verification) in place.
    	$effect(() => {
    		const fromUrl = readPaneParam('task');
    		if (fromUrl !== untrack(() => lastTaskParam)) {
-   			lastTaskParam = fromUrl; selectedId = fromUrl; backStack = [];
+   			lastTaskParam = fromUrl;
+   			selectedId = fromUrl;
+   			backStack = [];
    		}
    	});
    	$effect(() => {
    		const id = selectedId;
    		if (id !== untrack(() => lastTaskParam)) {
-   			lastTaskParam = id; setPaneUrl({ task: id });
+   			lastTaskParam = id;
+   			setPaneUrl({ task: id });
    		}
    	});
    	return {
-   		get selectedId() { return selectedId; },
-   		set selectedId(v: string | null) { selectedId = v; },
-   		get selected() { return getAllTasks().find((t) => t.id === selectedId) ?? null; },
+   		get selectedId() {
+   			return selectedId;
+   		},
+   		set selectedId(v: string | null) {
+   			selectedId = v;
+   		},
+   		get selected() {
+   			return getAllTasks().find((t) => t.id === selectedId) ?? null;
+   		},
    		get backTask() {
    			return backStack.length
-   				? (getAllTasks().find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null;
+   				? (getAllTasks().find((t) => t.id === backStack[backStack.length - 1]) ?? null)
+   				: null;
    		},
-   		openDetail(t: T) { selectedId = selectedId === t.id ? null : t.id; backStack = []; },
+   		openDetail(t: T) {
+   			selectedId = selectedId === t.id ? null : t.id;
+   			backStack = [];
+   		},
    		navTask(id: string) {
    			if (id === selectedId) return;
    			if (selectedId) backStack = [...backStack, selectedId];
@@ -411,7 +439,7 @@ manual per-view verification) in place.
    }
    ```
    **CAUTION**: Svelte 5 `$state`/`$effect` outside a component work only in a
-   `.svelte.ts` module *called from component init*. Confirm the factory is
+   `.svelte.ts` module _called from component init_. Confirm the factory is
    invoked at the top level of each `<script>` (component setup), not inside an
    event handler. If `npm run check` reports `$effect`/`$state` used outside a
    component or effect-orphan warnings, that is a STOP condition — the current
@@ -425,6 +453,7 @@ manual per-view verification) in place.
 3. Do NOT change any view's rendering or the props passed to `TaskPanel`.
 
 **Verify**:
+
 - `npm run check` → exit 0, 0 errors, 0 warnings
 - `grep -rn "let backStack" src/lib/components/views/` → **no matches**
 - `npm run test:unit` → all pass

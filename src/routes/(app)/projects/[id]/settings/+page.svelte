@@ -6,9 +6,7 @@
 
 	let { data, form } = $props();
 
-	const dependsOn = $derived(
-		data.allProjects.filter((p) => data.projectDependsOn.includes(p.id))
-	);
+	const dependsOn = $derived(data.allProjects.filter((p) => data.projectDependsOn.includes(p.id)));
 	const userName = (id: string) => data.users.find((u) => u.id === id)?.name ?? id;
 	const grantLabel = (g: { resourceType: string; resourceId: string }) => {
 		if (g.resourceType === 'project') return $t('project');
@@ -21,7 +19,9 @@
 <svelte:head><title>{data.project.name} — {$t('Settings')} — Baskets</title></svelte:head>
 
 <p class="u-tiny" style="margin-bottom: var(--sp-2);">
-	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"><Icon name="arrow-left" size={12} /> {data.project.name}</a>
+	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"
+		><Icon name="arrow-left" size={12} /> {data.project.name}</a
+	>
 </p>
 
 <h2 style="margin-bottom: var(--sp-4);">{$t('Project settings')}</h2>
@@ -92,7 +92,9 @@
 		{#each dependsOn as p (p.id)}
 			<form method="POST" action="?/removeProjectDep" use:enhance>
 				<input type="hidden" name="dependsOnId" value={p.id} />
-				<button class="chip chip--on" type="submit" use:tooltip={$t('Remove dependency')}>{p.name} ×</button>
+				<button class="chip chip--on" type="submit" use:tooltip={$t('Remove dependency')}
+					>{p.name} ×</button
+				>
 			</form>
 		{:else}
 			<span class="u-tiny u-muted">{$t('none')}</span>

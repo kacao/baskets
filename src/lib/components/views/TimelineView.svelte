@@ -26,10 +26,35 @@
 		dueDate: Date | string | null;
 	};
 	type Status = { id: string; name: string; category: string };
-	type Location = { id: string; title: string; address: string | null; latitude: number | null; longitude: number | null };
-	type CustomFieldDef = { id: string; name: string; type: string; config: Record<string, unknown>; position?: number };
-	type CustomFieldOption = { id: string; fieldId: string; title: string; color: string | null; icon: string | null };
-	type FileRef = { id: string; taskId: string | null; fieldId: string | null; filename: string; mimeType: string; size: number };
+	type Location = {
+		id: string;
+		title: string;
+		address: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	};
+	type CustomFieldDef = {
+		id: string;
+		name: string;
+		type: string;
+		config: Record<string, unknown>;
+		position?: number;
+	};
+	type CustomFieldOption = {
+		id: string;
+		fieldId: string;
+		title: string;
+		color: string | null;
+		icon: string | null;
+	};
+	type FileRef = {
+		id: string;
+		taskId: string | null;
+		fieldId: string | null;
+		filename: string;
+		mimeType: string;
+		size: number;
+	};
 
 	let {
 		tasks,
@@ -245,7 +270,9 @@
 		return out;
 	});
 	const rowByTask = $derived(new Map(rows.map((r) => [r.task.id, r])));
-	const chartHeight = $derived(rows.length > 0 ? (rows.length + lanes.length) * ROW_H + ROW_H : ROW_H);
+	const chartHeight = $derived(
+		rows.length > 0 ? (rows.length + lanes.length) * ROW_H + ROW_H : ROW_H
+	);
 
 	// Dependency lines: from each dependency's end to the dependent task's start,
 	// only when both endpoints are visible rows.
@@ -263,7 +290,8 @@
 
 	function fmtRange(t: Task): string {
 		const sp = span(t)!;
-		const f = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+		const f = (ms: number) =>
+			new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 		return sp.start === sp.end ? f(sp.start) : `${f(sp.start)} – ${f(sp.end)}`;
 	}
 </script>
@@ -271,15 +299,31 @@
 <div class="tl-wrap">
 	<div class="tl-toolbar">
 		<div class="zoom">
-			<button class="zbtn" class:active={zoom === 'week'} type="button" onclick={() => setZoom('week')}>
+			<button
+				class="zbtn"
+				class:active={zoom === 'week'}
+				type="button"
+				onclick={() => setZoom('week')}
+			>
 				{$t('Week')}
 			</button>
-			<button class="zbtn" class:active={zoom === 'month'} type="button" onclick={() => setZoom('month')}>
+			<button
+				class="zbtn"
+				class:active={zoom === 'month'}
+				type="button"
+				onclick={() => setZoom('month')}
+			>
 				{$t('Month')}
 			</button>
 		</div>
 		{#if onNewTask}
-			<button class="tl-add" type="button" aria-label={$t('New task')} use:tooltip={$t('New task')} onclick={() => onNewTask?.()}>+</button>
+			<button
+				class="tl-add"
+				type="button"
+				aria-label={$t('New task')}
+				use:tooltip={$t('New task')}
+				onclick={() => onNewTask?.()}>+</button
+			>
 		{/if}
 	</div>
 
@@ -358,7 +402,9 @@
 
 	{#if undated.length > 0}
 		<div class="tl-nodates">
-			<div class="tl-nodates-head">{$t('No dates')} <span class="tl-lane-count">{undated.length}</span></div>
+			<div class="tl-nodates-head">
+				{$t('No dates')} <span class="tl-lane-count">{undated.length}</span>
+			</div>
 			<div class="tl-nodates-list">
 				{#each undated as tk (tk.id)}
 					<button
@@ -432,7 +478,9 @@
 		font-weight: 500;
 		padding: 4px 10px;
 		cursor: pointer;
-		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
 	}
 
 	.zbtn:hover {
@@ -457,7 +505,9 @@
 		color: var(--color-muted);
 		cursor: pointer;
 		padding: 0 6px;
-		transition: color var(--dur-fast) ease, transform var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			transform var(--dur-fast) ease;
 	}
 
 	.tl-add:hover {
@@ -554,7 +604,9 @@
 		cursor: pointer;
 		padding: 2px;
 		border-radius: var(--radius-field, 0.25rem);
-		transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			background var(--dur-fast) ease;
 	}
 
 	.tl-lane-toggle::before {
@@ -602,7 +654,9 @@
 		cursor: pointer;
 		overflow: hidden;
 		z-index: 2;
-		transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+		transition:
+			border-color var(--dur-fast) ease,
+			box-shadow var(--dur-fast) ease;
 	}
 
 	.tl-bar:hover,

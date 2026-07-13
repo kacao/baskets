@@ -48,7 +48,9 @@ modules.
 function createDb(): DB {
 	if (DIALECT === 'postgres') {
 		if (!env.DATABASE_URL) {
-			throw new Error('DATABASE_URL (postgres:// connection string) is required when DB_DIALECT=postgres');
+			throw new Error(
+				'DATABASE_URL (postgres:// connection string) is required when DB_DIALECT=postgres'
+			);
 		}
 		const client = postgres(env.DATABASE_URL, { max: 10 });
 		return drizzlePg(client, { schema: pgSchema }) as unknown as DB;
@@ -107,6 +109,7 @@ export async function canEditTask(user, t: { id; parentId; projectId }) {
 REST (per AGENTS.md: `createTask`, `patchTask`, `moveTask`, `bulkPatchTasks`,
 etc.). Invariants to characterize (from AGENTS.md domain rules — verify against
 the actual exports by reading the file):
+
 - Sub-tasks are one level only: `parentId` set ⇒ no children; enforced in
   `createTask` AND `patchTask`'s re-parent branch.
 - Moving/patching a parent to a `done`-category status cascades that status onto
@@ -119,16 +122,17 @@ signatures before writing — do not assume.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Apply schema to a test DB | `DB_DIALECT=sqlite DATABASE_URL=<path> npm run db:push` | "Changes applied" |
-| Run the new unit tests | `npm run test:unit` | all pass, including new files |
-| Run one file | `npx vitest run tests/unit/server-permissions.test.ts` | pass |
-| Typecheck | `npm run check` | exit 0 |
+| Purpose                   | Command                                                 | Expected on success           |
+| ------------------------- | ------------------------------------------------------- | ----------------------------- |
+| Apply schema to a test DB | `DB_DIALECT=sqlite DATABASE_URL=<path> npm run db:push` | "Changes applied"             |
+| Run the new unit tests    | `npm run test:unit`                                     | all pass, including new files |
+| Run one file              | `npx vitest run tests/unit/server-permissions.test.ts`  | pass                          |
+| Typecheck                 | `npm run check`                                         | exit 0                        |
 
 ## Scope
 
 **In scope** (create):
+
 - `tests/unit/helpers/testDb.ts` — the test-DB harness (create + migrate + seed
   helpers).
 - `tests/unit/server-permissions.test.ts` — characterization tests for the
@@ -137,6 +141,7 @@ signatures before writing — do not assume.
   invariants.
 
 **Out of scope** (do NOT modify):
+
 - `src/lib/server/db/index.ts` — do NOT add a test hook; the env-var approach
   needs no source change. If you believe it does, STOP and report.
 - Any service module under `src/lib/server/` — characterization means observe,
@@ -158,7 +163,7 @@ change):
 
 1. Generate a unique temp file path per test run, e.g.
    `path.join(os.tmpdir(), \`baskets-test-${crypto.randomUUID()}.db\`)`.
-   (Prefer a temp FILE over `:memory:` — `npm run db:push` and the app open
+(Prefer a temp FILE over `:memory:`—`npm run db:push` and the app open
    separate connections, and file-backed SQLite is the closest match to prod.)
 2. Set `process.env.DB_DIALECT = 'sqlite'` and
    `process.env.DATABASE_URL = <that path>` **before importing anything from
@@ -168,7 +173,7 @@ change):
    passed through), OR — if that proves flaky under vitest — import
    `schema.sqlite.ts` and create tables with `drizzle-orm`'s `better-sqlite3`
    migrator. **Recommended: `execSync('npm run db:push', { env: {...process.env,
-   DB_DIALECT:'sqlite', DATABASE_URL: p }, stdio: 'pipe' })`** in a global setup,
+DB_DIALECT:'sqlite', DATABASE_URL: p }, stdio: 'pipe' })`** in a global setup,
    once, since the schema is static.
 4. Export helpers to insert fixture rows (a user, an admin user, a workspace, a
    project, statuses) so each test arranges its own world. Reuse the table
@@ -196,6 +201,7 @@ and the temp DB file exists. Remove the smoke test once green.
 
 Create `tests/unit/server-permissions.test.ts`. Arrange fixtures and assert the
 CURRENT behavior of the access matrix. Cover at minimum:
+
 - `isAdmin` true for `role === 'admin'`, false otherwise, false for null user.
 - `canAccessProject`: admin → true; owner of the project's workspace → true;
   a user with a direct `permission` grant on the project → true; an unrelated
@@ -216,6 +222,7 @@ Use Arrange-Act-Assert, one concept per test, sentence-style names
 Create `tests/unit/server-tasks.test.ts`. First READ `src/lib/server/tasks.ts`
 to confirm exact exported names/signatures (the AGENTS.md summary is a guide,
 not a contract). Cover:
+
 - **Status cascade**: create a parent + one sub-task, move the parent to a
   `completed`-category status, assert the sub-task's `statusId` now equals the
   parent's (the exact behavior in `tests/integration/task-mutations.test.ts`).

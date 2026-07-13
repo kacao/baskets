@@ -9,6 +9,7 @@
 > index — if so, skip it).
 >
 > **Drift check (run first)**:
+>
 > ```bash
 > git diff --stat 3958dd6..HEAD -- \
 >   "src/routes/(app)/projects/[id]/+page.server.ts" \
@@ -16,6 +17,7 @@
 >   src/lib/components/TaskPanel.svelte \
 >   src/lib/components/views/TableView.svelte src/lib/server/
 > ```
+>
 > If any in-scope file changed since planning, compare the "Current state"
 > excerpts against live code before proceeding; on a mismatch, treat it as a
 > STOP condition. NOTE: at planning time `src/lib/server/tasks.ts` and
@@ -27,7 +29,7 @@
 - **Effort**: L
 - **Risk**: MED
 - **Category**: tech-debt
-- **Confidence**: MEDIUM — whether the *large* split pays off is a team-appetite
+- **Confidence**: MEDIUM — whether the _large_ split pays off is a team-appetite
   call. The low-risk server-helper slice (Step 1) is worth doing regardless;
   everything beyond it is a recommendation to the team.
 - **Depends on**: plans/014-*.md (the test harness for server-module unit tests)
@@ -39,12 +41,12 @@
 Four modules are an order of magnitude larger than the repo's view-component
 median (~250–550 lines):
 
-| File | Lines |
-|------|-------|
-| `src/routes/(app)/projects/[id]/+page.svelte` | 2243 |
-| `src/lib/components/TaskPanel.svelte` | 2061 |
-| `src/routes/(app)/projects/[id]/+page.server.ts` | 1266 |
-| `src/lib/components/views/TableView.svelte` | 1209 |
+| File                                             | Lines |
+| ------------------------------------------------ | ----- |
+| `src/routes/(app)/projects/[id]/+page.svelte`    | 2243  |
+| `src/lib/components/TaskPanel.svelte`            | 2061  |
+| `src/routes/(app)/projects/[id]/+page.server.ts` | 1266  |
+| `src/lib/components/views/TableView.svelte`      | 1209  |
 
 (Verify with `wc -l` — see Step 0.) These are the highest-churn files in the
 project, so their size is a recurring maintainability tax: every feature touches
@@ -55,6 +57,7 @@ The safest, most independent win is inside the SERVER load
 (`+page.server.ts`): its `load` fans out ~20 queries and then does in-memory
 re-scans that are genuinely PURE (input → output, no DB, no request state) and
 therefore trivially extractable and unit-testable:
+
 - `projectRollupText` (lines ~300–328) aggregates rollup chip values, using a
   `valueOf` that does `rollupValues.find(...)` per (task, field).
 - the visible-user assembly (lines ~270–292) loops all task + project custom
@@ -74,10 +77,16 @@ drag→`use:sortable`. Do not propose or implement those.
 ## Current state
 
 Files (roles):
+
 - `src/routes/(app)/projects/[id]/+page.server.ts` — the project page `load` +
   all form actions; 1266 lines. Imports (already present):
   ```ts
-  import { decodeValue, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
+  import {
+  	decodeValue,
+  	computeTaskRollup,
+  	formatNumber,
+  	type RollupConfig
+  } from '$lib/customFields';
   import { /* ... */ projectAccessUserIds } from '$lib/server/permissions';
   ```
 - `src/lib/customFields.ts` — client-safe pure helpers (`computeTaskRollup`,
@@ -90,29 +99,29 @@ Files (roles):
 ### The visible-user assembly (`+page.server.ts:270-292`)
 
 ```ts
-	// ADR-019: assignee pickers/groupings expose only users who can ACCESS this
-	// project — plus any user already referenced (assignee or person custom field)
-	// so existing values still resolve to a name. Don't leak the whole roster.
-	const visibleUserIds = await projectAccessUserIds(params.id, proj.workspaceId);
-	for (const tk of tasks) if (tk.assigneeId) visibleUserIds.add(tk.assigneeId);
-	for (const f of customFields) {
-		if (f.type !== 'person') continue;
-		for (const v of taskCustomValues) {
-			if (v.fieldId !== f.id) continue;
-			const ids = decodeValue({ type: 'person' }, v.value);
-			if (Array.isArray(ids)) for (const id of ids) visibleUserIds.add(String(id));
-		}
+// ADR-019: assignee pickers/groupings expose only users who can ACCESS this
+// project — plus any user already referenced (assignee or person custom field)
+// so existing values still resolve to a name. Don't leak the whole roster.
+const visibleUserIds = await projectAccessUserIds(params.id, proj.workspaceId);
+for (const tk of tasks) if (tk.assigneeId) visibleUserIds.add(tk.assigneeId);
+for (const f of customFields) {
+	if (f.type !== 'person') continue;
+	for (const v of taskCustomValues) {
+		if (v.fieldId !== f.id) continue;
+		const ids = decodeValue({ type: 'person' }, v.value);
+		if (Array.isArray(ids)) for (const id of ids) visibleUserIds.add(String(id));
 	}
-	// project-entity person fields (header chips) resolve their user names too
-	for (const f of projectFields) {
-		if (f.type !== 'person') continue;
-		for (const v of projectCustomValues) {
-			if (v.fieldId !== f.id) continue;
-			const ids = decodeValue({ type: 'person' }, v.value);
-			if (Array.isArray(ids)) for (const id of ids) visibleUserIds.add(String(id));
-		}
+}
+// project-entity person fields (header chips) resolve their user names too
+for (const f of projectFields) {
+	if (f.type !== 'person') continue;
+	for (const v of projectCustomValues) {
+		if (v.fieldId !== f.id) continue;
+		const ids = decodeValue({ type: 'person' }, v.value);
+		if (Array.isArray(ids)) for (const id of ids) visibleUserIds.add(String(id));
 	}
-	const visibleUsers = users.filter((u) => visibleUserIds.has(u.id));
+}
+const visibleUsers = users.filter((u) => visibleUserIds.has(u.id));
 ```
 
 The `await projectAccessUserIds(...)` (a DB call) must STAY in the load; only the
@@ -124,32 +133,39 @@ fieldId), but behavior must be preserved.
 ### The rollup chip pass (`+page.server.ts:300-328`)
 
 ```ts
-	const projectRollupText: Record<string, string> = {};
-	const projRollups = projectFields.filter((f) => f.type === 'rollup');
-	if (projRollups.length > 0) {
-		const [rollupTasks, rollupValues] = await Promise.all([
-			db.select({ id: task.id, parentId: task.parentId }).from(task).where(eq(task.projectId, params.id)),
-			db
-				.select({ taskId: taskCustomValue.taskId, fieldId: taskCustomValue.fieldId, value: taskCustomValue.value })
-				.from(taskCustomValue)
-				.innerJoin(task, eq(taskCustomValue.taskId, task.id))
-				.where(eq(task.projectId, params.id))
-		]);
-		const valueOf = (tid: string, fid: string) => {
-			const raw = rollupValues.find((v) => v.taskId === tid && v.fieldId === fid)?.value;
-			const n = raw == null ? null : Number(raw);
-			return n != null && Number.isFinite(n) ? n : null;
-		};
-		for (const f of projRollups) {
-			const cfg = { ...(f.config as unknown as RollupConfig), relation: 'task' as const };
-			const n = computeTaskRollup(cfg, '', { tasks: rollupTasks, taskDeps: [], valueOf });
-			const target =
-				customFields.find((t) => t.id === cfg.targetFieldId) ??
-				projectFields.find((t) => t.id === cfg.targetFieldId);
-			projectRollupText[f.id] =
-				target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
-		}
+const projectRollupText: Record<string, string> = {};
+const projRollups = projectFields.filter((f) => f.type === 'rollup');
+if (projRollups.length > 0) {
+	const [rollupTasks, rollupValues] = await Promise.all([
+		db
+			.select({ id: task.id, parentId: task.parentId })
+			.from(task)
+			.where(eq(task.projectId, params.id)),
+		db
+			.select({
+				taskId: taskCustomValue.taskId,
+				fieldId: taskCustomValue.fieldId,
+				value: taskCustomValue.value
+			})
+			.from(taskCustomValue)
+			.innerJoin(task, eq(taskCustomValue.taskId, task.id))
+			.where(eq(task.projectId, params.id))
+	]);
+	const valueOf = (tid: string, fid: string) => {
+		const raw = rollupValues.find((v) => v.taskId === tid && v.fieldId === fid)?.value;
+		const n = raw == null ? null : Number(raw);
+		return n != null && Number.isFinite(n) ? n : null;
+	};
+	for (const f of projRollups) {
+		const cfg = { ...(f.config as unknown as RollupConfig), relation: 'task' as const };
+		const n = computeTaskRollup(cfg, '', { tasks: rollupTasks, taskDeps: [], valueOf });
+		const target =
+			customFields.find((t) => t.id === cfg.targetFieldId) ??
+			projectFields.find((t) => t.id === cfg.targetFieldId);
+		projectRollupText[f.id] =
+			target && cfg.formula !== 'count' ? formatNumber(n, target.config) : String(n);
 	}
+}
 ```
 
 The two `db.select(...)` queries must STAY in the load (they hit the DB). The
@@ -174,21 +190,22 @@ identical.
 
 ## Commands you will need
 
-| Purpose        | Command                     | Expected on success            |
-|----------------|-----------------------------|--------------------------------|
-| Line counts    | `wc -l <files>`             | confirms the sizes above       |
-| Typecheck/lint | `npm run check`             | exit 0, 0 errors, 0 warnings   |
-| Unit tests     | `npm run test:unit`         | all pass                       |
-| Integration    | `npm run test:integration`  | all pass (needs dev server)    |
-| E2E            | `npx playwright test`       | all pass (needs :5173 + seed)  |
-| Seed DB        | `npm run db:seed`           | idempotent seed                |
-| Dev server     | `npm run dev`               | serves on :5173                |
+| Purpose        | Command                    | Expected on success           |
+| -------------- | -------------------------- | ----------------------------- |
+| Line counts    | `wc -l <files>`            | confirms the sizes above      |
+| Typecheck/lint | `npm run check`            | exit 0, 0 errors, 0 warnings  |
+| Unit tests     | `npm run test:unit`        | all pass                      |
+| Integration    | `npm run test:integration` | all pass (needs dev server)   |
+| E2E            | `npx playwright test`      | all pass (needs :5173 + seed) |
+| Seed DB        | `npm run db:seed`          | idempotent seed               |
+| Dev server     | `npm run dev`              | serves on :5173               |
 
 Integration/e2e need a dev server on `:5173` and `npm run db:seed` first.
 
 ## Scope
 
 **In scope** (Step 1 — the shippable slice):
+
 - `src/lib/server/projectLoad.ts` (create — pure helpers)
 - `src/routes/(app)/projects/[id]/+page.server.ts` (replace the two inline
   blocks with calls to the new helpers)
@@ -196,11 +213,13 @@ Integration/e2e need a dev server on `:5173` and `npm run db:seed` first.
 
 **In scope** (Steps 2–3 — investigation output is a written recommendation, NOT
 necessarily code):
+
 - A findings note (in your final report) on whether/how to split
   `+page.svelte`, `TaskPanel.svelte`, `TableView.svelte`, and the rest of
   `+page.server.ts`.
 
 **Out of scope** (do NOT touch):
+
 - The three ADR-049-deferred client extractions: `viewConfig` mutators in
   `+page.svelte`, the rollup-resolver closure shared by TaskPanel/TableView, and
   the view-tab drag→`use:sortable`.
@@ -222,9 +241,9 @@ necessarily code):
 ### Step 0: Confirm the sizes and the excerpts
 
 1. `wc -l "src/routes/(app)/projects/[id]/+page.svelte" \
-   "src/lib/components/TaskPanel.svelte" \
-   "src/routes/(app)/projects/[id]/+page.server.ts" \
-   src/lib/components/views/TableView.svelte` — confirm the four are near the
+"src/lib/components/TaskPanel.svelte" \
+"src/routes/(app)/projects/[id]/+page.server.ts" \
+src/lib/components/views/TableView.svelte` — confirm the four are near the
    sizes in the table (drift tolerance ±10%).
 2. Open `+page.server.ts` around lines 270–328 and confirm the two excerpts
    above match. If they don't, STOP (drift).
@@ -237,7 +256,12 @@ necessarily code):
    `params`, no `db` import). Suggested signatures — match the exact input row
    shapes used in the load:
    ```ts
-   import { decodeValue, computeTaskRollup, formatNumber, type RollupConfig } from '$lib/customFields';
+   import {
+   	decodeValue,
+   	computeTaskRollup,
+   	formatNumber,
+   	type RollupConfig
+   } from '$lib/customFields';
 
    type Field = { id: string; type: string; config: unknown; targetFieldId?: string };
    type CustomValue = { fieldId: string; value: string | null };
@@ -247,9 +271,13 @@ necessarily code):
    export function collectVisibleUserIds(
    	base: Set<string>,
    	tasks: { assigneeId: string | null }[],
-   	taskFields: Field[], taskValues: (CustomValue & { taskId?: string })[],
-   	projectFields: Field[], projectValues: CustomValue[]
-   ): Set<string> { /* reproduce lines 274-291 exactly */ }
+   	taskFields: Field[],
+   	taskValues: (CustomValue & { taskId?: string })[],
+   	projectFields: Field[],
+   	projectValues: CustomValue[]
+   ): Set<string> {
+   	/* reproduce lines 274-291 exactly */
+   }
 
    /** Compute the project rollup chip text map. Pure — the caller supplies the
     *  already-queried rollupTasks/rollupValues. */
@@ -258,7 +286,9 @@ necessarily code):
    	customFields: Field[],
    	rollupTasks: { id: string; parentId: string | null }[],
    	rollupValues: { taskId: string; fieldId: string; value: string | null }[]
-   ): Record<string, string> { /* reproduce lines 304-327 exactly */ }
+   ): Record<string, string> {
+   	/* reproduce lines 304-327 exactly */
+   }
    ```
    - Reproduce the logic BYTE-for-BYTE in observable output. The `valueOf`
      pre-indexing optimization is OPTIONAL and allowed ONLY if a test proves
@@ -282,6 +312,7 @@ necessarily code):
      target is a project field vs a task field.
 
 **Verify**:
+
 - `npm run check` → exit 0, 0 errors, 0 warnings
 - `npm run test:unit` → all pass, including new `projectLoad.test.ts`
 - Manual: load a project page with rollup header chips and person custom fields;
@@ -352,7 +383,7 @@ Stop and report back (do not improvise) if:
 ## Maintenance notes
 
 - This is intentionally a SMALL first slice of a large problem. The MED
-  confidence is about the *larger* split, not Step 1 — Step 1 is low-risk and
+  confidence is about the _larger_ split, not Step 1 — Step 1 is low-risk and
   worth landing on its own.
 - The extracted helpers are the pattern for future load-logic: keep pure folds
   in `src/lib/server/projectLoad.ts` with tests, keep queries in the `load`.

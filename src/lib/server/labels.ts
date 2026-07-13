@@ -14,11 +14,14 @@ import {
 export type Actor = { id: string; role?: string | null } | null | undefined;
 
 export type ServiceResult<T> =
-	| { ok: true; data: T }
-	| { ok: false; status: number; message: string };
+	{ ok: true; data: T } | { ok: false; status: number; message: string };
 
 const ok = <T>(data: T): ServiceResult<T> => ({ ok: true, data });
-const err = (status: number, message: string): ServiceResult<never> => ({ ok: false, status, message });
+const err = (status: number, message: string): ServiceResult<never> => ({
+	ok: false,
+	status,
+	message
+});
 
 /** Accept a #rrggbb hex color, else null. */
 function parseColor(v: unknown): string | null {
@@ -227,7 +230,9 @@ export async function deleteLabelById(
 ): Promise<ServiceResult<null>> {
 	if (opts.owner) {
 		if ('projectId' in opts.owner)
-			await db.delete(label).where(and(eq(label.id, id), eq(label.projectId, opts.owner.projectId)));
+			await db
+				.delete(label)
+				.where(and(eq(label.id, id), eq(label.projectId, opts.owner.projectId)));
 		else
 			await db
 				.delete(label)

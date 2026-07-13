@@ -1,9 +1,23 @@
 <script lang="ts">
-	import { SvelteFlow, Background, Controls, MiniMap, MarkerType, type Node, type Edge } from '@xyflow/svelte';
+	import {
+		SvelteFlow,
+		Background,
+		Controls,
+		MiniMap,
+		MarkerType,
+		type Node,
+		type Edge
+	} from '@xyflow/svelte';
 	import '@xyflow/svelte/dist/style.css';
 	import FlowNode from './FlowNode.svelte';
 
-	type Task = { id: string; title: string; statusId: string; milestoneId: string | null; parentId: string | null };
+	type Task = {
+		id: string;
+		title: string;
+		statusId: string;
+		milestoneId: string | null;
+		parentId: string | null;
+	};
 	type Status = { id: string; name: string; category: string; color?: string | null };
 
 	let {
@@ -76,14 +90,21 @@
 			nodes.push(n);
 			byId.set(n.id, n);
 		};
-		for (const t of tasks) add({ id: `t:${t.id}`, type: 'task', position: { x: 0, y: 0 }, data: taskData(t) });
+		for (const t of tasks)
+			add({ id: `t:${t.id}`, type: 'task', position: { x: 0, y: 0 }, data: taskData(t) });
 
 		const arrow = { type: MarkerType.ArrowClosed, width: 14, height: 14 };
 		const edges: Edge[] = [];
 		// task → task dependency (prerequisite → dependent) among the charted tasks
 		for (const d of taskDeps) {
 			if (taskSet.has(d.taskId) && taskSet.has(d.dependsOnId))
-				edges.push({ id: `td:${d.dependsOnId}:${d.taskId}`, source: `t:${d.dependsOnId}`, target: `t:${d.taskId}`, type: 'smoothstep', markerEnd: arrow });
+				edges.push({
+					id: `td:${d.dependsOnId}:${d.taskId}`,
+					source: `t:${d.dependsOnId}`,
+					target: `t:${d.taskId}`,
+					type: 'smoothstep',
+					markerEnd: arrow
+				});
 		}
 
 		// focus-mode: reveal sub-tasks of expanded parents (hierarchy edge parent → sub)
@@ -92,7 +113,13 @@
 				if (!expanded.has(t.id)) continue;
 				for (const s of subtasksOf(t.id)) {
 					add({ id: `t:${s.id}`, type: 'task', position: { x: 0, y: 0 }, data: taskData(s, true) });
-					edges.push({ id: `sub:${t.id}:${s.id}`, source: `t:${t.id}`, target: `t:${s.id}`, type: 'smoothstep', style: 'stroke-dasharray:4 4;opacity:0.5' });
+					edges.push({
+						id: `sub:${t.id}:${s.id}`,
+						source: `t:${t.id}`,
+						target: `t:${s.id}`,
+						type: 'smoothstep',
+						style: 'stroke-dasharray:4 4;opacity:0.5'
+					});
 				}
 			}
 		}
@@ -101,7 +128,9 @@
 		// milestone columns) so a task is free to sit wherever its dependencies place it.
 		const incoming = new Map<string, string[]>();
 		for (const t of tasks) incoming.set(t.id, []);
-		for (const d of taskDeps) if (incoming.has(d.taskId) && taskSet.has(d.dependsOnId)) incoming.get(d.taskId)!.push(d.dependsOnId);
+		for (const d of taskDeps)
+			if (incoming.has(d.taskId) && taskSet.has(d.dependsOnId))
+				incoming.get(d.taskId)!.push(d.dependsOnId);
 		const memo = new Map<string, number>();
 		const visiting = new Set<string>();
 		const depth = (id: string): number => {
@@ -155,11 +184,24 @@
 			});
 			for (const d of milestoneDeps) {
 				if (msIds.has(d.milestoneId) && msIds.has(d.dependsOnId))
-					edges.push({ id: `md:${d.dependsOnId}:${d.milestoneId}`, source: `m:${d.dependsOnId}`, target: `m:${d.milestoneId}`, type: 'smoothstep', markerEnd: arrow, style: 'stroke-width:2' });
+					edges.push({
+						id: `md:${d.dependsOnId}:${d.milestoneId}`,
+						source: `m:${d.dependsOnId}`,
+						target: `m:${d.milestoneId}`,
+						type: 'smoothstep',
+						markerEnd: arrow,
+						style: 'stroke-width:2'
+					});
 			}
 			for (const t of tasks) {
 				if (t.milestoneId && msIds.has(t.milestoneId))
-					edges.push({ id: `tm:${t.milestoneId}:${t.id}`, source: `m:${t.milestoneId}`, target: `t:${t.id}`, type: 'smoothstep', style: 'stroke-dasharray:4 4;opacity:0.35' });
+					edges.push({
+						id: `tm:${t.milestoneId}:${t.id}`,
+						source: `m:${t.milestoneId}`,
+						target: `t:${t.id}`,
+						type: 'smoothstep',
+						style: 'stroke-dasharray:4 4;opacity:0.35'
+					});
 			}
 		}
 
@@ -187,9 +229,13 @@
 	});
 
 	const colorMode: 'light' | 'dark' =
-		typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+		typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark'
+			? 'dark'
+			: 'light';
 
-	const empty = $derived(tasks.length === 0 && (focusMode || !showMilestones || milestones.length === 0));
+	const empty = $derived(
+		tasks.length === 0 && (focusMode || !showMilestones || milestones.length === 0)
+	);
 
 	// Hide the MiniMap on phones — it wastes scarce space (kept for wider screens).
 	let vw = $state(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -206,7 +252,15 @@
 	<div class="flow-empty">No tasks to chart here yet.</div>
 {:else}
 	<div class="flow-canvas">
-		<SvelteFlow bind:nodes bind:edges {nodeTypes} {colorMode} fitView nodesConnectable={false} minZoom={0.2}>
+		<SvelteFlow
+			bind:nodes
+			bind:edges
+			{nodeTypes}
+			{colorMode}
+			fitView
+			nodesConnectable={false}
+			minZoom={0.2}
+		>
 			<Background />
 			<Controls />
 			{#if !narrow}

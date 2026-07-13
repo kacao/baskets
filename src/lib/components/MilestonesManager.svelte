@@ -71,7 +71,10 @@
 	}
 </script>
 
-<div class="ms-list" use:sortable={{ onReorder: reorder, handle: '[data-sortable-handle]', disabled: !canEdit }}>
+<div
+	class="ms-list"
+	use:sortable={{ onReorder: reorder, handle: '[data-sortable-handle]', disabled: !canEdit }}
+>
 	{#each milestones as m (m.id)}
 		{@const deps = depsOf(m.id)}
 		{@const p = prog(m.id)}
@@ -107,7 +110,12 @@
 				{#if canEdit}
 					<form method="POST" action="?/deleteMilestone" use:enhance>
 						<input type="hidden" name="id" value={m.id} />
-						<button class="ms-del" type="button" onclick={confirmDelete} aria-label={$t('Delete milestone')}>
+						<button
+							class="ms-del"
+							type="button"
+							onclick={confirmDelete}
+							aria-label={$t('Delete milestone')}
+						>
 							<Icon name="trash" size={14} />
 						</button>
 					</form>
@@ -115,7 +123,9 @@
 			</div>
 
 			<div class="ms-progress" use:tooltip={`${p.done}/${p.total} ${$t('done')}`}>
-				<div class="ms-bar"><div class="ms-bar-fill" class:full={p.pct === 100} style={`width:${p.pct}%`}></div></div>
+				<div class="ms-bar">
+					<div class="ms-bar-fill" class:full={p.pct === 100} style={`width:${p.pct}%`}></div>
+				</div>
 				<span class="ms-prog-text">{p.done}/{p.total}</span>
 			</div>
 
@@ -123,7 +133,9 @@
 				<form
 					method="POST"
 					action="?/updateMilestone"
-					use:enhance={() => async ({ update }) => update({ reset: false })}
+					use:enhance={() =>
+						async ({ update }) =>
+							update({ reset: false })}
 					class="ms-desc-form"
 				>
 					<input type="hidden" name="id" value={m.id} />
@@ -135,8 +147,8 @@
 						aria-label={$t('Description')}
 						onblur={(e) =>
 							(e.currentTarget.value ?? '') !== (m.description ?? '') &&
-							e.currentTarget.form?.requestSubmit()}
-					>{m.description ?? ''}</textarea>
+							e.currentTarget.form?.requestSubmit()}>{m.description ?? ''}</textarea
+					>
 				</form>
 			{:else if m.description}
 				<p class="ms-desc-ro">{m.description}</p>
@@ -169,8 +181,12 @@
 						/>
 					</form>
 				{:else}
-					{#if m.startDate}<span class="ms-date-ro"><Icon name="play" size={13} /> {iso(m.startDate)}</span>{/if}
-					{#if m.targetDate}<span class="ms-date-ro"><Icon name="calendar" size={13} /> {iso(m.targetDate)}</span>{/if}
+					{#if m.startDate}<span class="ms-date-ro"
+							><Icon name="play" size={13} /> {iso(m.startDate)}</span
+						>{/if}
+					{#if m.targetDate}<span class="ms-date-ro"
+							><Icon name="calendar" size={13} /> {iso(m.targetDate)}</span
+						>{/if}
 				{/if}
 			</div>
 
@@ -188,7 +204,9 @@
 								<form method="POST" action="?/setMilestoneDeps" use:enhance>
 									<input type="hidden" name="milestoneId" value={m.id} />
 									<button class="opt" class:opt--on={deps.length === 0} type="submit">
-										<span class="opt-check">{#if deps.length === 0}<Icon name="check" size={13} />{/if}</span>
+										<span class="opt-check"
+											>{#if deps.length === 0}<Icon name="check" size={13} />{/if}</span
+										>
 										{$t('Nothing')}
 									</button>
 								</form>
@@ -199,7 +217,9 @@
 											<input type="hidden" name="dependsOnId" value={id} />
 										{/each}
 										<button class="opt" class:opt--on={deps.includes(opt.id)} type="submit">
-											<span class="opt-check">{#if deps.includes(opt.id)}<Icon name="check" size={13} />{/if}</span>
+											<span class="opt-check"
+												>{#if deps.includes(opt.id)}<Icon name="check" size={13} />{/if}</span
+											>
 											{opt.name}
 										</button>
 									</form>
@@ -228,28 +248,56 @@
 			method="POST"
 			action="?/createMilestone"
 			class="ms-new"
-			use:enhance={() => async ({ formElement, update }) => {
-				await update({ reset: false });
-				formElement.reset();
-				createOpen = false;
-			}}
+			use:enhance={() =>
+				async ({ formElement, update }) => {
+					await update({ reset: false });
+					formElement.reset();
+					createOpen = false;
+				}}
 		>
-			<input name="name" class="input" placeholder={$t('Milestone name')} required autocomplete="off" />
-			<textarea name="description" class="input ms-new-desc" rows="2" placeholder={$t('Description (optional)')}></textarea>
+			<input
+				name="name"
+				class="input"
+				placeholder={$t('Milestone name')}
+				required
+				autocomplete="off"
+			/>
+			<textarea
+				name="description"
+				class="input ms-new-desc"
+				rows="2"
+				placeholder={$t('Description (optional)')}></textarea>
 			<div class="ms-new-dates">
-				<span class="ms-date-pill"><Icon name="play" size={13} /><input name="startDate" type="date" class="ms-date" aria-label={$t('Start date')} /></span>
-				<span class="ms-date-pill"><Icon name="calendar" size={13} /><input name="targetDate" type="date" class="ms-date" aria-label={$t('Target date')} /></span>
+				<span class="ms-date-pill"
+					><Icon name="play" size={13} /><input
+						name="startDate"
+						type="date"
+						class="ms-date"
+						aria-label={$t('Start date')}
+					/></span
+				>
+				<span class="ms-date-pill"
+					><Icon name="calendar" size={13} /><input
+						name="targetDate"
+						type="date"
+						class="ms-date"
+						aria-label={$t('Target date')}
+					/></span
+				>
 			</div>
 			<div class="ms-new-actions">
 				{#if milestones.length > 0}
-					<button class="btn btn-sm" type="button" onclick={() => (createOpen = false)}>{$t('Cancel')}</button>
+					<button class="btn btn-sm" type="button" onclick={() => (createOpen = false)}
+						>{$t('Cancel')}</button
+					>
 				{/if}
 				<button class="btn btn-sm btn-primary" type="submit">{$t('Add milestone')}</button>
 			</div>
 		</form>
 	{:else}
 		<button class="ms-add-btn" type="button" onclick={() => (createOpen = true)}>
-			<Icon name="plus" size={14} /> {$t('Add milestone')}
+			<Icon name="plus" size={14} />
+			{$t('Add milestone')}
 		</button>
 	{/if}
 {/if}

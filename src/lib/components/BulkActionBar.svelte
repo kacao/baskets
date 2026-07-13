@@ -88,7 +88,11 @@
 									disabled={busy}
 									onclick={() => run(() => onSetStatus(s.id), close)}
 								>
-									<span class="dot" style="--c: {s.color || 'var(--color-muted)'}" aria-hidden="true"></span>
+									<span
+										class="dot"
+										style="--c: {s.color || 'var(--color-muted)'}"
+										aria-hidden="true"
+									></span>
 									{s.name}
 								</button>
 							{/each}
@@ -102,11 +106,19 @@
 					{/snippet}
 					{#snippet panel(close)}
 						<div class="bulk-menu">
-							<button class="bulk-opt" disabled={busy} onclick={() => run(() => onSetAssignee(null), close)}>
+							<button
+								class="bulk-opt"
+								disabled={busy}
+								onclick={() => run(() => onSetAssignee(null), close)}
+							>
 								{$i18n('Unassigned')}
 							</button>
 							{#each users as u (u.id)}
-								<button class="bulk-opt" disabled={busy} onclick={() => run(() => onSetAssignee(u.id), close)}>
+								<button
+									class="bulk-opt"
+									disabled={busy}
+									onclick={() => run(() => onSetAssignee(u.id), close)}
+								>
 									{u.name}
 								</button>
 							{/each}
@@ -116,15 +128,25 @@
 
 				<Popover ariaLabel={$i18n('Set milestone')} up>
 					{#snippet trigger()}
-						<span class="bulk-trigger"><Icon name="triangle-flag" size={14} />{$i18n('Milestone')}</span>
+						<span class="bulk-trigger"
+							><Icon name="triangle-flag" size={14} />{$i18n('Milestone')}</span
+						>
 					{/snippet}
 					{#snippet panel(close)}
 						<div class="bulk-menu">
-							<button class="bulk-opt" disabled={busy} onclick={() => run(() => onSetMilestone(null), close)}>
+							<button
+								class="bulk-opt"
+								disabled={busy}
+								onclick={() => run(() => onSetMilestone(null), close)}
+							>
 								{$i18n('No milestone')}
 							</button>
 							{#each milestones as m (m.id)}
-								<button class="bulk-opt" disabled={busy} onclick={() => run(() => onSetMilestone(m.id), close)}>
+								<button
+									class="bulk-opt"
+									disabled={busy}
+									onclick={() => run(() => onSetMilestone(m.id), close)}
+								>
 									{m.name}
 								</button>
 							{/each}
@@ -134,12 +156,18 @@
 
 				<Popover ariaLabel={$i18n('Set priority')} up>
 					{#snippet trigger()}
-						<span class="bulk-trigger"><Icon name="priority-high" size={14} />{$i18n('Priority')}</span>
+						<span class="bulk-trigger"
+							><Icon name="priority-high" size={14} />{$i18n('Priority')}</span
+						>
 					{/snippet}
 					{#snippet panel(close)}
 						<div class="bulk-menu">
 							{#each PRIORITIES as p (p)}
-								<button class="bulk-opt" disabled={busy} onclick={() => run(() => onSetPriority(p), close)}>
+								<button
+									class="bulk-opt"
+									disabled={busy}
+									onclick={() => run(() => onSetPriority(p), close)}
+								>
 									{$i18n(p)}
 								</button>
 							{/each}
@@ -177,7 +205,12 @@
 			</div>
 		{/if}
 
-		<button class="bulk-clear" aria-label={$i18n('Clear selection')} onclick={onClear} disabled={busy}>
+		<button
+			class="bulk-clear"
+			aria-label={$i18n('Clear selection')}
+			onclick={onClear}
+			disabled={busy}
+		>
 			<Icon name="xmark" size={16} />
 		</button>
 	</div>
@@ -230,7 +263,9 @@
 		padding: 4px 6px;
 		border-radius: var(--radius, 6px);
 		white-space: nowrap;
-		transition: background var(--dur-fast), color var(--dur-fast);
+		transition:
+			background var(--dur-fast),
+			color var(--dur-fast);
 	}
 
 	.bulk-trigger:hover {
@@ -303,7 +338,9 @@
 		cursor: pointer;
 		padding: 4px;
 		border-radius: var(--radius, 6px);
-		transition: background var(--dur-fast), color var(--dur-fast);
+		transition:
+			background var(--dur-fast),
+			color var(--dur-fast);
 	}
 
 	.bulk-clear::before {

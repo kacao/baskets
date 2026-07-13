@@ -77,7 +77,8 @@ async function encodeAndValidate(
 			try {
 				const v = JSON.parse(s);
 				if (Array.isArray(v)) ids = v.map(String);
-				else if (type === 'task') ids = [s.trim()]; // legacy scalar task id
+				else if (type === 'task')
+					ids = [s.trim()]; // legacy scalar task id
 				else return { error: 'Invalid value' };
 			} catch {
 				// a bare (non-JSON) id is only valid for the formerly-scalar `task` type
@@ -193,7 +194,13 @@ export async function writeTaskCustomValues(
 	const byId = new Map(
 		fields.map((f) => [
 			f.id,
-			{ id: f.id, type: f.type, appliesTo: f.appliesTo, entity: f.entity, config: parseConfig(f.config) }
+			{
+				id: f.id,
+				type: f.type,
+				appliesTo: f.appliesTo,
+				entity: f.entity,
+				config: parseConfig(f.config)
+			}
 		])
 	);
 	// the field must apply to this task's level (top-level vs sub-task)
@@ -214,12 +221,17 @@ export async function writeTaskCustomValues(
 	}
 
 	for (const fieldId of clears)
-		await exec.delete(taskCustomValue).where(and(eq(taskCustomValue.taskId, taskId), eq(taskCustomValue.fieldId, fieldId)));
+		await exec
+			.delete(taskCustomValue)
+			.where(and(eq(taskCustomValue.taskId, taskId), eq(taskCustomValue.fieldId, fieldId)));
 	for (const w of writes)
 		await exec
 			.insert(taskCustomValue)
 			.values({ taskId, fieldId: w.fieldId, value: w.value })
-			.onConflictDoUpdate({ target: [taskCustomValue.taskId, taskCustomValue.fieldId], set: { value: w.value } });
+			.onConflictDoUpdate({
+				target: [taskCustomValue.taskId, taskCustomValue.fieldId],
+				set: { value: w.value }
+			});
 	return {};
 }
 
@@ -236,7 +248,10 @@ export async function writeProjectCustomValues(
 	if (entries.length === 0) return {};
 	const fields = await db.select().from(customField).where(eq(customField.projectId, projectId));
 	const byId = new Map(
-		fields.map((f) => [f.id, { id: f.id, type: f.type, entity: f.entity, config: parseConfig(f.config) }])
+		fields.map((f) => [
+			f.id,
+			{ id: f.id, type: f.type, entity: f.entity, config: parseConfig(f.config) }
+		])
 	);
 	const writes: { fieldId: string; value: string }[] = [];
 	const clears: string[] = [];
@@ -252,7 +267,9 @@ export async function writeProjectCustomValues(
 	for (const fieldId of clears)
 		await db
 			.delete(projectCustomValue)
-			.where(and(eq(projectCustomValue.projectId, projectId), eq(projectCustomValue.fieldId, fieldId)));
+			.where(
+				and(eq(projectCustomValue.projectId, projectId), eq(projectCustomValue.fieldId, fieldId))
+			);
 	for (const w of writes)
 		await db
 			.insert(projectCustomValue)
@@ -280,7 +297,10 @@ export async function customValuesByTask(
 	if (taskIds.length === 0) return {};
 	const fields = await listProjectCustomFields(projectId);
 	const fieldById = new Map(fields.map((f) => [f.id, f]));
-	const rows = await db.select().from(taskCustomValue).where(inArray(taskCustomValue.taskId, taskIds));
+	const rows = await db
+		.select()
+		.from(taskCustomValue)
+		.where(inArray(taskCustomValue.taskId, taskIds));
 	const out: Record<string, Record<string, unknown>> = {};
 	for (const r of rows) {
 		const f = fieldById.get(r.fieldId);

@@ -51,39 +51,48 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	if (!(await canEditWorkspace(locals.user, params.id)))
 		error(403, 'No edit permission on this workspace');
 
-	const [defaults, customStatuses, labels, groups, projects, users, statusUsage, taskUse, projectUse] =
-		await Promise.all([
-			listStatuses(),
-			listWorkspaceStatuses(params.id),
-			db
-				.select()
-				.from(label)
-				.where(eq(label.workspaceId, params.id))
-				.orderBy(asc(label.position), asc(label.name)),
-			db
-				.select()
-				.from(labelGroup)
-				.where(eq(labelGroup.workspaceId, params.id))
-				.orderBy(asc(labelGroup.position), asc(labelGroup.name)),
-			db
-				.select({ id: project.id, name: project.name })
-				.from(project)
-				.where(eq(project.workspaceId, params.id))
-				.orderBy(asc(project.name)),
-			db.select({ id: user.id, name: user.name }).from(user).orderBy(asc(user.name)),
-			db
-				.select({ statusId: task.statusId, n: count(task.id) })
-				.from(task)
-				.groupBy(task.statusId),
-			db
-				.select({ labelId: taskLabel.labelId, n: count() })
-				.from(taskLabel)
-				.groupBy(taskLabel.labelId),
-			db
-				.select({ labelId: projectLabel.labelId, n: count() })
-				.from(projectLabel)
-				.groupBy(projectLabel.labelId)
-		]);
+	const [
+		defaults,
+		customStatuses,
+		labels,
+		groups,
+		projects,
+		users,
+		statusUsage,
+		taskUse,
+		projectUse
+	] = await Promise.all([
+		listStatuses(),
+		listWorkspaceStatuses(params.id),
+		db
+			.select()
+			.from(label)
+			.where(eq(label.workspaceId, params.id))
+			.orderBy(asc(label.position), asc(label.name)),
+		db
+			.select()
+			.from(labelGroup)
+			.where(eq(labelGroup.workspaceId, params.id))
+			.orderBy(asc(labelGroup.position), asc(labelGroup.name)),
+		db
+			.select({ id: project.id, name: project.name })
+			.from(project)
+			.where(eq(project.workspaceId, params.id))
+			.orderBy(asc(project.name)),
+		db.select({ id: user.id, name: user.name }).from(user).orderBy(asc(user.name)),
+		db
+			.select({ statusId: task.statusId, n: count(task.id) })
+			.from(task)
+			.groupBy(task.statusId),
+		db
+			.select({ labelId: taskLabel.labelId, n: count() })
+			.from(taskLabel)
+			.groupBy(taskLabel.labelId),
+		db
+			.select({ labelId: projectLabel.labelId, n: count() })
+			.from(projectLabel)
+			.groupBy(projectLabel.labelId)
+	]);
 
 	const admin = isAdmin(locals.user);
 	const owner = ws.ownerId === locals.user!.id;
@@ -157,9 +166,7 @@ export const actions: Actions = {
 		// workspace reusing this id (e.g. workspace-default) can't inherit them
 		await db
 			.delete(permission)
-			.where(
-				and(eq(permission.resourceType, 'workspace'), eq(permission.resourceId, params.id))
-			);
+			.where(and(eq(permission.resourceType, 'workspace'), eq(permission.resourceId, params.id)));
 		await db.delete(workspace).where(eq(workspace.id, params.id));
 		redirect(303, '/workspaces');
 	},

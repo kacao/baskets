@@ -78,7 +78,10 @@ export function attachRealtime(httpServer) {
 		return _baseUrl;
 	}
 
-	const trusted = (process.env.TRUSTED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+	const trusted = (process.env.TRUSTED_ORIGINS ?? '')
+		.split(',')
+		.map((o) => o.trim())
+		.filter(Boolean);
 	function originAllowed(req) {
 		const origin = req.headers.origin;
 		if (!origin) return true; // non-browser client (no ambient-cookie risk)

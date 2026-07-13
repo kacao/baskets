@@ -9,7 +9,9 @@
 {#if priority === 'urgent'}
 	<svg class="pri" viewBox="0 0 12 12" aria-label="Urgent priority" role="img">
 		<rect x="0" y="0" width="12" height="12" fill="currentColor" />
-		<text x="6" y="9.5" text-anchor="middle" font-size="9" font-weight="700" fill="var(--color-bg)">!</text>
+		<text x="6" y="9.5" text-anchor="middle" font-size="9" font-weight="700" fill="var(--color-bg)"
+			>!</text
+		>
 	</svg>
 {:else}
 	<svg

@@ -12,10 +12,7 @@ import {
 } from '$lib/server/api';
 import { isValidRecurrence } from '$lib/recurrence';
 import { canAccessProject, canEditTask } from '$lib/server/permissions';
-import {
-	apiCustomFieldEntries,
-	customValuesByTask
-} from '$lib/server/customFields';
+import { apiCustomFieldEntries, customValuesByTask } from '$lib/server/customFields';
 import { deleteTaskService, updateTaskService, type UpdateTaskInput } from '$lib/server/tasks';
 import type { RequestHandler } from './$types';
 
@@ -89,7 +86,8 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	}
 
 	if (body.assigneeId !== undefined) {
-		input.assigneeId = typeof body.assigneeId === 'string' && body.assigneeId ? body.assigneeId : null;
+		input.assigneeId =
+			typeof body.assigneeId === 'string' && body.assigneeId ? body.assigneeId : null;
 		has.add('assigneeId');
 	}
 

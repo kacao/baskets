@@ -9,11 +9,14 @@ import { VIEW_TYPES, type ViewType } from '$lib/server/projects';
 export type Actor = { id: string; role?: string | null } | null | undefined;
 
 export type ServiceResult<T> =
-	| { ok: true; data: T }
-	| { ok: false; status: number; message: string };
+	{ ok: true; data: T } | { ok: false; status: number; message: string };
 
 const ok = <T>(data: T): ServiceResult<T> => ({ ok: true, data });
-const err = (status: number, message: string): ServiceResult<never> => ({ ok: false, status, message });
+const err = (status: number, message: string): ServiceResult<never> => ({
+	ok: false,
+	status,
+	message
+});
 
 type ViewRow = typeof view.$inferSelect;
 
@@ -56,7 +59,8 @@ export async function createView(
 		name = input.name.trim();
 		if (!name) return err(400, 'name cannot be empty');
 		if (name.length > 120) return err(400, 'name too long (max 120)');
-		if (existing.some((v) => v.name === name)) return err(400, 'a view with that name already exists');
+		if (existing.some((v) => v.name === name))
+			return err(400, 'a view with that name already exists');
 	} else {
 		const base = type[0].toUpperCase() + type.slice(1);
 		name = base;
@@ -240,7 +244,10 @@ export async function reorderViews(
 ): Promise<ServiceResult<ViewRow[]>> {
 	// REST collection PATCH gates on project access + canEditProject first.
 	if (opts.requireEditProject) {
-		const [proj] = await db.select({ id: project.id }).from(project).where(eq(project.id, projectId));
+		const [proj] = await db
+			.select({ id: project.id })
+			.from(project)
+			.where(eq(project.id, projectId));
 		if (!proj) return err(404, 'Project not found');
 		if (!(await canAccessProject(actor, projectId))) return err(404, 'Project not found');
 		if (!(await canEditProject(actor, projectId)))
@@ -257,7 +264,10 @@ export async function reorderViews(
 	}
 
 	for (let i = 0; i < ids.length; i++)
-		await db.update(view).set({ position: i * 10, updatedAt: new Date() }).where(eq(view.id, ids[i]));
+		await db
+			.update(view)
+			.set({ position: i * 10, updatedAt: new Date() })
+			.where(eq(view.id, ids[i]));
 
 	if (opts.broadcast) broadcastProjectChange(projectId, actor!.id);
 	return ok(

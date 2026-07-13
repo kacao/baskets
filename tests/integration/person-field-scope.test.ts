@@ -193,7 +193,7 @@ describe.skipIf(!RUN_INTEGRATION)('person custom-field values scoped to project 
 		expect(after.task.customFields?.[fieldId]).toBeUndefined();
 	});
 
-	it('accepts the acting admin\'s own id on a person field (200, persisted) — proves no over-blocking', async () => {
+	it("accepts the acting admin's own id on a person field (200, persisted) — proves no over-blocking", async () => {
 		if (!ensureAuth()) return;
 		expect(adminUserId).toBeTruthy();
 

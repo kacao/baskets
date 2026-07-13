@@ -111,6 +111,7 @@ if (!serverUp || !adminCookie) return;
 top-level `describe(...)` and inline `if (!serverUp ...) return;` guards.
 
 Common facts:
+
 - Every file reads `BASE` from `process.env.TEST_BASE_URL` with a
   `'http://localhost:5173'` default, so **presence of `TEST_BASE_URL` cannot be
   used as the run flag** (it has a default). Introduce a dedicated
@@ -123,16 +124,17 @@ Repo convention: tabs for indentation, single quotes (see any file above).
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Typecheck | `npm run check` | exit 0, no errors |
-| Integration (no server, flag unset) | `npm run test:integration` | exits 0; tests reported **skipped**, not passed |
-| Integration (flag on, no server) | `RUN_INTEGRATION=1 npm run test:integration` | **non-zero exit** (suite FAILS) |
-| Unit (unaffected) | `npm run test:unit` | all pass |
+| Purpose                             | Command                                      | Expected on success                             |
+| ----------------------------------- | -------------------------------------------- | ----------------------------------------------- |
+| Typecheck                           | `npm run check`                              | exit 0, no errors                               |
+| Integration (no server, flag unset) | `npm run test:integration`                   | exits 0; tests reported **skipped**, not passed |
+| Integration (flag on, no server)    | `RUN_INTEGRATION=1 npm run test:integration` | **non-zero exit** (suite FAILS)                 |
+| Unit (unaffected)                   | `npm run test:unit`                          | all pass                                        |
 
 ## Scope
 
 **In scope** (modify only these):
+
 - `tests/integration/task-mutations.test.ts`
 - `tests/integration/api-projects-tasks.test.ts`
 - `tests/integration/export-injection.test.ts`
@@ -141,6 +143,7 @@ Repo convention: tabs for indentation, single quotes (see any file above).
 - `tests/integration/api-security.test.ts`
 
 **Out of scope** (do NOT touch):
+
 - `vitest.integration.config.ts` — the include/env is correct; no change needed.
 - Any `src/` file — this plan changes test harness behavior only.
 - The actual test assertions/bodies — do not weaken or rewrite what they check.
@@ -174,16 +177,16 @@ throws when the flag is on. For **Family A** files
 each skip path currently reads:
 
 ```ts
-		skipReason = `...message...`;
-		return;
+skipReason = `...message...`;
+return;
 ```
 
 Change each to:
 
 ```ts
-		skipReason = `...message...`;
-		if (RUN_INTEGRATION) throw new Error(skipReason);
-		return;
+skipReason = `...message...`;
+if (RUN_INTEGRATION) throw new Error(skipReason);
+return;
 ```
 
 (Leave the `skipReason = ...` message text exactly as-is; only insert the
@@ -195,28 +198,36 @@ For **Family B** files (`api-authz`, `api-security`), the `beforeAll` skip paths
 have no `skipReason`. Change:
 
 ```ts
-	serverUp = await ping();
-	if (!serverUp) return;
+serverUp = await ping();
+if (!serverUp) return;
 ```
+
 to
+
 ```ts
-	serverUp = await ping();
-	if (!serverUp) {
-		if (RUN_INTEGRATION) throw new Error(`dev server not reachable at ${BASE}`);
-		return;
-	}
+serverUp = await ping();
+if (!serverUp) {
+	if (RUN_INTEGRATION) throw new Error(`dev server not reachable at ${BASE}`);
+	return;
+}
 ```
+
 and change (api-authz):
+
 ```ts
-	if (!adminCookie) return;
+if (!adminCookie) return;
 ```
+
 to
+
 ```ts
-	if (!adminCookie) {
-		if (RUN_INTEGRATION) throw new Error('admin sign-in failed — is the DB seeded (npm run db:seed)?');
-		return;
-	}
+if (!adminCookie) {
+	if (RUN_INTEGRATION)
+		throw new Error('admin sign-in failed — is the DB seeded (npm run db:seed)?');
+	return;
+}
 ```
+
 Apply the analogous change to `api-security.test.ts`'s post-sign-in guard (the
 one that leaves `sessionCookie` empty): wrap its `return` with the same
 `if (RUN_INTEGRATION) throw new Error('admin sign-in failed — is the DB seeded?')`.
@@ -232,7 +243,9 @@ one per file; `api-projects-tasks`, `api-authz`, `api-security` may have nested
 ```ts
 describe('<title unchanged>', () => {
 ```
+
 to
+
 ```ts
 describe.skipIf(!RUN_INTEGRATION)('<title unchanged>', () => {
 ```
@@ -301,7 +314,7 @@ Stop and report back (do not improvise) if:
   build instead of passing vacuously. Without this plan, the CI integration job
   would be green-but-empty.
 - Any NEW integration file must copy this pattern: `const RUN_INTEGRATION =
-  !!process.env.RUN_INTEGRATION;`, `describe.skipIf(!RUN_INTEGRATION)(...)`, and
+!!process.env.RUN_INTEGRATION;`, `describe.skipIf(!RUN_INTEGRATION)(...)`, and
   a throwing `beforeAll` when the flag is on but setup fails.
 - A reviewer should confirm no assertion bodies were weakened — only the
   skip/throw plumbing changed.

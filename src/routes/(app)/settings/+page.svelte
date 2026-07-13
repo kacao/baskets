@@ -115,19 +115,16 @@
 <div class="card" style="max-width: 560px; margin-bottom: var(--sp-4);">
 	<h4 style="margin-bottom: var(--sp-2);">{$t('Account')}</h4>
 	<p class="u-small"><strong>{$t('Name')}:</strong> {data.user?.name}</p>
-	<p class="u-small"><strong>{$t('Email')}:</strong> <span class="mono">{data.user?.email}</span></p>
+	<p class="u-small">
+		<strong>{$t('Email')}:</strong> <span class="mono">{data.user?.email}</span>
+	</p>
 	<p class="u-small"><strong>{$t('Role')}:</strong> {$t(data.user?.role ?? 'user')}</p>
 </div>
 
 <div class="card" style="max-width: 560px; margin-bottom: var(--sp-4);">
 	<h4 style="margin-bottom: var(--sp-2);">{$t('Theming')}</h4>
 	<label class="u-flex" style="gap: var(--sp-2); cursor: pointer; align-items: flex-start;">
-		<input
-			type="checkbox"
-			class="checkbox"
-			checked={highContrast}
-			onchange={toggleHighContrast}
-		/>
+		<input type="checkbox" class="checkbox" checked={highContrast} onchange={toggleHighContrast} />
 		<span>
 			<span style="font-weight: 500;">{$t('High contrast')}</span>
 			<span class="u-tiny u-muted" style="display: block;"
@@ -145,7 +142,9 @@
 		</span>
 	</div>
 	<p class="u-small u-muted" style="margin-bottom: var(--sp-3);">
-		{$t('Add a second step at sign-in using an authenticator app such as Google Authenticator, 1Password or Authy.')}
+		{$t(
+			'Add a second step at sign-in using an authenticator app such as Google Authenticator, 1Password or Authy.'
+		)}
 	</p>
 
 	{#if error}
@@ -157,11 +156,23 @@
 
 	{#if step === 'idle'}
 		{#if twoFactorOn}
-			<button class="btn btn-error" onclick={() => { step = 'disable'; success = ''; }}>
+			<button
+				class="btn btn-error"
+				onclick={() => {
+					step = 'disable';
+					success = '';
+				}}
+			>
 				{$t('Disable 2FA')}
 			</button>
 		{:else}
-			<button class="btn btn-primary" onclick={() => { step = 'password'; success = ''; }}>
+			<button
+				class="btn btn-primary"
+				onclick={() => {
+					step = 'password';
+					success = '';
+				}}
+			>
 				{$t('Enable 2FA')}
 			</button>
 		{/if}
@@ -187,7 +198,14 @@
 				<button class="btn btn-primary" type="submit" disabled={loading}>
 					{loading ? $t('Working…') : $t('Continue')}
 				</button>
-				<button class="btn" type="button" onclick={() => { step = 'idle'; error = ''; }}>
+				<button
+					class="btn"
+					type="button"
+					onclick={() => {
+						step = 'idle';
+						error = '';
+					}}
+				>
 					{$t('Cancel')}
 				</button>
 			</div>
@@ -197,7 +215,8 @@
 	{#if step === 'scan'}
 		<div transition:slide={{ duration: 150 }}>
 			<p class="u-small" style="margin-bottom: var(--sp-2);">
-				<strong>1.</strong> {$t('Scan this QR code with your authenticator app:')}
+				<strong>1.</strong>
+				{$t('Scan this QR code with your authenticator app:')}
 			</p>
 			{#if qrDataUrl}
 				<img src={qrDataUrl} alt={$t('TOTP QR code')} class="qr" />
@@ -205,7 +224,8 @@
 
 			{#if backupCodes.length > 0}
 				<p class="u-small" style="margin: var(--sp-3) 0 var(--sp-1);">
-					<strong>2.</strong> {$t('Save these one-time backup codes:')}
+					<strong>2.</strong>
+					{$t('Save these one-time backup codes:')}
 				</p>
 				<div class="codes mono">
 					{#each backupCodes as bc (bc)}
@@ -217,7 +237,8 @@
 			<form onsubmit={confirmEnable} style="margin-top: var(--sp-3);">
 				<div class="field">
 					<label class="label" for="totp">
-						<strong>3.</strong> {$t('Enter the 6-digit code to confirm')}
+						<strong>3.</strong>
+						{$t('Enter the 6-digit code to confirm')}
 					</label>
 					<input
 						id="totp"
@@ -232,7 +253,14 @@
 					<button class="btn btn-primary" type="submit" disabled={loading}>
 						{loading ? $t('Verifying…') : $t('Verify & enable')}
 					</button>
-					<button class="btn" type="button" onclick={() => { step = 'idle'; error = ''; }}>
+					<button
+						class="btn"
+						type="button"
+						onclick={() => {
+							step = 'idle';
+							error = '';
+						}}
+					>
 						{$t('Cancel')}
 					</button>
 				</div>
@@ -254,7 +282,10 @@
 
 	{#if form?.token}
 		<div class="token-reveal" transition:slide={{ duration: 150 }}>
-			<p class="u-small"><strong>{form.keyName}</strong> {$t('created. Copy the key now — it will not be shown again:')}</p>
+			<p class="u-small">
+				<strong>{form.keyName}</strong>
+				{$t('created. Copy the key now — it will not be shown again:')}
+			</p>
 			<div class="u-flex" style="margin-top: var(--sp-1);">
 				<code class="mono token">{form.token}</code>
 				<button class="btn btn-sm" type="button" onclick={copyToken}>
@@ -280,7 +311,9 @@
 								<form
 									method="POST"
 									action="?/revokeKey"
-									use:enhance={() => async ({ update }) => update()}
+									use:enhance={() =>
+										async ({ update }) =>
+											update()}
 								>
 									<input type="hidden" name="id" value={key.id} />
 									<button class="btn btn-sm btn-error" type="submit">{$t('Revoke')}</button>

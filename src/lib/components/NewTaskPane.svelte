@@ -32,8 +32,20 @@
 		milestones: { id: string; name: string }[];
 		locations?: { id: string; title: string }[];
 		tasks?: { id: string; title: string; parentId: string | null }[];
-		customFields?: { id: string; name: string; type: string; config: Record<string, unknown>; appliesTo?: string }[];
-		customFieldOptions?: { id: string; fieldId: string; title: string; color: string | null; icon: string | null }[];
+		customFields?: {
+			id: string;
+			name: string;
+			type: string;
+			config: Record<string, unknown>;
+			appliesTo?: string;
+		}[];
+		customFieldOptions?: {
+			id: string;
+			fieldId: string;
+			title: string;
+			color: string | null;
+			icon: string | null;
+		}[];
 		taskSearch?: (taskId: string) => string;
 		prefill?: Prefill;
 		onClose: () => void;
@@ -47,10 +59,7 @@
 	// at init is intentional (no reactive re-sync wanted).
 	// svelte-ignore state_referenced_locally
 	const defaultStatus =
-		prefill.statusId ??
-		statuses.find((s) => s.category === 'backlog')?.id ??
-		statuses[0]?.id ??
-		'';
+		prefill.statusId ?? statuses.find((s) => s.category === 'backlog')?.id ?? statuses[0]?.id ?? '';
 
 	// Controlled fields so "Create more" can keep the carried-over values while
 	// resetting title/priority for the next task.
@@ -79,7 +88,7 @@
 	onMount(() => requestAnimationFrame(() => titleEl?.focus()));
 </script>
 
-<SidePane title={$t('New task')} onClose={onClose} ariaLabel={$t('New task')}>
+<SidePane title={$t('New task')} {onClose} ariaLabel={$t('New task')}>
 	<form
 		method="POST"
 		action="?/createTask"

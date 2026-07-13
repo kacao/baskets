@@ -142,7 +142,9 @@ beforeAll(async () => {
 			headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: adminCookie },
 			body: fd.toString()
 		});
-		const detail = await fetch(url(`/api/projects/${projectA}`), { headers: { cookie: adminCookie } });
+		const detail = await fetch(url(`/api/projects/${projectA}`), {
+			headers: { cookie: adminCookie }
+		});
 		if (detail.ok) {
 			const j = (await detail.json()) as { customFields?: Array<{ id: string; type: string }> };
 			filesFieldId = j.customFields?.find((f) => f.type === 'files')?.id ?? '';
@@ -155,7 +157,10 @@ afterAll(async () => {
 	for (const p of [projectA, projectB]) {
 		if (!p) continue;
 		try {
-			await fetch(url(`/api/projects/${p}`), { method: 'DELETE', headers: { cookie: adminCookie } });
+			await fetch(url(`/api/projects/${p}`), {
+				method: 'DELETE',
+				headers: { cookie: adminCookie }
+			});
 		} catch {
 			/* ignore */
 		}
@@ -316,7 +321,11 @@ describe.skipIf(!RUN_INTEGRATION)('REST API authorization / ADR-019 (live :5173)
 			const form = new FormData();
 			form.set('fieldId', filesFieldId);
 			form.set('file', new Blob([bytes as BlobPart]), filename);
-			return fetch(url('/api/files'), { method: 'POST', headers: { cookie: adminCookie }, body: form });
+			return fetch(url('/api/files'), {
+				method: 'POST',
+				headers: { cookie: adminCookie },
+				body: form
+			});
 		}
 
 		it('rejects a double-extension .pdf.exe with 415', async () => {
@@ -382,7 +391,14 @@ describe.skipIf(!RUN_INTEGRATION)('REST API authorization / ADR-019 (live :5173)
 	});
 
 	describe('(J) DELETE on a missing scoped [id] returns 404 (no oracle)', () => {
-		for (const kind of ['milestones', 'labels', 'statuses', 'locations', 'views', 'custom-fields']) {
+		for (const kind of [
+			'milestones',
+			'labels',
+			'statuses',
+			'locations',
+			'views',
+			'custom-fields'
+		]) {
 			it(`admin DELETE /api/${kind}/:ghost → 404`, async () => {
 				if (!serverUp || !adminCookie) return;
 				const res = await fetch(url(`/api/${kind}/${ghostId()}`), {

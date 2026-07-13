@@ -35,7 +35,9 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	if (body.duplicateViewId !== undefined) {
 		if (typeof body.duplicateViewId !== 'string' || !body.duplicateViewId)
 			return apiError(400, 'duplicateViewId must be a non-empty string');
-		const res = await duplicateView(params.id, body.duplicateViewId, locals.user, { broadcast: true });
+		const res = await duplicateView(params.id, body.duplicateViewId, locals.user, {
+			broadcast: true
+		});
 		if (!res.ok)
 			return apiError(
 				res.status,
@@ -53,7 +55,10 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 
 	const res = await createView(
 		params.id,
-		{ type, name: body.name !== undefined ? (typeof body.name === 'string' ? body.name : '') : undefined },
+		{
+			type,
+			name: body.name !== undefined ? (typeof body.name === 'string' ? body.name : '') : undefined
+		},
 		locals.user,
 		{ broadcast: true }
 	);

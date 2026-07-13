@@ -35,10 +35,7 @@ let skipReason = '';
 const createdProjectIds = new Set<string>();
 
 /** fetch wrapper that attaches the session cookie + JSON content-type. */
-async function api(
-	path: string,
-	init: RequestInit & { json?: unknown } = {}
-): Promise<Response> {
+async function api(path: string, init: RequestInit & { json?: unknown } = {}): Promise<Response> {
 	const { json: body, headers, ...rest } = init;
 	return fetch(`${BASE}${path}`, {
 		...rest,
@@ -173,50 +170,53 @@ function parseCsv(text: string): string[][] {
 	return rows;
 }
 
-describe.skipIf(!RUN_INTEGRATION)('CSV export: formula-injection neutralization (integration)', () => {
-	it('prefixes a leading single-quote to a task title starting with =', async () => {
-		if (!ensureAuth()) return;
+describe.skipIf(!RUN_INTEGRATION)(
+	'CSV export: formula-injection neutralization (integration)',
+	() => {
+		it('prefixes a leading single-quote to a task title starting with =', async () => {
+			if (!ensureAuth()) return;
 
-		// Create a project + a task whose title is a formula-injection payload.
-		const projRes = await api('/api/projects', {
-			method: 'POST',
-			json: { name: `itest-export-${rid()}` }
+			// Create a project + a task whose title is a formula-injection payload.
+			const projRes = await api('/api/projects', {
+				method: 'POST',
+				json: { name: `itest-export-${rid()}` }
+			});
+			expect(projRes.status).toBe(201);
+			const projectId = (await projRes.json())?.project?.id as string;
+			expect(projectId).toBeTruthy();
+			createdProjectIds.add(projectId);
+
+			const taskRes = await api('/api/tasks', {
+				method: 'POST',
+				json: { projectId, title: EVIL_TITLE }
+			});
+			expect(taskRes.status).toBe(201);
+
+			// Export and parse the CSV.
+			const exportRes = await api(`/api/projects/${projectId}/export`);
+			expect(exportRes.status).toBe(200);
+			expect(exportRes.headers.get('content-type')).toContain('text/csv');
+
+			let body = await exportRes.text();
+			// Strip a leading UTF-8 BOM if present.
+			if (body.charCodeAt(0) === 0xfeff) body = body.slice(1);
+
+			const rows = parseCsv(body);
+			expect(rows.length).toBeGreaterThan(1); // header + at least one task
+
+			const header = rows[0];
+			const titleCol = header.indexOf('Title');
+			expect(titleCol).toBeGreaterThanOrEqual(0);
+
+			const titles = rows.slice(1).map((r) => r[titleCol]);
+			// The neutralized cell keeps the original payload but with a leading '.
+			const neutralized = `'${EVIL_TITLE}`;
+			const cell = titles.find((t) => t === neutralized);
+			expect(cell, 'expected a neutralized title cell in the export').toBeTruthy();
+			// Leading single-quote sits before the = so spreadsheets treat it as text.
+			expect(cell!.startsWith("'=")).toBe(true);
+			// And the un-neutralized raw payload must NOT appear.
+			expect(titles).not.toContain(EVIL_TITLE);
 		});
-		expect(projRes.status).toBe(201);
-		const projectId = (await projRes.json())?.project?.id as string;
-		expect(projectId).toBeTruthy();
-		createdProjectIds.add(projectId);
-
-		const taskRes = await api('/api/tasks', {
-			method: 'POST',
-			json: { projectId, title: EVIL_TITLE }
-		});
-		expect(taskRes.status).toBe(201);
-
-		// Export and parse the CSV.
-		const exportRes = await api(`/api/projects/${projectId}/export`);
-		expect(exportRes.status).toBe(200);
-		expect(exportRes.headers.get('content-type')).toContain('text/csv');
-
-		let body = await exportRes.text();
-		// Strip a leading UTF-8 BOM if present.
-		if (body.charCodeAt(0) === 0xfeff) body = body.slice(1);
-
-		const rows = parseCsv(body);
-		expect(rows.length).toBeGreaterThan(1); // header + at least one task
-
-		const header = rows[0];
-		const titleCol = header.indexOf('Title');
-		expect(titleCol).toBeGreaterThanOrEqual(0);
-
-		const titles = rows.slice(1).map((r) => r[titleCol]);
-		// The neutralized cell keeps the original payload but with a leading '.
-		const neutralized = `'${EVIL_TITLE}`;
-		const cell = titles.find((t) => t === neutralized);
-		expect(cell, 'expected a neutralized title cell in the export').toBeTruthy();
-		// Leading single-quote sits before the = so spreadsheets treat it as text.
-		expect(cell!.startsWith("'=")).toBe(true);
-		// And the un-neutralized raw payload must NOT appear.
-		expect(titles).not.toContain(EVIL_TITLE);
-	});
-});
+	}
+);

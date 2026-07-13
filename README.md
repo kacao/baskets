@@ -14,10 +14,10 @@ npm run dev                 # http://localhost:5173
 
 Seeded accounts (change after first login):
 
-| Account | Email | Password |
-| --- | --- | --- |
-| Admin | admin@baskets.local | admin-baskets-2026 |
-| Demo | demo@baskets.local | demo-baskets-2026 |
+| Account | Email               | Password           |
+| ------- | ------------------- | ------------------ |
+| Admin   | admin@baskets.local | admin-baskets-2026 |
+| Demo    | demo@baskets.local  | demo-baskets-2026  |
 
 Without seeding, register at `/register`, then promote the first user to admin:
 

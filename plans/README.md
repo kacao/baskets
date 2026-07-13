@@ -17,28 +17,28 @@ update your row in the table when done.
 
 ## Execution order & status
 
-| Plan | Title | Priority | Effort | Risk | Depends on | Status |
-|------|-------|----------|--------|------|------------|--------|
-| 001 | Gate integration tests behind a flag (kill skip-as-pass) | P1 | S | LOW | — | DONE |
-| 002 | Add indexes on hot foreign-key columns | P1 | M | LOW | — | DONE |
-| 003 | Spawn recurrence on board drag-to-done | P1 | S | LOW | — | DONE |
-| 004 | Add CI pipeline (check + unit; flag-gated integ/e2e) | P1 | M | LOW | 001 | DONE |
-| 005 | Collapse the bulk-permission N+1 | P1 | S | LOW | — | DONE |
-| 006 | Validate `Origin` on the WebSocket upgrade | P1 | S | LOW | — | DONE |
-| 007 | Scope `person` custom-field values to project members | P1 | S | LOW | — | DONE |
-| 008 | Unlink file bytes on task/project delete | P2 | M | MED | — | TODO |
-| 009 | Map-based resolvers for `cfSearchByTask` | P2 | S | LOW | — | TODO |
-| 010 | Keyed maps for TableView per-row/cell lookups | P2 | M | MED | — | TODO |
-| 011 | Wrap multi-write service ops in transactions | P2 | M | MED | — | TODO |
-| 012 | Add ESLint + Prettier + editorconfig | P2 | S–M | MED | — | TODO |
-| 013 | Document project grants + statuses in `llms.txt` | P2 | S | LOW | — | TODO |
-| 018 | One-command `verify` script + drop webwright scratch | P2 | S | LOW | — | TODO |
-| 014 | Service-layer + permissions unit tests (test-DB harness) | P3 | L | LOW–MED | — | TODO |
-| 015 | Component tests + coverage instrumentation | P3 | M–L | LOW | — | TODO |
-| 016 | Consolidate duplicated view-component logic | P3 | L | MED | 014 (rec.) | TODO |
-| 017 | Coordinated toolchain major bumps | P3 | M | MED | 004 (rec.) | TODO |
-| 019 | Investigate splitting the god files (server-load slice) | P3 | L | MED | 014 (rec.) | TODO |
-| 020 | Investigate recurrence double-spawn race | P3 | S | LOW | 011 | TODO |
+| Plan | Title                                                    | Priority | Effort | Risk    | Depends on | Status |
+| ---- | -------------------------------------------------------- | -------- | ------ | ------- | ---------- | ------ |
+| 001  | Gate integration tests behind a flag (kill skip-as-pass) | P1       | S      | LOW     | —          | DONE   |
+| 002  | Add indexes on hot foreign-key columns                   | P1       | M      | LOW     | —          | DONE   |
+| 003  | Spawn recurrence on board drag-to-done                   | P1       | S      | LOW     | —          | DONE   |
+| 004  | Add CI pipeline (check + unit; flag-gated integ/e2e)     | P1       | M      | LOW     | 001        | DONE   |
+| 005  | Collapse the bulk-permission N+1                         | P1       | S      | LOW     | —          | DONE   |
+| 006  | Validate `Origin` on the WebSocket upgrade               | P1       | S      | LOW     | —          | DONE   |
+| 007  | Scope `person` custom-field values to project members    | P1       | S      | LOW     | —          | DONE   |
+| 008  | Unlink file bytes on task/project delete                 | P2       | M      | MED     | —          | TODO   |
+| 009  | Map-based resolvers for `cfSearchByTask`                 | P2       | S      | LOW     | —          | TODO   |
+| 010  | Keyed maps for TableView per-row/cell lookups            | P2       | M      | MED     | —          | TODO   |
+| 011  | Wrap multi-write service ops in transactions             | P2       | M      | MED     | —          | TODO   |
+| 012  | Add ESLint + Prettier + editorconfig                     | P2       | S–M    | MED     | —          | TODO   |
+| 013  | Document project grants + statuses in `llms.txt`         | P2       | S      | LOW     | —          | TODO   |
+| 018  | One-command `verify` script + drop webwright scratch     | P2       | S      | LOW     | —          | TODO   |
+| 014  | Service-layer + permissions unit tests (test-DB harness) | P3       | L      | LOW–MED | —          | TODO   |
+| 015  | Component tests + coverage instrumentation               | P3       | M–L    | LOW     | —          | TODO   |
+| 016  | Consolidate duplicated view-component logic              | P3       | L      | MED     | 014 (rec.) | TODO   |
+| 017  | Coordinated toolchain major bumps                        | P3       | M      | MED     | 004 (rec.) | TODO   |
+| 019  | Investigate splitting the god files (server-load slice)  | P3       | L      | MED     | 014 (rec.) | TODO   |
+| 020  | Investigate recurrence double-spawn race                 | P3       | S      | LOW     | 011        | TODO   |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` (one-line reason) | `REJECTED` (one-line rationale).
 
@@ -61,14 +61,14 @@ for the CI gate (it depends on 001).
 
 ## Investigate-only plans
 
-**019** and **020** are *investigate* plans (reproduce/scope first, then decide), not
+**019** and **020** are _investigate_ plans (reproduce/scope first, then decide), not
 fix-now plans — per the audit's LOW/MED confidence. 019's only pre-approved slice is the
 low-risk server-load helper extraction.
 
 ## Direction options — NOT planned (product decisions for the maintainer)
 
 The audit also surfaced five forward-looking options. These are **not** in the plan set (they're
-calls for the maintainer, and selected ones would become *design/spike* plans, not build-everything
+calls for the maintainer, and selected ones would become _design/spike_ plans, not build-everything
 plans). Recorded here so they aren't re-discovered as "findings":
 
 - **A. Generic outgoing webhooks + broader event catalog** — `dispatchEvent` is already the one
@@ -80,7 +80,7 @@ plans). Recorded here so they aren't re-discovered as "findings":
 - **D. Custom fields v2 (sort/group/filter by field)** — v1 is display-only by design; the
   one-TEXT-column storage makes typed comparison the hard part.
 - **E. Read-only permission tier** — `canAccessProject ≡ canEditProject` today; deferred as a
-  *product decision*, not a bug.
+  _product decision_, not a bug.
 
 Say "plan A" (etc.) to turn any into a design/spike plan.
 

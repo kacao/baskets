@@ -108,11 +108,11 @@ describe('computeTaskRollup', () => {
 
 	it('rolls up over every other project task for the task relation, excluding itself', () => {
 		const vals: Record<string, number> = { p: 100, a: 1, b: 2, c: 3 };
-		const n = computeTaskRollup(
-			{ relation: 'task', targetFieldId: 'hours', formula: 'sum' },
-			'p',
-			{ tasks, taskDeps: [], valueOf: (tid) => vals[tid] ?? null }
-		);
+		const n = computeTaskRollup({ relation: 'task', targetFieldId: 'hours', formula: 'sum' }, 'p', {
+			tasks,
+			taskDeps: [],
+			valueOf: (tid) => vals[tid] ?? null
+		});
 		// excludes p's own 100; sums a+b+c = 6
 		expect(n).toBe(6);
 	});
@@ -149,8 +149,12 @@ describe('computeTaskRollup', () => {
 
 describe('rollsUpToParent', () => {
 	it('is true for a number field with rollupToParent and appliesTo other than "tasks"', () => {
-		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'all' })).toBe(true);
-		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'subtasks' })).toBe(true);
+		expect(
+			rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'all' })
+		).toBe(true);
+		expect(
+			rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'subtasks' })
+		).toBe(true);
 	});
 
 	it('defaults an unset appliesTo to "all" and stays true', () => {
@@ -158,18 +162,26 @@ describe('rollsUpToParent', () => {
 	});
 
 	it('is false for a "tasks"-only field', () => {
-		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'tasks' })).toBe(false);
+		expect(
+			rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'tasks' })
+		).toBe(false);
 	});
 
 	it('is false when rollupToParent is not exactly true', () => {
-		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: false }, appliesTo: 'all' })).toBe(false);
+		expect(
+			rollsUpToParent({ type: 'number', config: { rollupToParent: false }, appliesTo: 'all' })
+		).toBe(false);
 		expect(rollsUpToParent({ type: 'number', config: {}, appliesTo: 'all' })).toBe(false);
 		expect(rollsUpToParent({ type: 'number', config: null, appliesTo: 'all' })).toBe(false);
 	});
 
 	it('is false for a non-number field even when rollupToParent is set', () => {
-		expect(rollsUpToParent({ type: 'rollup', config: { rollupToParent: true }, appliesTo: 'all' })).toBe(false);
-		expect(rollsUpToParent({ type: 'text', config: { rollupToParent: true }, appliesTo: 'all' })).toBe(false);
+		expect(
+			rollsUpToParent({ type: 'rollup', config: { rollupToParent: true }, appliesTo: 'all' })
+		).toBe(false);
+		expect(
+			rollsUpToParent({ type: 'text', config: { rollupToParent: true }, appliesTo: 'all' })
+		).toBe(false);
 	});
 });
 
@@ -220,7 +232,10 @@ describe('rollupDisplayText', () => {
 		const rollup = {
 			id: 'r',
 			type: 'rollup',
-			config: { relation: 'sub-task', targetFieldId: 'hours', formula: 'sum' } as Record<string, unknown>
+			config: { relation: 'sub-task', targetFieldId: 'hours', formula: 'sum' } as Record<
+				string,
+				unknown
+			>
 		};
 		expect(rollupDisplayText(rollup, 'p', ctxFor(true, [target]))).toBe('10');
 	});
@@ -229,7 +244,10 @@ describe('rollupDisplayText', () => {
 		const rollup = {
 			id: 'r',
 			type: 'rollup',
-			config: { relation: 'sub-task', targetFieldId: '', formula: 'count' } as Record<string, unknown>
+			config: { relation: 'sub-task', targetFieldId: '', formula: 'count' } as Record<
+				string,
+				unknown
+			>
 		};
 		expect(rollupDisplayText(rollup, 'p', ctxFor(true))).toBe('2');
 	});
@@ -240,7 +258,10 @@ describe('rollupDisplayText', () => {
 		const rollup = {
 			id: 'r',
 			type: 'rollup',
-			config: { relation: 'sub-task', targetFieldId: 'gone', formula: 'sum' } as Record<string, unknown>
+			config: { relation: 'sub-task', targetFieldId: 'gone', formula: 'sum' } as Record<
+				string,
+				unknown
+			>
 		};
 		expect(rollupDisplayText(rollup, 'p', ctxFor(true, []))).toBe('0');
 	});

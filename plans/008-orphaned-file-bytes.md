@@ -17,7 +17,7 @@
 > had UNCOMMITTED working-tree edits when this plan was written (a milestone-
 > inheritance feature) affecting `createTaskService` and the `updateTaskService`
 > re-parent branch — NOT `deleteTaskService`/`bulkDeleteTasks`. `git diff --stat
-> 3958dd6..HEAD` may show nothing while the working tree differs. Match excerpts
+3958dd6..HEAD` may show nothing while the working tree differs. Match excerpts
 > by code content, not line number.
 
 ## Status
@@ -59,7 +59,7 @@ export const file = sqliteTable('file', {
 	filename: text('filename').notNull(),
 	mimeType: text('mime_type').notNull(),
 	size: integer('size').notNull(),
-	storagePath: text('storage_path').notNull(),
+	storagePath: text('storage_path').notNull()
 	// ...
 });
 ```
@@ -98,23 +98,23 @@ export async function deleteFilesForField(fieldId: string) {
 `src/lib/server/tasks.ts` — `deleteTaskService`:
 
 ```ts
-	await db.delete(task).where(eq(task.parentId, taskId)); // sub-tasks first
-	await db.delete(task).where(eq(task.id, taskId));
-	broadcastProjectChange(projectId, actor.id);
-	return ok(null);
+await db.delete(task).where(eq(task.parentId, taskId)); // sub-tasks first
+await db.delete(task).where(eq(task.id, taskId));
+broadcastProjectChange(projectId, actor.id);
+return ok(null);
 ```
 
 `src/lib/server/tasks.ts` — `bulkDeleteTasks`:
 
 ```ts
-	const allowed = await bulkAllowed(ids, projectId, actor);
-	if (allowed.length === 0) return err(403, 'No deletable tasks selected');
+const allowed = await bulkAllowed(ids, projectId, actor);
+if (allowed.length === 0) return err(403, 'No deletable tasks selected');
 
-	await db.delete(task).where(inArray(task.parentId, allowed)); // sub-tasks first
-	await db.delete(task).where(inArray(task.id, allowed));
+await db.delete(task).where(inArray(task.parentId, allowed)); // sub-tasks first
+await db.delete(task).where(inArray(task.id, allowed));
 
-	broadcastProjectChange(projectId, actor.id);
-	return ok({ deleted: allowed.length });
+broadcastProjectChange(projectId, actor.id);
+return ok({ deleted: allowed.length });
 ```
 
 `src/routes/api/tasks/[id]/+server.ts` — REST DELETE **bypasses the service** and
@@ -142,25 +142,25 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 
 1. `src/routes/(app)/projects/[id]/+page.server.ts` — `deleteProject`:
    ```ts
-   		await db.delete(project).where(eq(project.id, params.id));
-   		broadcastProjectChange(params.id, locals.user.id);
-   		redirect(303, '/projects');
+   await db.delete(project).where(eq(project.id, params.id));
+   broadcastProjectChange(params.id, locals.user.id);
+   redirect(303, '/projects');
    ```
 2. `src/routes/(app)/projects/+page.server.ts` — `delete`:
    ```ts
-   		await db.delete(project).where(eq(project.id, id));
-   		return { success: true };
+   await db.delete(project).where(eq(project.id, id));
+   return { success: true };
    ```
 3. `src/routes/(app)/projects/[id]/settings/+page.server.ts` — `deleteProject`:
    ```ts
-   		await db.delete(project).where(eq(project.id, params.id));
-   		redirect(303, '/projects');
+   await db.delete(project).where(eq(project.id, params.id));
+   redirect(303, '/projects');
    ```
 4. `src/routes/api/projects/[id]/+server.ts` — REST DELETE:
    ```ts
-   	await db.delete(project).where(eq(project.id, params.id));
-   	broadcastProjectChange(params.id, locals.user.id);
-   	return new Response(null, { status: 204 });
+   await db.delete(project).where(eq(project.id, params.id));
+   broadcastProjectChange(params.id, locals.user.id);
+   return new Response(null, { status: 204 });
    ```
 
 ### Upload storage layout (for the test)
@@ -173,17 +173,18 @@ default is `./data/uploads`.
 
 ## Commands you will need
 
-| Purpose        | Command                     | Expected on success                    |
-|----------------|-----------------------------|----------------------------------------|
-| Typecheck      | `npm run check`             | exit 0, 0 errors, 0 warnings           |
-| Unit tests     | `npm run test:unit`         | all pass (baseline: 416 tests)         |
-| Integration    | `npm run test:integration`  | all pass (needs live server + seeded DB)|
-| Start dev srv  | `npm run dev`               | serves on `http://localhost:5173`      |
-| Seed DB        | `npm run db:seed`           | seeds admin/demo + sample data         |
+| Purpose       | Command                    | Expected on success                      |
+| ------------- | -------------------------- | ---------------------------------------- |
+| Typecheck     | `npm run check`            | exit 0, 0 errors, 0 warnings             |
+| Unit tests    | `npm run test:unit`        | all pass (baseline: 416 tests)           |
+| Integration   | `npm run test:integration` | all pass (needs live server + seeded DB) |
+| Start dev srv | `npm run dev`              | serves on `http://localhost:5173`        |
+| Seed DB       | `npm run db:seed`          | seeds admin/demo + sample data           |
 
 ## Scope
 
 **In scope** (the only files you should modify):
+
 - `src/lib/server/uploads.ts` (add two helpers)
 - `src/lib/server/tasks.ts` (`deleteTaskService`, `bulkDeleteTasks`)
 - `src/routes/api/tasks/[id]/+server.ts` (REST task DELETE)
@@ -194,6 +195,7 @@ default is `./data/uploads`.
 - `tests/integration/delete-file-cleanup.test.ts` (create)
 
 **Out of scope** (do NOT touch):
+
 - `src/lib/server/db/schema.sqlite.ts` / `schema.pg.ts` — NO schema change; the
   cascade stays. This is purely a disk-cleanup addition.
 - `deleteFilesForField` and the single-file `DELETE /api/files/[id]` — they
@@ -264,21 +266,21 @@ import style in that file — the others use `$lib/server/...`).
 their files BEFORE the deletes:
 
 ```ts
-	const subs = await db.select({ id: task.id }).from(task).where(eq(task.parentId, taskId));
-	await deleteFilesForTasks([taskId, ...subs.map((s) => s.id)]);
-	await db.delete(task).where(eq(task.parentId, taskId)); // sub-tasks first
-	await db.delete(task).where(eq(task.id, taskId));
-	broadcastProjectChange(projectId, actor.id);
-	return ok(null);
+const subs = await db.select({ id: task.id }).from(task).where(eq(task.parentId, taskId));
+await deleteFilesForTasks([taskId, ...subs.map((s) => s.id)]);
+await db.delete(task).where(eq(task.parentId, taskId)); // sub-tasks first
+await db.delete(task).where(eq(task.id, taskId));
+broadcastProjectChange(projectId, actor.id);
+return ok(null);
 ```
 
 **(2c)** In `bulkDeleteTasks`, do the same over `allowed` + their sub-tasks:
 
 ```ts
-	const subs = await db.select({ id: task.id }).from(task).where(inArray(task.parentId, allowed));
-	await deleteFilesForTasks([...allowed, ...subs.map((s) => s.id)]);
-	await db.delete(task).where(inArray(task.parentId, allowed)); // sub-tasks first
-	await db.delete(task).where(inArray(task.id, allowed));
+const subs = await db.select({ id: task.id }).from(task).where(inArray(task.parentId, allowed));
+await deleteFilesForTasks([...allowed, ...subs.map((s) => s.id)]);
+await db.delete(task).where(inArray(task.parentId, allowed)); // sub-tasks first
+await db.delete(task).where(inArray(task.id, allowed));
 ```
 
 (`inArray` is already imported in `tasks.ts`.)
@@ -333,10 +335,10 @@ each file's existing import style).
 Example (site 4):
 
 ```ts
-	await deleteFilesForProject(params.id);
-	await db.delete(project).where(eq(project.id, params.id));
-	broadcastProjectChange(params.id, locals.user.id);
-	return new Response(null, { status: 204 });
+await deleteFilesForProject(params.id);
+await db.delete(project).where(eq(project.id, params.id));
+broadcastProjectChange(params.id, locals.user.id);
+return new Response(null, { status: 204 });
 ```
 
 **Verify**: `npm run check` → exit 0, 0 errors / 0 warnings.
@@ -384,6 +386,7 @@ async function uploadToTask(taskId: string, name: string, bytes: string) {
 ```
 
 **Test A — project delete removes bytes:**
+
 1. `createProject(...)` → projectId.
 2. `POST /api/tasks` `{ projectId, title }` → taskId.
 3. `uploadToTask(taskId, 'a.txt', 'hello')` → expect `res.status` 201.
@@ -392,6 +395,7 @@ async function uploadToTask(taskId: string, name: string, bytes: string) {
 6. `projectFiles(projectId)` → expect length 0 (bytes unlinked).
 
 **Test B — task delete removes its attachment bytes:**
+
 1. New project + task, upload a file (as above), confirm `projectFiles` ≥ 1.
 2. `DELETE /api/tasks/{taskId}` → expect 204.
 3. `projectFiles(projectId)` → expect 0.

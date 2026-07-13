@@ -105,13 +105,7 @@ export async function generateDueReminders(userId: string): Promise<Notification
 		})
 		.from(task)
 		.innerJoin(status, eq(task.statusId, status.id))
-		.where(
-			and(
-				eq(task.assigneeId, userId),
-				isNotNull(task.dueDate),
-				lte(task.dueDate, soon)
-			)
-		);
+		.where(and(eq(task.assigneeId, userId), isNotNull(task.dueDate), lte(task.dueDate, soon)));
 
 	const dayStart = startOfDay(now);
 	const created: NotificationRow[] = [];
@@ -136,9 +130,7 @@ export async function generateDueReminders(userId: string): Promise<Notification
 			);
 		if (existing.length > 0) continue;
 
-		const body = overdue
-			? `Overdue: "${r.title}"`
-			: `Due soon: "${r.title}"`;
+		const body = overdue ? `Overdue: "${r.title}"` : `Due soon: "${r.title}"`;
 		const row = await create({ userId, type, body, projectId: r.projectId, taskId: r.id });
 		if (row) created.push(row);
 	}

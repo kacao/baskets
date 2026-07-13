@@ -85,7 +85,10 @@ export function rollsUpToParent(field: {
 
 /** RollupConfig for a number rollup-to-parent field: aggregate the field over the
  *  task's direct sub-tasks (the target is the field itself). */
-export function numberRollupConfig(field: { id: string; config?: FieldConfig | null }): RollupConfig {
+export function numberRollupConfig(field: {
+	id: string;
+	config?: FieldConfig | null;
+}): RollupConfig {
 	return {
 		relation: 'sub-task',
 		targetFieldId: field.id,
@@ -201,7 +204,13 @@ export type CustomFieldDef = {
 export function defaultConfig(type: string): FieldConfig {
 	switch (type) {
 		case 'number':
-			return { numberFormat: 'number', currencyCode: 'USD', formatString: '', rollupToParent: false, rollupFormula: 'sum' };
+			return {
+				numberFormat: 'number',
+				currencyCode: 'USD',
+				formatString: '',
+				rollupToParent: false,
+				rollupFormula: 'sum'
+			};
 		case 'select':
 			return { multi: false, displayOption: 'text' };
 		case 'date':
@@ -227,9 +236,17 @@ export function sanitizeConfig(type: string, raw: unknown): FieldConfig {
 		case 'number': {
 			const numberFormat = pick(c.numberFormat, NUMBER_FORMATS, 'number');
 			const out: FieldConfig = { numberFormat };
-			if (numberFormat === 'currency' || numberFormat === 'accounting' || numberFormat === 'financial')
-				out.currencyCode = typeof c.currencyCode === 'string' && c.currencyCode.trim() ? c.currencyCode.trim().toUpperCase().slice(0, 3) : 'USD';
-			if (numberFormat === 'custom') out.formatString = typeof c.formatString === 'string' ? c.formatString.slice(0, 80) : '';
+			if (
+				numberFormat === 'currency' ||
+				numberFormat === 'accounting' ||
+				numberFormat === 'financial'
+			)
+				out.currencyCode =
+					typeof c.currencyCode === 'string' && c.currencyCode.trim()
+						? c.currencyCode.trim().toUpperCase().slice(0, 3)
+						: 'USD';
+			if (numberFormat === 'custom')
+				out.formatString = typeof c.formatString === 'string' ? c.formatString.slice(0, 80) : '';
 			if (c.rollupToParent === true) {
 				out.rollupToParent = true;
 				out.rollupFormula = pick(
@@ -241,9 +258,15 @@ export function sanitizeConfig(type: string, raw: unknown): FieldConfig {
 			return out;
 		}
 		case 'select':
-			return { multi: c.multi === true, displayOption: pick(c.displayOption, SELECT_DISPLAYS, 'text') };
+			return {
+				multi: c.multi === true,
+				displayOption: pick(c.displayOption, SELECT_DISPLAYS, 'text')
+			};
 		case 'date':
-			return { dateFormat: pick(c.dateFormat, DATE_FORMATS, 'full'), timeFormat: pick(c.timeFormat, TIME_FORMATS, 'hidden') };
+			return {
+				dateFormat: pick(c.dateFormat, DATE_FORMATS, 'full'),
+				timeFormat: pick(c.timeFormat, TIME_FORMATS, 'hidden')
+			};
 		case 'person':
 		case 'place':
 		case 'files':
@@ -311,12 +334,17 @@ export function buildTaskCfSearch(
 		let text: string;
 		if (Array.isArray(d)) {
 			const r =
-				type === 'select' ? d.map(resolve.option)
-				: type === 'person' ? d.map(resolve.user)
-				: type === 'place' ? d.map(resolve.location)
-				: type === 'task' ? d.map(resolve.task)
-				: type === 'files' ? d.map(resolve.file)
-				: d.map(String);
+				type === 'select'
+					? d.map(resolve.option)
+					: type === 'person'
+						? d.map(resolve.user)
+						: type === 'place'
+							? d.map(resolve.location)
+							: type === 'task'
+								? d.map(resolve.task)
+								: type === 'files'
+									? d.map(resolve.file)
+									: d.map(String);
 			text = r.join(' ');
 		} else {
 			text = String(d ?? '');
@@ -339,9 +367,14 @@ export function formatNumber(n: number, config: FieldConfig): string {
 	const fmt = (config.numberFormat as string) ?? 'number';
 	const currency = ((config.currencyCode as string) || 'USD').toUpperCase();
 	try {
-		if (fmt === 'currency') return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(n);
+		if (fmt === 'currency')
+			return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(n);
 		if (fmt === 'accounting' || fmt === 'financial')
-			return new Intl.NumberFormat(undefined, { style: 'currency', currency, currencySign: 'accounting' }).format(n);
+			return new Intl.NumberFormat(undefined, {
+				style: 'currency',
+				currency,
+				currencySign: 'accounting'
+			}).format(n);
 		if (fmt === 'custom') return String(n); // format string stored, not interpreted (v1)
 		return new Intl.NumberFormat().format(n);
 	} catch {
@@ -430,7 +463,11 @@ export function formatDate(iso: string, config: FieldConfig): string {
 	let datePart: string;
 	switch (dateFormat) {
 		case 'short':
-			datePart = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+			datePart = d.toLocaleDateString(undefined, {
+				year: 'numeric',
+				month: 'short',
+				day: 'numeric'
+			});
 			break;
 		case 'mdy':
 			datePart = `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()}`;
@@ -443,10 +480,19 @@ export function formatDate(iso: string, config: FieldConfig): string {
 			break;
 		case 'full':
 		default:
-			datePart = d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+			datePart = d.toLocaleDateString(undefined, {
+				weekday: 'long',
+				year: 'numeric',
+				month: 'long',
+				day: 'numeric'
+			});
 	}
 	if (timeFormat !== 'hidden' && iso.includes('T')) {
-		const timePart = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: timeFormat === '12h' });
+		const timePart = d.toLocaleTimeString(undefined, {
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: timeFormat === '12h'
+		});
 		return `${datePart} ${timePart}`;
 	}
 	return datePart;

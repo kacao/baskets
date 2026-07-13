@@ -46,7 +46,7 @@ access roster — this plan makes `person` custom-field writes do the same.
   export async function projectAccessUserIds(
   	projectId: string,
   	workspaceId: string | null
-  ): Promise<Set<string>>
+  ): Promise<Set<string>>;
   ```
 
   It returns admins + the workspace owner + workspace grantees + direct project
@@ -54,49 +54,49 @@ access roster — this plan makes `person` custom-field writes do the same.
   uses it exactly this way:
 
   ```ts
-  	const [proj] = await db
-  		.select({ workspaceId: project.workspaceId })
-  		.from(project)
-  		.where(eq(project.id, opts.projectId));
-  	const allowed = await projectAccessUserIds(opts.projectId, proj?.workspaceId ?? null);
-  	const targets = fresh.filter((id) => allowed.has(id));
+  const [proj] = await db
+  	.select({ workspaceId: project.workspaceId })
+  	.from(project)
+  	.where(eq(project.id, opts.projectId));
+  const allowed = await projectAccessUserIds(opts.projectId, proj?.workspaceId ?? null);
+  const targets = fresh.filter((id) => allowed.has(id));
   ```
 
 ### The vulnerable validation, inside `encodeAndValidate` (`customFields.ts`):
 
 ```ts
-		let valid: Set<string>;
-		if (type === 'select') {
-			const opts = await db
-				.select({ id: customFieldOption.id })
-				.from(customFieldOption)
-				.where(eq(customFieldOption.fieldId, field.id));
-			valid = new Set(opts.map((o) => o.id));
-		} else if (type === 'person') {
-			const us = await db.select({ id: user.id }).from(user).where(inArray(user.id, ids));
-			valid = new Set(us.map((u) => u.id));
-		} else if (type === 'place') {
-			const locs = await db
-				.select({ id: location.id })
-				.from(location)
-				.where(and(eq(location.projectId, projectId), inArray(location.id, ids)));
-			valid = new Set(locs.map((l) => l.id));
-		} else if (type === 'task') {
-			const ts = await db
-				.select({ id: task.id })
-				.from(task)
-				.where(and(eq(task.projectId, projectId), inArray(task.id, ids)));
-			valid = new Set(ts.map((t) => t.id));
-		} else {
-			// files
-			const fs = await db
-				.select({ id: file.id })
-				.from(file)
-				.where(and(eq(file.projectId, projectId), inArray(file.id, ids)));
-			valid = new Set(fs.map((f) => f.id));
-		}
-		if (!ids.every((id) => valid.has(id))) return { error: 'Invalid reference in custom field' };
-		return { value: JSON.stringify(ids) };
+let valid: Set<string>;
+if (type === 'select') {
+	const opts = await db
+		.select({ id: customFieldOption.id })
+		.from(customFieldOption)
+		.where(eq(customFieldOption.fieldId, field.id));
+	valid = new Set(opts.map((o) => o.id));
+} else if (type === 'person') {
+	const us = await db.select({ id: user.id }).from(user).where(inArray(user.id, ids));
+	valid = new Set(us.map((u) => u.id));
+} else if (type === 'place') {
+	const locs = await db
+		.select({ id: location.id })
+		.from(location)
+		.where(and(eq(location.projectId, projectId), inArray(location.id, ids)));
+	valid = new Set(locs.map((l) => l.id));
+} else if (type === 'task') {
+	const ts = await db
+		.select({ id: task.id })
+		.from(task)
+		.where(and(eq(task.projectId, projectId), inArray(task.id, ids)));
+	valid = new Set(ts.map((t) => t.id));
+} else {
+	// files
+	const fs = await db
+		.select({ id: file.id })
+		.from(file)
+		.where(and(eq(file.projectId, projectId), inArray(file.id, ids)));
+	valid = new Set(fs.map((f) => f.id));
+}
+if (!ids.every((id) => valid.has(id))) return { error: 'Invalid reference in custom field' };
+return { value: JSON.stringify(ids) };
 ```
 
 The `person` branch is the only one that does not constrain `ids` to the project.
@@ -127,21 +127,23 @@ import {
 
 ## Commands you will need
 
-| Purpose        | Command                     | Expected on success                    |
-|----------------|-----------------------------|----------------------------------------|
-| Typecheck      | `npm run check`             | exit 0, 0 errors, 0 warnings           |
-| Unit tests     | `npm run test:unit`         | all pass (baseline: 416 tests)         |
-| Integration    | `npm run test:integration`  | all pass (needs live server + seeded DB)|
-| Start dev srv  | `npm run dev`               | serves on `http://localhost:5173`      |
-| Seed DB        | `npm run db:seed`           | seeds admin/demo + sample data         |
+| Purpose       | Command                    | Expected on success                      |
+| ------------- | -------------------------- | ---------------------------------------- |
+| Typecheck     | `npm run check`            | exit 0, 0 errors, 0 warnings             |
+| Unit tests    | `npm run test:unit`        | all pass (baseline: 416 tests)           |
+| Integration   | `npm run test:integration` | all pass (needs live server + seeded DB) |
+| Start dev srv | `npm run dev`              | serves on `http://localhost:5173`        |
+| Seed DB       | `npm run db:seed`          | seeds admin/demo + sample data           |
 
 ## Scope
 
 **In scope** (the only files you should modify):
+
 - `src/lib/server/customFields.ts`
 - `tests/integration/person-field-scope.test.ts` (create)
 
 **Out of scope** (do NOT touch):
+
 - `src/lib/server/permissions.ts` — reuse `projectAccessUserIds` as-is; do not
   change its signature.
 - The `place`/`task`/`files`/`select` branches — they are already project-scoped.

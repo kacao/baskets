@@ -86,5 +86,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		createdAt: new Date()
 	});
 	broadcastProjectChange(t.projectId, locals.user.id);
-	return json({ file: { id, taskId: params.id, fieldId: null, filename, mimeType, size: blob.size } }, { status: 201 });
+	return json(
+		{ file: { id, taskId: params.id, fieldId: null, filename, mimeType, size: blob.size } },
+		{ status: 201 }
+	);
 };

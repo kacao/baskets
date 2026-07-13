@@ -38,7 +38,9 @@ export function createPaneNav<T extends { id: string }>(getAllTasks: () => T[]) 
 
 	const selected = $derived(getAllTasks().find((t) => t.id === selectedId) ?? null);
 	const backTask = $derived(
-		backStack.length ? (getAllTasks().find((t) => t.id === backStack[backStack.length - 1]) ?? null) : null
+		backStack.length
+			? (getAllTasks().find((t) => t.id === backStack[backStack.length - 1]) ?? null)
+			: null
 	);
 
 	function openDetail(t: T) {

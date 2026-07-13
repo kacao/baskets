@@ -1,14 +1,26 @@
 import { json } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { customField, customFieldOption, location, milestone, project, task, view } from '$lib/server/db/schema';
+import {
+	customField,
+	customFieldOption,
+	location,
+	milestone,
+	project,
+	task,
+	view
+} from '$lib/server/db/schema';
 import { apiError, readJson, optionalString, ApiValidationError } from '$lib/server/api';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { canAccessProject, canEditProject } from '$lib/server/permissions';
 import { deleteFilesForProject } from '$lib/server/uploads';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
 import { ICON_NAMES } from '$lib/heroiconNames';
-import { customValuesByTask, listCustomFieldOptions, listProjectCustomFields } from '$lib/server/customFields';
+import {
+	customValuesByTask,
+	listCustomFieldOptions,
+	listProjectCustomFields
+} from '$lib/server/customFields';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals }) => {
@@ -46,7 +58,10 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	const customFields = await listProjectCustomFields(params.id);
 	const [customFieldOptions, valuesByTask] = await Promise.all([
 		listCustomFieldOptions(customFields.map((f) => f.id)),
-		customValuesByTask(params.id, tasks.map((t) => t.id))
+		customValuesByTask(
+			params.id,
+			tasks.map((t) => t.id)
+		)
 	]);
 	// attach each task's decoded custom-field value map
 	const tasksWithCf = tasks.map((t) => ({ ...t, customFields: valuesByTask[t.id] ?? {} }));

@@ -12,7 +12,9 @@
 <svelte:head><title>{data.project.name} — {$t('Locations')} — Baskets</title></svelte:head>
 
 <p class="u-tiny" style="margin-bottom: var(--sp-2);">
-	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"><Icon name="arrow-left" size={12} /> {data.project.name}</a>
+	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;"
+		><Icon name="arrow-left" size={12} /> {data.project.name}</a
+	>
 </p>
 <h2 style="margin-bottom: var(--sp-4);">{$t('Locations')}</h2>
 
@@ -36,12 +38,39 @@
 					style="flex: 1; flex-wrap: wrap;"
 				>
 					<input type="hidden" name="id" value={l.id} />
-					<input name="title" class="input" value={l.title} placeholder={$t('Title')} required style="flex: 1; min-width: 120px;" />
-					<input name="address" class="input" value={l.address ?? ''} placeholder={$t('Address (optional)')} style="flex: 1; min-width: 120px;" />
-					<input name="latitude" class="input mono" value={l.latitude ?? ''} placeholder={$t('Latitude')} style="width: 90px;" />
-					<input name="longitude" class="input mono" value={l.longitude ?? ''} placeholder={$t('Longitude')} style="width: 90px;" />
+					<input
+						name="title"
+						class="input"
+						value={l.title}
+						placeholder={$t('Title')}
+						required
+						style="flex: 1; min-width: 120px;"
+					/>
+					<input
+						name="address"
+						class="input"
+						value={l.address ?? ''}
+						placeholder={$t('Address (optional)')}
+						style="flex: 1; min-width: 120px;"
+					/>
+					<input
+						name="latitude"
+						class="input mono"
+						value={l.latitude ?? ''}
+						placeholder={$t('Latitude')}
+						style="width: 90px;"
+					/>
+					<input
+						name="longitude"
+						class="input mono"
+						value={l.longitude ?? ''}
+						placeholder={$t('Longitude')}
+						style="width: 90px;"
+					/>
 					<button class="btn btn-sm btn-primary" type="submit">{$t('Save')}</button>
-					<button class="btn btn-sm" type="button" onclick={() => (editingLocation = null)}>{$t('Cancel')}</button>
+					<button class="btn btn-sm" type="button" onclick={() => (editingLocation = null)}
+						>{$t('Cancel')}</button
+					>
 				</form>
 			{:else}
 				<span class="name">{l.title}</span>
@@ -60,9 +89,26 @@
 	{:else}
 		<p class="u-tiny u-muted" style="margin-bottom: var(--sp-2);">{$t('No locations yet.')}</p>
 	{/each}
-	<form method="POST" action="?/createLocation" use:enhance class="u-flex" style="flex-wrap: wrap; margin-top: var(--sp-2);">
-		<input name="title" class="input" style="flex: 1; min-width: 120px;" placeholder={$t('Location name…')} required />
-		<input name="address" class="input" style="flex: 1; min-width: 120px;" placeholder={$t('Address (optional)')} />
+	<form
+		method="POST"
+		action="?/createLocation"
+		use:enhance
+		class="u-flex"
+		style="flex-wrap: wrap; margin-top: var(--sp-2);"
+	>
+		<input
+			name="title"
+			class="input"
+			style="flex: 1; min-width: 120px;"
+			placeholder={$t('Location name…')}
+			required
+		/>
+		<input
+			name="address"
+			class="input"
+			style="flex: 1; min-width: 120px;"
+			placeholder={$t('Address (optional)')}
+		/>
 		<input name="latitude" class="input mono" style="width: 90px;" placeholder={$t('Latitude')} />
 		<input name="longitude" class="input mono" style="width: 90px;" placeholder={$t('Longitude')} />
 		<button class="btn btn-sm" type="submit">{$t('Add')}</button>

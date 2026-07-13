@@ -7,12 +7,7 @@ import {
 	canEditWorkspace,
 	isAdmin
 } from '$lib/server/permissions';
-import {
-	createProject,
-	createUser,
-	createWorkspace,
-	grantPermission
-} from './helpers/testDb';
+import { createProject, createUser, createWorkspace, grantPermission } from './helpers/testDb';
 
 beforeEach(resetTables);
 

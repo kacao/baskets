@@ -32,7 +32,9 @@
 		</span>
 	</div>
 	<p class="u-small u-muted desc" style="margin-bottom: var(--sp-3);">
-		{$t('Posts to a Slack channel when projects are created and tasks are created or completed. Uses an incoming webhook — create one in Slack under Apps → Incoming Webhooks.')}
+		{$t(
+			'Posts to a Slack channel when projects are created and tasks are created or completed. Uses an incoming webhook — create one in Slack under Apps → Incoming Webhooks.'
+		)}
 	</p>
 
 	{#if form?.message}
@@ -42,12 +44,15 @@
 		<div class="alert alert-success" role="status">{$t('Slack connected.')}</div>
 	{/if}
 	{#if form?.tested}
-		<div class="alert alert-success" role="status">{$t('Test message sent — check your channel.')}</div>
+		<div class="alert alert-success" role="status">
+			{$t('Test message sent — check your channel.')}
+		</div>
 	{/if}
 
 	{#if !admin}
 		<p class="u-small u-muted">
-			{connected ? $t('Connected.') : $t('Not connected.')} {$t('Only admins can manage integrations.')}
+			{connected ? $t('Connected.') : $t('Not connected.')}
+			{$t('Only admins can manage integrations.')}
 		</p>
 	{:else if connected && !editing}
 		<p class="u-small" style="margin-bottom: var(--sp-3);">
@@ -85,7 +90,8 @@
 					{loading ? $t('Saving…') : connected ? $t('Update webhook') : $t('Connect Slack')}
 				</button>
 				{#if editing}
-					<button class="btn" type="button" onclick={() => (editing = false)}>{$t('Cancel')}</button>
+					<button class="btn" type="button" onclick={() => (editing = false)}>{$t('Cancel')}</button
+					>
 				{/if}
 			</div>
 		</form>

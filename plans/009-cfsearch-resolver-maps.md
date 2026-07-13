@@ -30,7 +30,7 @@ array** (`customFieldOptions`, `users`, `locations`, `tasks`, `files`).
 custom-field value array on every task**, so building the search index is
 `O(values · array-length · list-length)`. It is a `$derived`, so it rebuilds on
 every data change — including every realtime `invalidateAll()` refetch. The
-inline comment even hedges *"O(values) — fine at app scale"* (optimistic).
+inline comment even hedges _"O(values) — fine at app scale"_ (optimistic).
 Swapping the linear `.find(` closures for `Map.get(` calls (maps built once)
 drops the per-lookup cost from O(list) to O(1). Pure refactor — the resolved
 strings are identical, so search behavior does not change.
@@ -40,19 +40,19 @@ strings are identical, so search behavior does not change.
 ### `src/routes/(app)/projects/[id]/+page.svelte:137–149`
 
 ```ts
-	// Per-task searchable text from custom-field values (resolved to display labels).
-	// Lets free-text search + the task-cf link picker hit custom fields. ponytail:
-	// rebuilt on any data change, O(values) — fine at app scale.
-	const cfSearchByTask = $derived(
-		buildTaskCfSearch(data.customFields, data.taskCustomValues, {
-			option: (id) => data.customFieldOptions.find((o) => o.id === id)?.title ?? '',
-			user: (id) => data.users.find((u) => u.id === id)?.name ?? '',
-			location: (id) => data.locations.find((l) => l.id === id)?.title ?? '',
-			task: (id) => data.tasks.find((t) => t.id === id)?.title ?? '',
-			file: (id) => data.files.find((f) => f.id === id)?.filename ?? ''
-		})
-	);
-	const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';
+// Per-task searchable text from custom-field values (resolved to display labels).
+// Lets free-text search + the task-cf link picker hit custom fields. ponytail:
+// rebuilt on any data change, O(values) — fine at app scale.
+const cfSearchByTask = $derived(
+	buildTaskCfSearch(data.customFields, data.taskCustomValues, {
+		option: (id) => data.customFieldOptions.find((o) => o.id === id)?.title ?? '',
+		user: (id) => data.users.find((u) => u.id === id)?.name ?? '',
+		location: (id) => data.locations.find((l) => l.id === id)?.title ?? '',
+		task: (id) => data.tasks.find((t) => t.id === id)?.title ?? '',
+		file: (id) => data.files.find((f) => f.id === id)?.filename ?? ''
+	})
+);
+const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';
 ```
 
 ### `buildTaskCfSearch` — `src/lib/customFields.ts:294–333` (the consumer)
@@ -78,12 +78,17 @@ export function buildTaskCfSearch(
 		let text: string;
 		if (Array.isArray(d)) {
 			const r =
-				type === 'select' ? d.map(resolve.option)
-				: type === 'person' ? d.map(resolve.user)
-				: type === 'place' ? d.map(resolve.location)
-				: type === 'task' ? d.map(resolve.task)
-				: type === 'files' ? d.map(resolve.file)
-				: d.map(String);
+				type === 'select'
+					? d.map(resolve.option)
+					: type === 'person'
+						? d.map(resolve.user)
+						: type === 'place'
+							? d.map(resolve.location)
+							: type === 'task'
+								? d.map(resolve.task)
+								: type === 'files'
+									? d.map(resolve.file)
+									: d.map(String);
 			text = r.join(' ');
 		} else {
 			text = String(d ?? '');
@@ -101,7 +106,7 @@ export function buildTaskCfSearch(
 ```
 
 `buildTaskCfSearch`'s **signature does not change** — it still takes five
-`(id) => string` resolvers. Only the *closures the caller passes* change from
+`(id) => string` resolvers. Only the _closures the caller passes_ change from
 `array.find(...)` to `map.get(...)`. So the pure `$lib` function is untouched,
 and its unit tests (`tests/unit/customFieldsSearch.test.ts`) keep passing
 without modification.
@@ -109,17 +114,17 @@ without modification.
 ### TaskPanel.svelte:195–205 (the parallel site — Step 2)
 
 ```ts
-	// per-task cf search text so the `task`-cf link picker searches by cf values too
-	const cfSearchByTask = $derived(
-		buildTaskCfSearch(customFields, taskCustomValues, {
-			option: (id) => customFieldOptions.find((o) => o.id === id)?.title ?? '',
-			user: (id) => users.find((u) => u.id === id)?.name ?? '',
-			location: (id) => locations.find((l) => l.id === id)?.title ?? '',
-			task: (id) => tasks.find((t) => t.id === id)?.title ?? '',
-			file: (id) => files.find((f) => f.id === id)?.filename ?? ''
-		})
-	);
-	const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';
+// per-task cf search text so the `task`-cf link picker searches by cf values too
+const cfSearchByTask = $derived(
+	buildTaskCfSearch(customFields, taskCustomValues, {
+		option: (id) => customFieldOptions.find((o) => o.id === id)?.title ?? '',
+		user: (id) => users.find((u) => u.id === id)?.name ?? '',
+		location: (id) => locations.find((l) => l.id === id)?.title ?? '',
+		task: (id) => tasks.find((t) => t.id === id)?.title ?? '',
+		file: (id) => files.find((f) => f.id === id)?.filename ?? ''
+	})
+);
+const taskCfSearch = (id: string) => cfSearchByTask.get(id) ?? '';
 ```
 
 Same shape; `customFields`/`customFieldOptions`/`users`/`locations`/`tasks`/`files`
@@ -135,19 +140,21 @@ stale. Reference exemplar of a reactive derived in this same file:
 
 ## Commands you will need
 
-| Purpose        | Command                                              | Expected on success       |
-|----------------|-----------------------------------------------------|---------------------------|
-| Typecheck      | `npm run check`                                     | exit 0, 0 errors/warnings |
-| Unit tests     | `npm run test:unit`                                 | all pass (416 tests)      |
-| Grep (no find) | `grep -n "\.find(" "src/routes/(app)/projects/[id]/+page.svelte"` | (see Step verify) |
+| Purpose        | Command                                                           | Expected on success       |
+| -------------- | ----------------------------------------------------------------- | ------------------------- |
+| Typecheck      | `npm run check`                                                   | exit 0, 0 errors/warnings |
+| Unit tests     | `npm run test:unit`                                               | all pass (416 tests)      |
+| Grep (no find) | `grep -n "\.find(" "src/routes/(app)/projects/[id]/+page.svelte"` | (see Step verify)         |
 
 ## Scope
 
 **In scope**:
+
 - `src/routes/(app)/projects/[id]/+page.svelte` — Step 1 (primary).
 - `src/lib/components/TaskPanel.svelte` — Step 2 (optional parallel site).
 
 **Out of scope** (do NOT touch):
+
 - `src/lib/customFields.ts` — `buildTaskCfSearch`'s signature and body stay
   exactly as-is. This is a caller-side change only.
 - `tests/unit/customFieldsSearch.test.ts` — must pass unchanged (proves behavior
@@ -170,31 +177,32 @@ In `src/routes/(app)/projects/[id]/+page.svelte`, ABOVE the `cfSearchByTask`
 derived (i.e. before line 140), add five reactive maps:
 
 ```ts
-	const optionTitleById = $derived(new Map(data.customFieldOptions.map((o) => [o.id, o.title])));
-	const userNameById = $derived(new Map(data.users.map((u) => [u.id, u.name])));
-	const locationTitleById = $derived(new Map(data.locations.map((l) => [l.id, l.title])));
-	const taskTitleById = $derived(new Map(data.tasks.map((t) => [t.id, t.title])));
-	const fileNameById = $derived(new Map(data.files.map((f) => [f.id, f.filename])));
+const optionTitleById = $derived(new Map(data.customFieldOptions.map((o) => [o.id, o.title])));
+const userNameById = $derived(new Map(data.users.map((u) => [u.id, u.name])));
+const locationTitleById = $derived(new Map(data.locations.map((l) => [l.id, l.title])));
+const taskTitleById = $derived(new Map(data.tasks.map((t) => [t.id, t.title])));
+const fileNameById = $derived(new Map(data.files.map((f) => [f.id, f.filename])));
 ```
 
 Then change the resolver closures to read from those maps:
 
 ```ts
-	const cfSearchByTask = $derived(
-		buildTaskCfSearch(data.customFields, data.taskCustomValues, {
-			option: (id) => optionTitleById.get(id) ?? '',
-			user: (id) => userNameById.get(id) ?? '',
-			location: (id) => locationTitleById.get(id) ?? '',
-			task: (id) => taskTitleById.get(id) ?? '',
-			file: (id) => fileNameById.get(id) ?? ''
-		})
-	);
+const cfSearchByTask = $derived(
+	buildTaskCfSearch(data.customFields, data.taskCustomValues, {
+		option: (id) => optionTitleById.get(id) ?? '',
+		user: (id) => userNameById.get(id) ?? '',
+		location: (id) => locationTitleById.get(id) ?? '',
+		task: (id) => taskTitleById.get(id) ?? '',
+		file: (id) => fileNameById.get(id) ?? ''
+	})
+);
 ```
 
 Keep the `const taskCfSearch = (id) => cfSearchByTask.get(id) ?? '';` line
 unchanged.
 
 **Verify**:
+
 - `npm run check` → exit 0, 0 errors/warnings.
 - The five cf-search resolvers now use `.get(` — confirm by eye that none of the
   five closures inside the `buildTaskCfSearch(...)` call still contains `.find(`.

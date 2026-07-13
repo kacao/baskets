@@ -33,7 +33,7 @@
 	);
 
 	const lightbox = $derived(
-		lightboxId ? data.files.find((f) => f.id === lightboxId) ?? null : null
+		lightboxId ? (data.files.find((f) => f.id === lightboxId) ?? null) : null
 	);
 
 	function sourceLabel(f: PageData['files'][number]): string {
@@ -44,7 +44,11 @@
 
 	function shortDate(d: Date | string | number): string {
 		try {
-			return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+			return new Date(d).toLocaleDateString(undefined, {
+				month: 'short',
+				day: 'numeric',
+				year: 'numeric'
+			});
 		} catch {
 			return '';
 		}
@@ -95,7 +99,9 @@
 	}
 
 	async function remove(f: PageData['files'][number]) {
-		if (!(await confirmDialog($t('Delete this file?'), { confirmLabel: $t('Delete'), danger: true })))
+		if (
+			!(await confirmDialog($t('Delete this file?'), { confirmLabel: $t('Delete'), danger: true }))
+		)
 			return;
 		const res = await fetch(`/api/files/${f.id}`, { method: 'DELETE' });
 		if (res.ok) {
@@ -109,7 +115,8 @@
 
 <p class="u-tiny" style="margin-bottom: var(--sp-2);">
 	<a href="/projects/{data.project.id}" class="u-flex" style="gap: 4px;">
-		<Icon name="arrow-left" size={12} /> {data.project.name}
+		<Icon name="arrow-left" size={12} />
+		{data.project.name}
 	</a>
 </p>
 <h2 style="margin-bottom: var(--sp-4);">
@@ -124,21 +131,40 @@
 		role="button"
 		tabindex="0"
 		aria-label={$t('Add files')}
-		ondragover={(e) => { e.preventDefault(); dragOver = true; }}
+		ondragover={(e) => {
+			e.preventDefault();
+			dragOver = true;
+		}}
 		ondragleave={() => (dragOver = false)}
 		ondrop={onDrop}
 		onclick={() => fileInput?.click()}
-		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput?.click(); } }}
+		onkeydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				fileInput?.click();
+			}
+		}}
 	>
 		<Icon name="cloud-upload" size={20} />
 		<span>{uploading ? $t('Uploading…') : $t('Drag files here or click to upload')}</span>
-		<button class="btn btn-sm btn-primary" type="button" onclick={(e) => { e.stopPropagation(); fileInput?.click(); }} disabled={uploading}>
-			<Icon name="upload" size={14} /> {$t('Upload')}
+		<button
+			class="btn btn-sm btn-primary"
+			type="button"
+			onclick={(e) => {
+				e.stopPropagation();
+				fileInput?.click();
+			}}
+			disabled={uploading}
+		>
+			<Icon name="upload" size={14} />
+			{$t('Upload')}
 		</button>
 	</div>
 	<input bind:this={fileInput} type="file" multiple onchange={onPick} hidden />
 	{#if uploadError}
-		<div class="alert alert-error" role="alert" style="margin-bottom: var(--sp-3);">{uploadError}</div>
+		<div class="alert alert-error" role="alert" style="margin-bottom: var(--sp-3);">
+			{uploadError}
+		</div>
 	{/if}
 {/if}
 
@@ -201,11 +227,22 @@
 			<div class="card-file">
 				<div class="preview">
 					{#if isPreviewableImage(f.mimeType)}
-						<button class="img-btn" type="button" onclick={() => (lightboxId = f.id)} aria-label={f.filename}>
+						<button
+							class="img-btn"
+							type="button"
+							onclick={() => (lightboxId = f.id)}
+							aria-label={f.filename}
+						>
 							<img src={`/api/files/${f.id}`} alt={f.filename} loading="lazy" />
 						</button>
 					{:else}
-						<a class="doc-btn" href={`/api/files/${f.id}`} target="_blank" rel="noreferrer noopener" aria-label={f.filename}>
+						<a
+							class="doc-btn"
+							href={`/api/files/${f.id}`}
+							target="_blank"
+							rel="noreferrer noopener"
+							aria-label={f.filename}
+						>
 							<Icon name={fileIcon(f.mimeType, f.filename)} size={28} />
 						</a>
 					{/if}
@@ -217,15 +254,28 @@
 						<span class="size">{formatBytes(f.size)}</span>
 					</span>
 					<span class="who">
-						{#if f.uploaderName}{f.uploaderName} · {/if}{shortDate(f.createdAt)}
+						{#if f.uploaderName}{f.uploaderName} ·
+						{/if}{shortDate(f.createdAt)}
 					</span>
 				</div>
 				<div class="row-actions">
-					<a class="icon-btn" href={`/api/files/${f.id}`} download use:tooltip={$t('Download')} aria-label={$t('Download')}>
+					<a
+						class="icon-btn"
+						href={`/api/files/${f.id}`}
+						download
+						use:tooltip={$t('Download')}
+						aria-label={$t('Download')}
+					>
 						<Icon name="download" size={14} />
 					</a>
 					{#if data.perm.canEdit}
-						<button class="icon-btn danger" type="button" onclick={() => remove(f)} use:tooltip={$t('Delete')} aria-label={$t('Delete')}>
+						<button
+							class="icon-btn danger"
+							type="button"
+							onclick={() => remove(f)}
+							use:tooltip={$t('Delete')}
+							aria-label={$t('Delete')}
+						>
 							<Icon name="trash" size={14} />
 						</button>
 					{/if}
@@ -239,30 +289,60 @@
 			<div class="list-row">
 				<div class="list-thumb">
 					{#if isPreviewableImage(f.mimeType)}
-						<button class="img-btn" type="button" onclick={() => (lightboxId = f.id)} aria-label={f.filename}>
+						<button
+							class="img-btn"
+							type="button"
+							onclick={() => (lightboxId = f.id)}
+							aria-label={f.filename}
+						>
 							<img src={`/api/files/${f.id}`} alt={f.filename} loading="lazy" />
 						</button>
 					{:else}
-						<a class="doc-btn" href={`/api/files/${f.id}`} target="_blank" rel="noreferrer noopener" aria-label={f.filename}>
+						<a
+							class="doc-btn"
+							href={`/api/files/${f.id}`}
+							target="_blank"
+							rel="noreferrer noopener"
+							aria-label={f.filename}
+						>
 							<Icon name={fileIcon(f.mimeType, f.filename)} size={22} />
 						</a>
 					{/if}
 				</div>
-				<a class="list-name" href={`/api/files/${f.id}`} target="_blank" rel="noreferrer noopener" use:tooltip={f.filename}>
+				<a
+					class="list-name"
+					href={`/api/files/${f.id}`}
+					target="_blank"
+					rel="noreferrer noopener"
+					use:tooltip={f.filename}
+				>
 					{f.filename}
 				</a>
 				<span class="chip chip--{f.source.kind}">{sourceLabel(f)}</span>
 				<span class="list-size">{formatBytes(f.size)}</span>
 				<span class="list-who">
-					{#if f.uploaderName}{f.uploaderName} · {/if}{shortDate(f.createdAt)}
+					{#if f.uploaderName}{f.uploaderName} ·
+					{/if}{shortDate(f.createdAt)}
 				</span>
 				<span class="spacer"></span>
 				<div class="row-actions">
-					<a class="icon-btn" href={`/api/files/${f.id}`} download use:tooltip={$t('Download')} aria-label={$t('Download')}>
+					<a
+						class="icon-btn"
+						href={`/api/files/${f.id}`}
+						download
+						use:tooltip={$t('Download')}
+						aria-label={$t('Download')}
+					>
 						<Icon name="download" size={14} />
 					</a>
 					{#if data.perm.canEdit}
-						<button class="icon-btn danger" type="button" onclick={() => remove(f)} use:tooltip={$t('Delete')} aria-label={$t('Delete')}>
+						<button
+							class="icon-btn danger"
+							type="button"
+							onclick={() => remove(f)}
+							use:tooltip={$t('Delete')}
+							aria-label={$t('Delete')}
+						>
 							<Icon name="trash" size={14} />
 						</button>
 					{/if}
@@ -279,9 +359,16 @@
 		tabindex="0"
 		aria-label={$t('Close')}
 		onclick={() => (lightboxId = null)}
-		onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') lightboxId = null; }}
+		onkeydown={(e) => {
+			if (e.key === 'Escape' || e.key === 'Enter') lightboxId = null;
+		}}
 	>
-		<button class="lb-close" type="button" aria-label={$t('Close')} onclick={() => (lightboxId = null)}>
+		<button
+			class="lb-close"
+			type="button"
+			aria-label={$t('Close')}
+			onclick={() => (lightboxId = null)}
+		>
 			<Icon name="xmark" size={20} />
 		</button>
 		<img class="lb-img" src={`/api/files/${lightbox.id}`} alt={lightbox.filename} />
@@ -311,7 +398,10 @@
 		font-size: 13px;
 		cursor: pointer;
 		text-align: center;
-		transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
+		transition:
+			border-color var(--dur-fast),
+			color var(--dur-fast),
+			background var(--dur-fast);
 	}
 
 	.dropzone:hover,
@@ -377,7 +467,9 @@
 		background: none;
 		color: var(--color-muted);
 		cursor: pointer;
-		transition: background var(--dur-fast), color var(--dur-fast);
+		transition:
+			background var(--dur-fast),
+			color var(--dur-fast);
 	}
 
 	.seg-btn + .seg-btn {
@@ -420,7 +512,9 @@
 		border-radius: var(--radius-field, 0.25rem);
 		overflow: hidden;
 		background: var(--color-base-100, var(--color-bg));
-		transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+		transition:
+			border-color var(--dur-fast),
+			box-shadow var(--dur-fast);
 	}
 
 	.card-file:hover {
@@ -538,7 +632,10 @@
 		color: var(--color-muted);
 		cursor: pointer;
 		text-decoration: none;
-		transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+		transition:
+			background var(--dur-fast),
+			color var(--dur-fast),
+			border-color var(--dur-fast);
 	}
 
 	.icon-btn:hover {

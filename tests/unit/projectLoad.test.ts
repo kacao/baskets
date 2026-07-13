@@ -127,7 +127,13 @@ describe('computeProjectRollupText', () => {
 			{ taskId: 't2', fieldId: 'hours', value: '5' },
 			{ taskId: 't3', fieldId: 'hours', value: 'not-a-number' }
 		];
-		const out = computeProjectRollupText([rollupField], [targetField], [], rollupTasks, rollupValues);
+		const out = computeProjectRollupText(
+			[rollupField],
+			[targetField],
+			[],
+			rollupTasks,
+			rollupValues
+		);
 		expect(out).toEqual({ r1: '15' });
 	});
 
@@ -137,7 +143,11 @@ describe('computeProjectRollupText', () => {
 			type: 'rollup',
 			config: { relation: 'task', targetFieldId: 'hours', formula: 'average' }
 		};
-		const taskField = { id: 'hours', type: 'number', config: { numberFormat: 'currency', currencyCode: 'USD' } };
+		const taskField = {
+			id: 'hours',
+			type: 'number',
+			config: { numberFormat: 'currency', currencyCode: 'USD' }
+		};
 		const rollupValues = [
 			{ taskId: 't1', fieldId: 'hours', value: '10' },
 			{ taskId: 't2', fieldId: 'hours', value: '20' }
@@ -149,7 +159,9 @@ describe('computeProjectRollupText', () => {
 			rollupTasks,
 			rollupValues
 		);
-		expect(out.r1).toBe(new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(15));
+		expect(out.r1).toBe(
+			new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(15)
+		);
 	});
 
 	it('falls back to projectFields when the target is a project-entity (non-rollup) field, not in customFields', () => {
@@ -158,7 +170,11 @@ describe('computeProjectRollupText', () => {
 			type: 'rollup',
 			config: { relation: 'task', targetFieldId: 'proj-num', formula: 'sum' }
 		};
-		const projectNumberField = { id: 'proj-num', type: 'number', config: { numberFormat: 'number' } };
+		const projectNumberField = {
+			id: 'proj-num',
+			type: 'number',
+			config: { numberFormat: 'number' }
+		};
 		// No custom (task-facing) fields at all — target only resolvable via the
 		// full projectFields list, proving the fallback lookup still works.
 		const out = computeProjectRollupText(

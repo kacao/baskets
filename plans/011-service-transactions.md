@@ -99,33 +99,33 @@ manual-BEGIN path this plan adds is new to the codebase.
 ### The op to fix — `updateTaskService` (`src/lib/server/tasks.ts`), the un-atomic tail
 
 ```ts
-	const cf = input.cf ?? [];
-	if (Object.keys(set).length === 0 && cf.length === 0) return err(400, 'No fields to update');
+const cf = input.cf ?? [];
+if (Object.keys(set).length === 0 && cf.length === 0) return err(400, 'No fields to update');
 
-	// Write custom values FIRST so a CF validation error doesn't leave the task
-	// row partially updated with no rollback (no surrounding transaction).
-	if (cf.length > 0) {
-		const res = await writeTaskCustomValues(taskId, projectId, cf);
-		if (res.error) return err(400, res.error);
+// Write custom values FIRST so a CF validation error doesn't leave the task
+// row partially updated with no rollback (no surrounding transaction).
+if (cf.length > 0) {
+	const res = await writeTaskCustomValues(taskId, projectId, cf);
+	if (res.error) return err(400, res.error);
+}
+
+const [updated] = await db
+	.update(task)
+	.set({ ...set, updatedAt: new Date() })
+	.where(eq(task.id, taskId))
+	.returning();
+
+// Completing a parent completes its sub-tasks + recurrence spawn (REST PATCH).
+if (opts.completeCascade) {
+	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	if (targetStatus?.category === 'completed' && !wasDone) {
+		// ...recurrence insert + sub-task cascade update + (void) dispatchEvent...
 	}
+}
 
-	const [updated] = await db
-		.update(task)
-		.set({ ...set, updatedAt: new Date() })
-		.where(eq(task.id, taskId))
-		.returning();
-
-	// Completing a parent completes its sub-tasks + recurrence spawn (REST PATCH).
-	if (opts.completeCascade) {
-		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-		if (targetStatus?.category === 'completed' && !wasDone) {
-			// ...recurrence insert + sub-task cascade update + (void) dispatchEvent...
-		}
-	}
-
-	// ...logActivity (void), notifyMentions (void), notifyAssignee (void)...
-	broadcastProjectChange(projectId, actor.id);
-	return ok(updated);
+// ...logActivity (void), notifyMentions (void), notifyAssignee (void)...
+broadcastProjectChange(projectId, actor.id);
+return ok(updated);
 ```
 
 The DB writes to make atomic: the CF write, the task `update`, and (inside
@@ -144,12 +144,17 @@ export async function writeTaskCustomValues(
 ): Promise<{ error?: string }> {
 	// ...validation... then:
 	for (const fieldId of clears)
-		await db.delete(taskCustomValue).where(and(eq(taskCustomValue.taskId, taskId), eq(taskCustomValue.fieldId, fieldId)));
+		await db
+			.delete(taskCustomValue)
+			.where(and(eq(taskCustomValue.taskId, taskId), eq(taskCustomValue.fieldId, fieldId)));
 	for (const w of writes)
 		await db
 			.insert(taskCustomValue)
 			.values({ taskId, fieldId: w.fieldId, value: w.value })
-			.onConflictDoUpdate({ target: [taskCustomValue.taskId, taskCustomValue.fieldId], set: { value: w.value } });
+			.onConflictDoUpdate({
+				target: [taskCustomValue.taskId, taskCustomValue.fieldId],
+				set: { value: w.value }
+			});
 	return {};
 }
 ```
@@ -159,23 +164,25 @@ must run its writes against the transaction handle, not the global `db`.
 
 ## Commands you will need
 
-| Purpose        | Command                     | Expected on success                    |
-|----------------|-----------------------------|----------------------------------------|
-| Typecheck      | `npm run check`             | exit 0, 0 errors, 0 warnings           |
-| Unit tests     | `npm run test:unit`         | all pass (baseline: 416 tests)         |
-| Integration    | `npm run test:integration`  | all pass (needs live server + seeded DB)|
-| Start dev srv  | `npm run dev`               | serves on `http://localhost:5173`      |
-| Seed DB        | `npm run db:seed`           | seeds admin/demo + sample data         |
+| Purpose       | Command                    | Expected on success                      |
+| ------------- | -------------------------- | ---------------------------------------- |
+| Typecheck     | `npm run check`            | exit 0, 0 errors, 0 warnings             |
+| Unit tests    | `npm run test:unit`        | all pass (baseline: 416 tests)           |
+| Integration   | `npm run test:integration` | all pass (needs live server + seeded DB) |
+| Start dev srv | `npm run dev`              | serves on `http://localhost:5173`        |
+| Seed DB       | `npm run db:seed`          | seeds admin/demo + sample data           |
 
 ## Scope
 
 **In scope** (the only files you should modify):
+
 - `src/lib/server/db/index.ts` (add `withTransaction`)
 - `src/lib/server/customFields.ts` (accept an optional executor in `writeTaskCustomValues`)
 - `src/lib/server/tasks.ts` (`updateTaskService` only)
 - `ADR.md` (append one ADR record for the transaction decision)
 
 **Out of scope** (do NOT touch — listed as explicit follow-ons, see Maintenance):
+
 - `bulkUpdateTasks`, `moveTaskService`'s position-renumber loop,
   `setTaskStatusService`'s recurrence spawn, `createTaskService`'s compensating
   delete — DO NOT wrap these in this plan. One op at a time; prove the primitive
@@ -219,9 +226,11 @@ import { sql } from 'drizzle-orm';
  */
 export async function withTransaction<T>(fn: (tx: DB) => Promise<T>): Promise<T> {
 	if (DIALECT === 'postgres') {
-		return (db as unknown as {
-			transaction: (f: (tx: DB) => Promise<T>) => Promise<T>;
-		}).transaction((tx) => fn(tx));
+		return (
+			db as unknown as {
+				transaction: (f: (tx: DB) => Promise<T>) => Promise<T>;
+			}
+		).transaction((tx) => fn(tx));
 	}
 	await db.run(sql`BEGIN IMMEDIATE`);
 	try {
@@ -290,42 +299,43 @@ task row. Keep ALL `void`-ed side effects and `broadcastProjectChange` AFTER the
 transaction. Target shape:
 
 ```ts
-	const cf = input.cf ?? [];
-	if (Object.keys(set).length === 0 && cf.length === 0) return err(400, 'No fields to update');
+const cf = input.cf ?? [];
+if (Object.keys(set).length === 0 && cf.length === 0) return err(400, 'No fields to update');
 
-	let updated: typeof task.$inferSelect;
-	let cfError: string | null = null;
-	try {
-		updated = await withTransaction(async (tx) => {
-			if (cf.length > 0) {
-				const res = await writeTaskCustomValues(taskId, projectId, cf, tx);
-				if (res.error) {
-					cfError = res.error;
-					throw new Error('cf-validation'); // rolls back; mapped to err(400) below
-				}
+let updated: typeof task.$inferSelect;
+let cfError: string | null = null;
+try {
+	updated = await withTransaction(async (tx) => {
+		if (cf.length > 0) {
+			const res = await writeTaskCustomValues(taskId, projectId, cf, tx);
+			if (res.error) {
+				cfError = res.error;
+				throw new Error('cf-validation'); // rolls back; mapped to err(400) below
 			}
-			const [row] = await tx
-				.update(task)
-				.set({ ...set, updatedAt: new Date() })
-				.where(eq(task.id, taskId))
-				.returning();
+		}
+		const [row] = await tx
+			.update(task)
+			.set({ ...set, updatedAt: new Date() })
+			.where(eq(task.id, taskId))
+			.returning();
 
-			if (opts.completeCascade) {
-				const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-				if (targetStatus?.category === 'completed' && !wasDone) {
-					// move the recurrence insert + sub-task cascade update here, using `tx`
-					// instead of `db` (the dispatchEvent side effect stays OUTSIDE — see below)
-				}
+		if (opts.completeCascade) {
+			const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+			if (targetStatus?.category === 'completed' && !wasDone) {
+				// move the recurrence insert + sub-task cascade update here, using `tx`
+				// instead of `db` (the dispatchEvent side effect stays OUTSIDE — see below)
 			}
-			return row;
-		});
-	} catch (e) {
-		if (cfError) return err(400, cfError);
-		throw e;
-	}
+		}
+		return row;
+	});
+} catch (e) {
+	if (cfError) return err(400, cfError);
+	throw e;
+}
 ```
 
 Important details:
+
 - Inside the transaction, replace `db.` with `tx.` for the CF write (passed as the
   4th arg), the task `update`, the recurrence `insert`, and the sub-task cascade
   `update`.
@@ -401,10 +411,9 @@ Machine-checkable. ALL must hold:
 
 Stop and report back (do not improvise) if:
 
-- `db.run(sql\`BEGIN IMMEDIATE\`)` is not available on the `DB` type or throws at
-  runtime under sqlite (the manual-transaction approach depends on it) — report
-  the exact type/runtime error; do NOT fall back to a broken async
-  `db.transaction(async ...)` under sqlite (it silently loses atomicity).
+- `db.run(sql\`BEGIN IMMEDIATE\`)`is not available on the`DB`type or throws at
+runtime under sqlite (the manual-transaction approach depends on it) — report
+the exact type/runtime error; do NOT fall back to a broken async`db.transaction(async ...)` under sqlite (it silently loses atomicity).
 - The postgres `db.transaction` cast does not typecheck cleanly — report the type
   error rather than sprinkling `any` beyond the single documented cast in Step 1.
 - Wrapping `updateTaskService` changes the observable behavior of any existing

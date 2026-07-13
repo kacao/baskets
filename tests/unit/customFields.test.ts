@@ -111,7 +111,9 @@ describe('sanitizeConfig', () => {
 			numberFormat: 'currency',
 			currencyCode: 'EUR'
 		});
-		expect(sanitizeConfig('number', { numberFormat: 'accounting', currencyCode: '  usdx ' })).toEqual({
+		expect(
+			sanitizeConfig('number', { numberFormat: 'accounting', currencyCode: '  usdx ' })
+		).toEqual({
 			numberFormat: 'accounting',
 			currencyCode: 'USD'
 		});
@@ -417,7 +419,13 @@ describe('rollup', () => {
 
 describe('number rollup-to-parent config', () => {
 	it('sanitizes rollupToParent + rollupFormula on a number field', () => {
-		expect(sanitizeConfig('number', { numberFormat: 'number', rollupToParent: true, rollupFormula: 'average' })).toEqual({
+		expect(
+			sanitizeConfig('number', {
+				numberFormat: 'number',
+				rollupToParent: true,
+				rollupFormula: 'average'
+			})
+		).toEqual({
 			numberFormat: 'number',
 			rollupToParent: true,
 			rollupFormula: 'average'
@@ -425,7 +433,13 @@ describe('number rollup-to-parent config', () => {
 	});
 
 	it('defaults an invalid/blank rollupFormula to "sum" when rolling up', () => {
-		expect(sanitizeConfig('number', { numberFormat: 'number', rollupToParent: true, rollupFormula: 'bogus' })).toEqual({
+		expect(
+			sanitizeConfig('number', {
+				numberFormat: 'number',
+				rollupToParent: true,
+				rollupFormula: 'bogus'
+			})
+		).toEqual({
 			numberFormat: 'number',
 			rollupToParent: true,
 			rollupFormula: 'sum'
@@ -438,7 +452,13 @@ describe('number rollup-to-parent config', () => {
 	});
 
 	it('drops rollup keys when rollupToParent is not exactly true', () => {
-		expect(sanitizeConfig('number', { numberFormat: 'number', rollupToParent: false, rollupFormula: 'max' })).toEqual({
+		expect(
+			sanitizeConfig('number', {
+				numberFormat: 'number',
+				rollupToParent: false,
+				rollupFormula: 'max'
+			})
+		).toEqual({
 			numberFormat: 'number'
 		});
 		// truthy-but-not-true must not enable it
@@ -450,21 +470,33 @@ describe('number rollup-to-parent config', () => {
 
 describe('rollsUpToParent', () => {
 	it('is true only for a number field with rollupToParent and a non-"tasks" appliesTo', () => {
-		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'all' })).toBe(true);
-		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'subtasks' })).toBe(true);
+		expect(
+			rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'all' })
+		).toBe(true);
+		expect(
+			rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'subtasks' })
+		).toBe(true);
 		// unset appliesTo defaults to 'all'
 		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true } })).toBe(true);
 	});
 
 	it('is false for a "tasks"-only field (no parent to roll up to)', () => {
-		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'tasks' })).toBe(false);
+		expect(
+			rollsUpToParent({ type: 'number', config: { rollupToParent: true }, appliesTo: 'tasks' })
+		).toBe(false);
 	});
 
 	it('is false when rollupToParent is off or the type is not number', () => {
-		expect(rollsUpToParent({ type: 'number', config: { rollupToParent: false }, appliesTo: 'all' })).toBe(false);
+		expect(
+			rollsUpToParent({ type: 'number', config: { rollupToParent: false }, appliesTo: 'all' })
+		).toBe(false);
 		expect(rollsUpToParent({ type: 'number', config: {}, appliesTo: 'all' })).toBe(false);
-		expect(rollsUpToParent({ type: 'rollup', config: { rollupToParent: true }, appliesTo: 'all' })).toBe(false);
-		expect(rollsUpToParent({ type: 'text', config: { rollupToParent: true }, appliesTo: 'all' })).toBe(false);
+		expect(
+			rollsUpToParent({ type: 'rollup', config: { rollupToParent: true }, appliesTo: 'all' })
+		).toBe(false);
+		expect(
+			rollsUpToParent({ type: 'text', config: { rollupToParent: true }, appliesTo: 'all' })
+		).toBe(false);
 	});
 });
 
@@ -504,8 +536,17 @@ describe('numberRollupConfig', () => {
 });
 
 describe('fieldAggregations with rollup-to-parent', () => {
-	const field = { id: 'hours', name: 'Hours', type: 'number', config: { numberFormat: 'number' }, appliesTo: 'all' as const };
-	const rollupField = { ...field, config: { numberFormat: 'number', rollupToParent: true, rollupFormula: 'sum' } };
+	const field = {
+		id: 'hours',
+		name: 'Hours',
+		type: 'number',
+		config: { numberFormat: 'number' },
+		appliesTo: 'all' as const
+	};
+	const rollupField = {
+		...field,
+		config: { numberFormat: 'number', rollupToParent: true, rollupFormula: 'sum' }
+	};
 	const allTasks = [
 		{ id: 'p', parentId: null },
 		{ id: 'a', parentId: 'p' },
@@ -545,7 +586,10 @@ describe('rollupDisplayText (shared rollup display path)', () => {
 	];
 	const vals: Record<string, Record<string, number>> = { a: { hours: 3 }, b: { hours: 7 } };
 	const valueOf = (tid: string, fid: string) => vals[tid]?.[fid] ?? null;
-	const ctxFor = (hasSubtasks: boolean, fields: { id: string; config: Record<string, unknown> }[] = []) => ({
+	const ctxFor = (
+		hasSubtasks: boolean,
+		fields: { id: string; config: Record<string, unknown> }[] = []
+	) => ({
 		tasks,
 		taskDeps: [] as { taskId: string; dependsOnId: string }[],
 		fields,
@@ -558,7 +602,10 @@ describe('rollupDisplayText (shared rollup display path)', () => {
 		const rollup = {
 			id: 'r',
 			type: 'rollup',
-			config: { relation: 'sub-task', targetFieldId: 'hours', formula: 'sum' } as Record<string, unknown>
+			config: { relation: 'sub-task', targetFieldId: 'hours', formula: 'sum' } as Record<
+				string,
+				unknown
+			>
 		};
 		expect(rollupDisplayText(rollup, 'p', ctxFor(true, [hours]))).toBe('10');
 	});
@@ -567,18 +614,31 @@ describe('rollupDisplayText (shared rollup display path)', () => {
 		const rollup = {
 			id: 'r',
 			type: 'rollup',
-			config: { relation: 'sub-task', targetFieldId: '', formula: 'count' } as Record<string, unknown>
+			config: { relation: 'sub-task', targetFieldId: '', formula: 'count' } as Record<
+				string,
+				unknown
+			>
 		};
 		expect(rollupDisplayText(rollup, 'p', ctxFor(true))).toBe('2');
 	});
 
 	it('rolls a number rollup-to-parent field up over the parent’s sub-tasks', () => {
-		const field = { id: 'hours', type: 'number', config: { rollupToParent: true, rollupFormula: 'sum' }, appliesTo: 'all' };
+		const field = {
+			id: 'hours',
+			type: 'number',
+			config: { rollupToParent: true, rollupFormula: 'sum' },
+			appliesTo: 'all'
+		};
 		expect(rollupDisplayText(field, 'p', ctxFor(true))).toBe('10');
 	});
 
 	it('returns null for a rollup-to-parent field with no sub-tasks (renders normally)', () => {
-		const field = { id: 'hours', type: 'number', config: { rollupToParent: true, rollupFormula: 'sum' }, appliesTo: 'all' };
+		const field = {
+			id: 'hours',
+			type: 'number',
+			config: { rollupToParent: true, rollupFormula: 'sum' },
+			appliesTo: 'all'
+		};
 		expect(rollupDisplayText(field, 'a', ctxFor(false))).toBeNull();
 	});
 

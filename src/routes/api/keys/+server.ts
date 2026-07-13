@@ -49,10 +49,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	});
 
 	// Plaintext token returned exactly once — only the hash is stored.
-	return json(
-		{ key: { id, name, prefix, lastUsedAt: null, createdAt }, token },
-		{ status: 201 }
-	);
+	return json({ key: { id, name, prefix, lastUsedAt: null, createdAt }, token }, { status: 201 });
 };
 
 export const DELETE: RequestHandler = async ({ request, locals }) => {

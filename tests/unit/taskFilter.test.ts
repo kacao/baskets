@@ -310,10 +310,7 @@ describe('filterTasks (inclusion)', () => {
 	});
 
 	it('keeps only the checked tasks for a flat list', () => {
-		const tasks = [
-			makeTask({ id: 'a', priority: 'high' }),
-			makeTask({ id: 'b', priority: 'low' })
-		];
+		const tasks = [makeTask({ id: 'a', priority: 'high' }), makeTask({ id: 'b', priority: 'low' })];
 		const out = filterTasks(tasks, { priorities: ['low'] }, '', noLabels);
 		expect(out.map((t) => t.id)).toEqual(['b']);
 	});

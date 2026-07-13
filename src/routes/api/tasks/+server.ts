@@ -11,10 +11,7 @@ import {
 	PRIORITIES
 } from '$lib/server/api';
 import { canAccessProject } from '$lib/server/permissions';
-import {
-	apiCustomFieldEntries,
-	customValuesByTask
-} from '$lib/server/customFields';
+import { apiCustomFieldEntries, customValuesByTask } from '$lib/server/customFields';
 import { createTaskService } from '$lib/server/tasks';
 import type { RequestHandler } from './$types';
 
@@ -24,8 +21,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const projectId = url.searchParams.get('projectId');
 	if (!projectId) return apiError(400, 'projectId query parameter is required');
 	// ADR-019: inaccessible projects are indistinguishable from missing ones
-	if (!(await canAccessProject(locals.user, projectId)))
-		return apiError(404, 'Project not found');
+	if (!(await canAccessProject(locals.user, projectId))) return apiError(404, 'Project not found');
 
 	const tasks = await db
 		.select()
@@ -33,7 +29,10 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		.where(eq(task.projectId, projectId))
 		.orderBy(asc(task.position), asc(task.createdAt));
 
-	const values = await customValuesByTask(projectId, tasks.map((t) => t.id));
+	const values = await customValuesByTask(
+		projectId,
+		tasks.map((t) => t.id)
+	);
 	return json({ tasks: tasks.map((t) => ({ ...t, customFields: values[t.id] ?? {} })) });
 };
 
@@ -57,8 +56,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	// Existence 404 BEFORE access (ADR-019: identical to a no-access 404).
 	const [proj] = await db.select().from(project).where(eq(project.id, projectId));
 	if (!proj) return apiError(404, 'Project not found');
-	if (!(await canAccessProject(locals.user, projectId)))
-		return apiError(404, 'Project not found');
+	if (!(await canAccessProject(locals.user, projectId))) return apiError(404, 'Project not found');
 
 	// status: accepts statusId or status name; the service defaults + validates.
 	const statusId = typeof body.statusId === 'string' ? body.statusId : undefined;
@@ -120,7 +118,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			order,
 			dueDate,
 			cf:
-				body.customFields && typeof body.customFields === 'object' && !Array.isArray(body.customFields)
+				body.customFields &&
+				typeof body.customFields === 'object' &&
+				!Array.isArray(body.customFields)
 					? apiCustomFieldEntries(body.customFields as Record<string, unknown>)
 					: undefined
 		},

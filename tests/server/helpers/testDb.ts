@@ -11,7 +11,9 @@ function uid(prefix: string): string {
 	return `${prefix}-${Date.now()}-${counter}`;
 }
 
-export async function createUser(opts: { role?: string | null; name?: string } = {}): Promise<TestUser> {
+export async function createUser(
+	opts: { role?: string | null; name?: string } = {}
+): Promise<TestUser> {
 	const id = uid('user');
 	const now = new Date();
 	await db.insert(user).values({
@@ -37,11 +39,7 @@ export async function createWorkspace(ownerId: string, name = 'Test workspace') 
 	return { id, name, ownerId };
 }
 
-export async function createProject(
-	workspaceId: string,
-	createdBy: string,
-	name = 'Test project'
-) {
+export async function createProject(workspaceId: string, createdBy: string, name = 'Test project') {
 	const id = uid('proj');
 	const now = new Date();
 	await db

@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetTables } from './isolationGuard';
 import { seedProjectFixture } from './helpers/testDb';
-import {
-	bulkUpdateTasks,
-	createTaskService,
-	setTaskStatusService
-} from '$lib/server/tasks';
+import { bulkUpdateTasks, createTaskService, setTaskStatusService } from '$lib/server/tasks';
 
 beforeEach(resetTables);
 
@@ -20,10 +16,7 @@ describe('task status cascade (characterization)', () => {
 	it('completing a parent task also completes its sub-tasks', async () => {
 		const { owner, proj, statuses } = await seedProjectFixture();
 
-		const parentRes = await createTaskService(
-			{ projectId: proj.id, title: 'Parent task' },
-			owner
-		);
+		const parentRes = await createTaskService({ projectId: proj.id, title: 'Parent task' }, owner);
 		expect(parentRes.ok).toBe(true);
 		if (!parentRes.ok) return;
 		const parent = parentRes.data;

@@ -5,7 +5,14 @@
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import { t } from '$lib/i18n';
-	import { decodeValue, formatNumber, formatDate, numberAffix, rollsUpToParent, type FieldConfig } from '$lib/customFields';
+	import {
+		decodeValue,
+		formatNumber,
+		formatDate,
+		numberAffix,
+		rollsUpToParent,
+		type FieldConfig
+	} from '$lib/customFields';
 
 	type Option = { id: string; title: string; color: string | null; icon: string | null };
 	type FileRef = { id: string; filename: string; mimeType: string; size: number };
@@ -148,8 +155,12 @@
 
 	// search state for reference pickers
 	let query = $state('');
-	const matchUsers = $derived(users.filter((u) => u.name.toLowerCase().includes(query.toLowerCase())));
-	const matchLocs = $derived(locations.filter((l) => l.title.toLowerCase().includes(query.toLowerCase())));
+	const matchUsers = $derived(
+		users.filter((u) => u.name.toLowerCase().includes(query.toLowerCase()))
+	);
+	const matchLocs = $derived(
+		locations.filter((l) => l.title.toLowerCase().includes(query.toLowerCase()))
+	);
 	const matchTasks = $derived(
 		tasks.filter(
 			(tk) =>
@@ -197,7 +208,13 @@
 	{:else if field.type === 'date'}
 		<span class="v">{formatDate(current, field.config)}</span>
 	{:else if field.type === 'url'}
-		<a class="v link" href={current} target="_blank" rel="noreferrer noopener" onclick={(e) => e.stopPropagation()}>{current}</a>
+		<a
+			class="v link"
+			href={current}
+			target="_blank"
+			rel="noreferrer noopener"
+			onclick={(e) => e.stopPropagation()}>{current}</a
+		>
 	{:else if field.type === 'email'}
 		<span class="v">{current}</span>
 	{:else if field.type === 'select'}
@@ -213,16 +230,28 @@
 			{/each}
 		</span>
 	{:else if field.type === 'person'}
-		<span class="chips">{#each ids as id (id)}<span class="chip">{userName(id)}</span>{/each}</span>
+		<span class="chips"
+			>{#each ids as id (id)}<span class="chip">{userName(id)}</span>{/each}</span
+		>
 	{:else if field.type === 'place'}
-		<span class="chips">{#each ids as id (id)}<span class="chip">{locTitle(id)}</span>{/each}</span>
+		<span class="chips"
+			>{#each ids as id (id)}<span class="chip">{locTitle(id)}</span>{/each}</span
+		>
 	{:else if field.type === 'task'}
-		<span class="chips">{#each ids as id (id)}<span class="chip">{taskTitle(id)}</span>{/each}</span>
+		<span class="chips"
+			>{#each ids as id (id)}<span class="chip">{taskTitle(id)}</span>{/each}</span
+		>
 	{:else if field.type === 'files'}
 		<span class="chips">
 			{#each ids as id (id)}
 				{@const f = fileById(id)}
-				{#if f}<a class="chip link" href={`/api/files/${f.id}`} target="_blank" rel="noreferrer noopener" onclick={(e) => e.stopPropagation()}>{f.filename}</a>{/if}
+				{#if f}<a
+						class="chip link"
+						href={`/api/files/${f.id}`}
+						target="_blank"
+						rel="noreferrer noopener"
+						onclick={(e) => e.stopPropagation()}>{f.filename}</a
+					>{/if}
 			{/each}
 		</span>
 	{:else}
@@ -242,12 +271,24 @@
 			autocomplete="off"
 			use:autofocus={autoFocus}
 			onblur={(e) => set(e.currentTarget.value.trim())}
-			onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); set(e.currentTarget.value.trim()); close(); } }}
+			onkeydown={(e) => {
+				if (e.key === 'Enter') {
+					e.preventDefault();
+					set(e.currentTarget.value.trim());
+					close();
+				}
+			}}
 		/>
 	{:else if field.type === 'number'}
 		<div class="num-editor">
-			<button class="num-step" type="button" tabindex="-1" aria-label={$t('Decrease')}
-				onpointerdown={(e) => e.preventDefault()} onclick={() => stepNumber(-1)}>
+			<button
+				class="num-step"
+				type="button"
+				tabindex="-1"
+				aria-label={$t('Decrease')}
+				onpointerdown={(e) => e.preventDefault()}
+				onclick={() => stepNumber(-1)}
+			>
 				<Icon name="minus" size={13} />
 			</button>
 			<div class="num-field">
@@ -263,30 +304,63 @@
 					placeholder="0"
 					use:autofocus={autoFocus}
 					onblur={(e) => set(e.currentTarget.value.trim())}
-					onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); set(e.currentTarget.value.trim()); close(); } }}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.preventDefault();
+							set(e.currentTarget.value.trim());
+							close();
+						}
+					}}
 				/>
 			</div>
-			<button class="num-step" type="button" tabindex="-1" aria-label={$t('Increase')}
-				onpointerdown={(e) => e.preventDefault()} onclick={() => stepNumber(1)}>
+			<button
+				class="num-step"
+				type="button"
+				tabindex="-1"
+				aria-label={$t('Increase')}
+				onpointerdown={(e) => e.preventDefault()}
+				onclick={() => stepNumber(1)}
+			>
 				<Icon name="plus" size={13} />
 			</button>
 		</div>
 	{:else if field.type === 'date'}
 		<input
 			class="input"
-			type={field.config?.timeFormat && field.config.timeFormat !== 'hidden' ? 'datetime-local' : 'date'}
+			type={field.config?.timeFormat && field.config.timeFormat !== 'hidden'
+				? 'datetime-local'
+				: 'date'}
 			value={current}
 			use:autofocus={autoFocus}
 			onchange={(e) => set(e.currentTarget.value)}
 		/>
 	{:else if field.type === 'checkbox'}
-		<label class="chk"><input type="checkbox" checked={current === 'true'} onchange={(e) => set(e.currentTarget.checked ? 'true' : '')} /> {field.name}</label>
+		<label class="chk"
+			><input
+				type="checkbox"
+				checked={current === 'true'}
+				onchange={(e) => set(e.currentTarget.checked ? 'true' : '')}
+			/>
+			{field.name}</label
+		>
 	{:else if field.type === 'select'}
 		<div class="pick">
 			{#each options as o (o.id)}
-				<button class="pick-item" type="button" onclick={() => { toggleId(o.id); if (!multi) close(); }}>
-					<span class="chk-box">{#if ids.includes(o.id)}<Icon name="check" size={12} />{/if}</span>
-					{#if o.icon}<EntityIcon value={o.icon} size={14} />{:else}<span class="dot" style="--c: {o.color || 'var(--color-muted)'}"></span>{/if}
+				<button
+					class="pick-item"
+					type="button"
+					onclick={() => {
+						toggleId(o.id);
+						if (!multi) close();
+					}}
+				>
+					<span class="chk-box"
+						>{#if ids.includes(o.id)}<Icon name="check" size={12} />{/if}</span
+					>
+					{#if o.icon}<EntityIcon value={o.icon} size={14} />{:else}<span
+							class="dot"
+							style="--c: {o.color || 'var(--color-muted)'}"
+						></span>{/if}
 					<span>{o.title}</span>
 				</button>
 			{:else}
@@ -294,31 +368,76 @@
 			{/each}
 		</div>
 	{:else if field.type === 'person'}
-		<input class="input search" placeholder={$t('Search people…')} bind:value={query} autocomplete="off" use:autofocus={autoFocus} />
+		<input
+			class="input search"
+			placeholder={$t('Search people…')}
+			bind:value={query}
+			autocomplete="off"
+			use:autofocus={autoFocus}
+		/>
 		<div class="pick">
 			{#each matchUsers as u (u.id)}
-				<button class="pick-item" type="button" onclick={() => { toggleId(u.id); if (!multi) close(); }}>
-					<span class="chk-box">{#if ids.includes(u.id)}<Icon name="check" size={12} />{/if}</span>{u.name}
+				<button
+					class="pick-item"
+					type="button"
+					onclick={() => {
+						toggleId(u.id);
+						if (!multi) close();
+					}}
+				>
+					<span class="chk-box"
+						>{#if ids.includes(u.id)}<Icon name="check" size={12} />{/if}</span
+					>{u.name}
 				</button>
 			{/each}
 		</div>
 	{:else if field.type === 'place'}
-		<input class="input search" placeholder={$t('Search places…')} bind:value={query} autocomplete="off" use:autofocus={autoFocus} />
+		<input
+			class="input search"
+			placeholder={$t('Search places…')}
+			bind:value={query}
+			autocomplete="off"
+			use:autofocus={autoFocus}
+		/>
 		<div class="pick">
 			{#each matchLocs as l (l.id)}
-				<button class="pick-item" type="button" onclick={() => { toggleId(l.id); if (!multi) close(); }}>
-					<span class="chk-box">{#if ids.includes(l.id)}<Icon name="check" size={12} />{/if}</span>{l.title}
+				<button
+					class="pick-item"
+					type="button"
+					onclick={() => {
+						toggleId(l.id);
+						if (!multi) close();
+					}}
+				>
+					<span class="chk-box"
+						>{#if ids.includes(l.id)}<Icon name="check" size={12} />{/if}</span
+					>{l.title}
 				</button>
 			{:else}
 				<p class="empty">{$t('No locations. Add some in project settings.')}</p>
 			{/each}
 		</div>
 	{:else if field.type === 'task'}
-		<input class="input search" placeholder={$t('Search tasks…')} bind:value={query} autocomplete="off" use:autofocus={autoFocus} />
+		<input
+			class="input search"
+			placeholder={$t('Search tasks…')}
+			bind:value={query}
+			autocomplete="off"
+			use:autofocus={autoFocus}
+		/>
 		<div class="pick">
 			{#each matchTasks as tk (tk.id)}
-				<button class="pick-item" type="button" onclick={() => { toggleId(tk.id); if (!multi) close(); }}>
-					<span class="chk-box">{#if ids.includes(tk.id)}<Icon name="check" size={12} />{/if}</span>{tk.title}
+				<button
+					class="pick-item"
+					type="button"
+					onclick={() => {
+						toggleId(tk.id);
+						if (!multi) close();
+					}}
+				>
+					<span class="chk-box"
+						>{#if ids.includes(tk.id)}<Icon name="check" size={12} />{/if}</span
+					>{tk.title}
 				</button>
 			{/each}
 		</div>
@@ -328,8 +447,20 @@
 				{@const f = fileById(id)}
 				{#if f}
 					<div class="file-row">
-						<a class="link" href={`/api/files/${f.id}`} target="_blank" rel="noreferrer noopener">{f.filename}</a>
-						<button class="rm" type="button" aria-label={$t('Remove')} onclick={() => set(JSON.stringify(ids.filter((x) => x !== id)) === '[]' ? '' : JSON.stringify(ids.filter((x) => x !== id)))}>
+						<a class="link" href={`/api/files/${f.id}`} target="_blank" rel="noreferrer noopener"
+							>{f.filename}</a
+						>
+						<button
+							class="rm"
+							type="button"
+							aria-label={$t('Remove')}
+							onclick={() =>
+								set(
+									JSON.stringify(ids.filter((x) => x !== id)) === '[]'
+										? ''
+										: JSON.stringify(ids.filter((x) => x !== id))
+								)}
+						>
 							<Icon name="xmark" size={12} />
 						</button>
 					</div>
@@ -363,7 +494,12 @@
 	<!-- pill -->
 	<div class="cf-pill" class:cf-pill--collapsible={collapsible}>
 		{#if collapsible}
-			<button class="cf-label cf-head" type="button" aria-expanded={!collapsed} onclick={() => onToggleCollapse?.()}>
+			<button
+				class="cf-label cf-head"
+				type="button"
+				aria-expanded={!collapsed}
+				onclick={() => onToggleCollapse?.()}
+			>
 				<Icon name={collapsed ? 'nav-arrow-right' : 'nav-arrow-down'} size={12} />
 				<span class="cf-head-name">{field.name}</span>
 				<span class="cf-count">{ids.length}</span>
@@ -372,49 +508,72 @@
 			<span class="cf-label">{field.name}</span>
 		{/if}
 		{#if !collapsible || !collapsed}
-		{#if canEdit && !rollupReadonly}
-			{#if multiChips}
-				<!-- multi reference field: each value is a removable chip + an "+ Add" picker -->
-				<div class="cf-multi">
-					{#each ids as id (id)}
-						{#if field.type === 'select'}
-							{@const o = optById(id)}
-							{#if o}
-								<span class="chip-rm colored" style="--c: {o.color || 'var(--color-muted)'}">
-									{#if displayOption !== 'text' && o.icon}<EntityIcon value={o.icon} size={12} />{/if}
-									{#if displayOption !== 'icon' || !o.icon}<span>{o.title}</span>{/if}
-									<button class="chip-x" type="button" aria-label={$t('Remove')} onclick={() => toggleId(id)}><Icon name="xmark" size={11} /></button>
+			{#if canEdit && !rollupReadonly}
+				{#if multiChips}
+					<!-- multi reference field: each value is a removable chip + an "+ Add" picker -->
+					<div class="cf-multi">
+						{#each ids as id (id)}
+							{#if field.type === 'select'}
+								{@const o = optById(id)}
+								{#if o}
+									<span class="chip-rm colored" style="--c: {o.color || 'var(--color-muted)'}">
+										{#if displayOption !== 'text' && o.icon}<EntityIcon
+												value={o.icon}
+												size={12}
+											/>{/if}
+										{#if displayOption !== 'icon' || !o.icon}<span>{o.title}</span>{/if}
+										<button
+											class="chip-x"
+											type="button"
+											aria-label={$t('Remove')}
+											onclick={() => toggleId(id)}><Icon name="xmark" size={11} /></button
+										>
+									</span>
+								{/if}
+							{:else}
+								<span class="chip-rm">
+									<span
+										>{field.type === 'person'
+											? userName(id)
+											: field.type === 'place'
+												? locTitle(id)
+												: taskTitle(id)}</span
+									>
+									<button
+										class="chip-x"
+										type="button"
+										aria-label={$t('Remove')}
+										onclick={() => toggleId(id)}><Icon name="xmark" size={11} /></button
+									>
 								</span>
 							{/if}
-						{:else}
-							<span class="chip-rm">
-								<span>{field.type === 'person' ? userName(id) : field.type === 'place' ? locTitle(id) : taskTitle(id)}</span>
-								<button class="chip-x" type="button" aria-label={$t('Remove')} onclick={() => toggleId(id)}><Icon name="xmark" size={11} /></button>
-							</span>
-						{/if}
-					{/each}
+						{/each}
+						<Popover ariaLabel={field.name}>
+							{#snippet trigger()}<span class="add-chip"
+									><Icon name="plus" size={12} /> {$t('Add')}</span
+								>{/snippet}
+							{#snippet panel(close)}<div class="panel">
+									{@render editor(close, true)}
+								</div>{/snippet}
+						</Popover>
+					</div>
+				{:else}
 					<Popover ariaLabel={field.name}>
-						{#snippet trigger()}<span class="add-chip"><Icon name="plus" size={12} /> {$t('Add')}</span>{/snippet}
-						{#snippet panel(close)}<div class="panel">{@render editor(close, true)}</div>{/snippet}
+						{#snippet trigger()}
+							<span class="pill-val">{@render display()}</span>
+						{/snippet}
+						{#snippet panel(close)}
+							<div class="panel">{@render editor(close, true)}</div>
+						{/snippet}
 					</Popover>
-				</div>
+				{/if}
+				<form bind:this={form} method="POST" action={formAction} use:enhance class="hidden-form">
+					<input type="hidden" name="id" value={taskId} />
+					<input type="hidden" name={`cf_${field.id}`} value={current} />
+				</form>
 			{:else}
-				<Popover ariaLabel={field.name}>
-					{#snippet trigger()}
-						<span class="pill-val">{@render display()}</span>
-					{/snippet}
-					{#snippet panel(close)}
-						<div class="panel">{@render editor(close, true)}</div>
-					{/snippet}
-				</Popover>
+				<span class="pill-val pill-val--ro">{@render display()}</span>
 			{/if}
-			<form bind:this={form} method="POST" action={formAction} use:enhance class="hidden-form">
-				<input type="hidden" name="id" value={taskId} />
-				<input type="hidden" name={`cf_${field.id}`} value={current} />
-			</form>
-		{:else}
-			<span class="pill-val pill-val--ro">{@render display()}</span>
-		{/if}
 		{/if}
 	</div>
 {/if}
@@ -585,7 +744,9 @@
 		padding: 1px;
 		line-height: 0;
 		border-radius: 999px;
-		transition: color var(--dur-fast), background-color var(--dur-fast);
+		transition:
+			color var(--dur-fast),
+			background-color var(--dur-fast);
 	}
 
 	.chip-x::before {
@@ -691,7 +852,9 @@
 		color: var(--color-muted);
 		border-radius: var(--radius-field, 0.25rem);
 		cursor: pointer;
-		transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
 	}
 
 	.num-step:hover {
