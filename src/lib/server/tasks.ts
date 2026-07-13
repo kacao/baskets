@@ -33,6 +33,44 @@ function isPriority(p: string): boolean {
 	return PRIORITIES.includes(p as (typeof PRIORITIES)[number]);
 }
 
+/**
+ * When a task transitions INTO a completed status (and wasn't already
+ * completed) and has a recurrence rule, spawn the next occurrence as a fresh
+ * backlog task with due date advanced. No-op otherwise.
+ */
+async function spawnRecurrenceIfCompleting(
+	existing: typeof task.$inferSelect,
+	eligible: Awaited<ReturnType<typeof listProjectStatuses>>,
+	targetCategory: string,
+	wasCompleted: boolean,
+	actor: Actor
+): Promise<void> {
+	if (targetCategory !== 'completed' || wasCompleted || !existing.recurrence) return;
+	const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
+	const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
+	if (!backlog) return;
+	const spawnNow = new Date();
+	await db.insert(task).values({
+		id: crypto.randomUUID(),
+		projectId: existing.projectId,
+		parentId: existing.parentId,
+		title: existing.title,
+		description: existing.description,
+		priority: existing.priority,
+		statusId: backlog.id,
+		assigneeId: existing.assigneeId,
+		milestoneId: existing.milestoneId,
+		locationId: existing.locationId,
+		startDate: existing.startDate,
+		dueDate: nextDue,
+		recurrence: existing.recurrence,
+		createdBy: actor.id,
+		position: spawnNow.getTime(),
+		createdAt: spawnNow,
+		updatedAt: spawnNow
+	});
+}
+
 /* --------------------------------- create --------------------------------- */
 
 export type CreateTaskInput = {
@@ -204,32 +242,7 @@ export async function setTaskStatusService(
 	// occurrence with its due date advanced by the recurrence rule (BASDEV-8).
 	const wasCompleted =
 		eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
-	if (target.category === 'completed' && !wasCompleted && existing.recurrence) {
-		const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
-		const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-		if (backlog) {
-			const spawnNow = new Date();
-			await db.insert(task).values({
-				id: crypto.randomUUID(),
-				projectId: existing.projectId,
-				parentId: existing.parentId,
-				title: existing.title,
-				description: existing.description,
-				priority: existing.priority,
-				statusId: backlog.id,
-				assigneeId: existing.assigneeId,
-				milestoneId: existing.milestoneId,
-				locationId: existing.locationId,
-				startDate: existing.startDate,
-				dueDate: nextDue,
-				recurrence: existing.recurrence,
-				createdBy: actor.id,
-				position: spawnNow.getTime(),
-				createdAt: spawnNow,
-				updatedAt: spawnNow
-			});
-		}
-	}
+	await spawnRecurrenceIfCompleting(existing, eligible, target.category, wasCompleted, actor);
 
 	// Completing a parent completes its sub-tasks
 	if (target.category === 'completed') {
@@ -308,6 +321,7 @@ export async function moveTaskService(
 		.where(eq(task.id, taskId));
 
 	const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
+	await spawnRecurrenceIfCompleting(existing, eligible, target.category, wasDone, actor);
 	if (target.category === 'completed') {
 		await db.update(task).set({ statusId, updatedAt: new Date() }).where(eq(task.parentId, taskId));
 	}
@@ -502,32 +516,7 @@ export async function updateTaskService(
 	if (opts.completeCascade) {
 		const wasDone = eligible.find((s) => s.id === existing.statusId)?.category === 'completed';
 		if (targetStatus?.category === 'completed' && !wasDone) {
-			if (existing.recurrence) {
-				const nextDue = nextDueDate(existing.dueDate ?? new Date(), existing.recurrence);
-				const backlog = eligible.find((s) => s.category === 'backlog') ?? eligible[0];
-				if (backlog) {
-					const spawnNow = new Date();
-					await db.insert(task).values({
-						id: crypto.randomUUID(),
-						projectId: existing.projectId,
-						parentId: existing.parentId,
-						title: existing.title,
-						description: existing.description,
-						priority: existing.priority,
-						statusId: backlog.id,
-						assigneeId: existing.assigneeId,
-						milestoneId: existing.milestoneId,
-						locationId: existing.locationId,
-						startDate: existing.startDate,
-						dueDate: nextDue,
-						recurrence: existing.recurrence,
-						createdBy: actor.id,
-						position: spawnNow.getTime(),
-						createdAt: spawnNow,
-						updatedAt: spawnNow
-					});
-				}
-			}
+			await spawnRecurrenceIfCompleting(existing, eligible, targetStatus.category, wasDone, actor);
 
 			await db
 				.update(task)
