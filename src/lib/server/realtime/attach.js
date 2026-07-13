@@ -78,6 +78,21 @@ export function attachRealtime(httpServer) {
 		return _baseUrl;
 	}
 
+	const trusted = (process.env.TRUSTED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+	function originAllowed(req) {
+		const origin = req.headers.origin;
+		if (!origin) return true; // non-browser client (no ambient-cookie risk)
+		let host;
+		try {
+			host = new URL(origin).host;
+		} catch {
+			return false;
+		}
+		if (origin === baseUrl()) return true;
+		if (req.headers.host && host === req.headers.host) return true;
+		return trusted.includes(origin);
+	}
+
 	httpServer.on('upgrade', async (req, socket, head) => {
 		let pathname;
 		try {
@@ -87,6 +102,15 @@ export function attachRealtime(httpServer) {
 		}
 		// Only claim our path — leave Vite HMR and any other upgrades untouched.
 		if (pathname !== WS_PATH) return;
+
+		// Reject cross-origin browser upgrades before touching auth (CSWSH defense) —
+		// SameSite cookies don't reliably protect the WS handshake, so we check Origin
+		// explicitly. Non-browser clients (no Origin header) pass through to auth.
+		if (!originAllowed(req)) {
+			socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+			socket.destroy();
+			return;
+		}
 
 		const origin = baseUrl();
 		const cookie = req.headers.cookie ?? '';
