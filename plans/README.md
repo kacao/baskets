@@ -17,28 +17,28 @@ update your row in the table when done.
 
 ## Execution order & status
 
-| Plan | Title                                                    | Priority | Effort | Risk    | Depends on | Status |
-| ---- | -------------------------------------------------------- | -------- | ------ | ------- | ---------- | ------ |
-| 001  | Gate integration tests behind a flag (kill skip-as-pass) | P1       | S      | LOW     | —          | DONE   |
-| 002  | Add indexes on hot foreign-key columns                   | P1       | M      | LOW     | —          | DONE   |
-| 003  | Spawn recurrence on board drag-to-done                   | P1       | S      | LOW     | —          | DONE   |
-| 004  | Add CI pipeline (check + unit; flag-gated integ/e2e)     | P1       | M      | LOW     | 001        | DONE   |
-| 005  | Collapse the bulk-permission N+1                         | P1       | S      | LOW     | —          | DONE   |
-| 006  | Validate `Origin` on the WebSocket upgrade               | P1       | S      | LOW     | —          | DONE   |
-| 007  | Scope `person` custom-field values to project members    | P1       | S      | LOW     | —          | DONE   |
-| 008  | Unlink file bytes on task/project delete                 | P2       | M      | MED     | —          | DONE (integration test ran green) |
-| 009  | Map-based resolvers for `cfSearchByTask`                 | P2       | S      | LOW     | —          | DONE   |
-| 010  | Keyed maps for TableView per-row/cell lookups            | P2       | M      | MED     | —          | DONE (manual cell-reactivity QA pending) |
-| 011  | Wrap multi-write service ops in transactions             | P2       | M      | MED     | —          | DONE (tx-atomicity integration test passing) |
-| 012  | Add ESLint + Prettier + editorconfig                     | P2       | S–M    | MED     | —          | DONE (0 err / 135 warn backlog) |
-| 013  | Document project grants + statuses in `llms.txt`         | P2       | S      | LOW     | —          | DONE   |
-| 018  | One-command `verify` script + drop webwright scratch     | P2       | S      | LOW     | —          | DONE   |
-| 014  | Service-layer + permissions unit tests (test-DB harness) | P3       | L      | LOW–MED | —          | DONE (`test:server` script; not yet in CI) |
+| Plan | Title                                                    | Priority | Effort | Risk    | Depends on | Status                                                         |
+| ---- | -------------------------------------------------------- | -------- | ------ | ------- | ---------- | -------------------------------------------------------------- |
+| 001  | Gate integration tests behind a flag (kill skip-as-pass) | P1       | S      | LOW     | —          | DONE                                                           |
+| 002  | Add indexes on hot foreign-key columns                   | P1       | M      | LOW     | —          | DONE                                                           |
+| 003  | Spawn recurrence on board drag-to-done                   | P1       | S      | LOW     | —          | DONE                                                           |
+| 004  | Add CI pipeline (check + unit; flag-gated integ/e2e)     | P1       | M      | LOW     | 001        | DONE                                                           |
+| 005  | Collapse the bulk-permission N+1                         | P1       | S      | LOW     | —          | DONE                                                           |
+| 006  | Validate `Origin` on the WebSocket upgrade               | P1       | S      | LOW     | —          | DONE                                                           |
+| 007  | Scope `person` custom-field values to project members    | P1       | S      | LOW     | —          | DONE                                                           |
+| 008  | Unlink file bytes on task/project delete                 | P2       | M      | MED     | —          | DONE (integration test ran green)                              |
+| 009  | Map-based resolvers for `cfSearchByTask`                 | P2       | S      | LOW     | —          | DONE                                                           |
+| 010  | Keyed maps for TableView per-row/cell lookups            | P2       | M      | MED     | —          | DONE (manual cell-reactivity QA pending)                       |
+| 011  | Wrap multi-write service ops in transactions             | P2       | M      | MED     | —          | DONE (tx-atomicity integration test passing)                   |
+| 012  | Add ESLint + Prettier + editorconfig                     | P2       | S–M    | MED     | —          | DONE (0 err / 135 warn backlog)                                |
+| 013  | Document project grants + statuses in `llms.txt`         | P2       | S      | LOW     | —          | DONE                                                           |
+| 018  | One-command `verify` script + drop webwright scratch     | P2       | S      | LOW     | —          | DONE                                                           |
+| 014  | Service-layer + permissions unit tests (test-DB harness) | P3       | L      | LOW–MED | —          | DONE (`test:server` script; not yet in CI)                     |
 | 015  | Component tests + coverage instrumentation               | P3       | M–L    | LOW     | —          | DONE (`*.svelte.test.ts` runs via `npm test`, not `test:unit`) |
-| 016  | Consolidate duplicated view-component logic              | P3       | L      | MED     | 014 (rec.) | DONE (ADR-055 pane behavior covered by e2e) |
-| 017  | Coordinated toolchain major bumps                        | P3       | M      | MED     | 004 (rec.) | DONE   |
-| 019  | Investigate splitting the god files (server-load slice)  | P3       | L      | MED     | 014 (rec.) | DONE (Step 1 shipped; Steps 2–3 = recommendations) |
-| 020  | Investigate recurrence double-spawn race                 | P3       | S      | LOW     | 011        | DONE — NOT REPRODUCED (repro test kept as guard) |
+| 016  | Consolidate duplicated view-component logic              | P3       | L      | MED     | 014 (rec.) | DONE (ADR-055 pane behavior covered by e2e)                    |
+| 017  | Coordinated toolchain major bumps                        | P3       | M      | MED     | 004 (rec.) | DONE                                                           |
+| 019  | Investigate splitting the god files (server-load slice)  | P3       | L      | MED     | 014 (rec.) | DONE (Step 1 shipped; Steps 2–3 = recommendations)             |
+| 020  | Investigate recurrence double-spawn race                 | P3       | S      | LOW     | 011        | DONE — NOT REPRODUCED (repro test kept as guard)               |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` (one-line reason) | `REJECTED` (one-line rationale).
 
