@@ -6,7 +6,6 @@
 //                               keeps working — it renders the mapped Heroicon).
 //   src/lib/heroiconNames.ts  — the searchable Heroicon name list (IconPicker pool).
 // Run via `npm run icons:build` (also wired as a prebuild step). See ADR-052.
-import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -151,10 +150,6 @@ export const HEROICON_NAMES: string[] = ${JSON.stringify(names)};
 export const ICON_NAMES: string[] = ${JSON.stringify(allIds)};
 `;
 writeFileSync(namesOut, namesFile);
-// Emit prettier-formatted output so the prebuild run doesn't dirty the tree with
-// format-only churn (the raw one-line JSON.stringify arrays diff as ~695 deleted
-// lines against the committed prettier-formatted file, which reads like data loss).
-execFileSync('npx', ['prettier', '--write', namesOut], { stdio: 'inherit' });
 
 console.log(
 	`heroicons: ${names.length} symbols + ${Object.keys(ALIASES).length} aliases + ${Object.keys(CUSTOM).length} custom → static/heroicons.svg (${allIds.length} ids)`

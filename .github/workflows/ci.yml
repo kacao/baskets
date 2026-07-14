@@ -7,6 +7,11 @@
 # shape (server boot + readiness wait) wasn't verified locally, so it's left
 # for a follow-up change. e2e (Playwright) similarly needs a live server and
 # is out of scope here.
+#
+# Server-free suites ARE wired below: `npm test` (unit + `*.svelte.test.ts`
+# component tests) and `npm run test:server` (isolated per-run SQLite DB — its
+# globalSetup drives `drizzle-kit push` against a throwaway ./data/test-server.db,
+# no live server needed), plus lint + format:check.
 name: CI
 on:
   push:
@@ -14,8 +19,8 @@ on:
   pull_request:
     branches: [dev, main]
 jobs:
-  check-and-unit:
-    name: check + unit tests
+  check-and-test:
+    name: check + lint + tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,11 +34,14 @@ jobs:
         run: npm run icons:build
       - name: Type + Svelte check
         run: npm run check
-      - name: Unit tests
-        run: npm run test:unit
-      # Org-isolation coverage (ADR-062 W5). Server-free per ADR-060: the suite
-      # provisions its OWN isolated sqlite file (data/test-server.db) via
-      # drizzle-kit push in globalSetup, so no service containers or seeded server
-      # are needed. DB_DIALECT/DATABASE_URL are set inside the test:server script.
-      - name: Server isolation tests
+      - name: Lint
+        run: npm run lint
+      - name: Format check
+        run: npm run format:check
+      - name: Unit + component tests
+        run: npm test
+      # Also carries the ADR-062 org-isolation suite. Server-free per ADR-060:
+      # globalSetup provisions its OWN isolated sqlite file (data/test-server.db)
+      # via drizzle-kit push, so no service containers or seeded server are needed.
+      - name: Server characterization tests (isolated DB)
         run: npm run test:server
