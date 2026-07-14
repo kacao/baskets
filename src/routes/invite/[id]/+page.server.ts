@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { acceptInvitationService, getInvitationForAccept } from '$lib/server/orgs';
+import { ORG_COOKIE_OPTS, acceptInvitationService, getInvitationForAccept } from '$lib/server/orgs';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Mask an email for the wrong-account screen: `t***@example.com`. */
@@ -48,8 +48,9 @@ export const actions: Actions = {
 		);
 		if (!res.ok) return fail(res.status, { message: res.message });
 		// switch the active org to the just-joined one (the plugin only writes
-		// session.activeOrganizationId, which the app ignores — D4)
-		cookies.set('org', res.data.orgId, { path: '/', maxAge: 31536000, sameSite: 'lax' });
+		// session.activeOrganizationId, which the app ignores — D4). ORG_COOKIE_OPTS
+		// keeps the cookie client-writable so the switcher can override it later.
+		cookies.set('org', res.data.orgId, ORG_COOKIE_OPTS);
 		cookies.delete('workspace', { path: '/' });
 		redirect(303, '/projects');
 	}

@@ -90,10 +90,12 @@ export const actions: Actions = {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		const res = await leaveOrgService(locals.user.id, params.id);
 		if (!res.ok) return fail(res.status, { message: res.message });
-		// leaving the active org: drop its cookies so the shell re-resolves another
-		// org (or /onboarding if none remain).
-		cookies.delete('org', { path: '/' });
-		cookies.delete('workspace', { path: '/' });
+		// only clear the cookies when leaving the ACTIVE org — leaving a non-active
+		// org must not silently switch which org the user is currently in.
+		if (cookies.get('org') === params.id) {
+			cookies.delete('org', { path: '/' });
+			cookies.delete('workspace', { path: '/' });
+		}
 		redirect(303, '/projects');
 	},
 
@@ -101,8 +103,10 @@ export const actions: Actions = {
 		if (!locals.user) return fail(401, { message: 'Not signed in' });
 		const res = await deleteOrganizationGuarded(params.id, locals.user.id);
 		if (!res.ok) return fail(res.status, { message: res.message });
-		cookies.delete('org', { path: '/' });
-		cookies.delete('workspace', { path: '/' });
+		if (cookies.get('org') === params.id) {
+			cookies.delete('org', { path: '/' });
+			cookies.delete('workspace', { path: '/' });
+		}
 		redirect(303, '/projects');
 	}
 };

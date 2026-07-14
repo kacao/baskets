@@ -286,12 +286,15 @@ await db.insert(schema.label).values([
 	}
 ]);
 
-// Demo user can edit project 1 (admins implicitly edit everything)
+// Demo user (a plain org-default member) is granted edit on project 1. The grant
+// MUST carry organizationId (ADR-062: grant org == resource org) or the demo user
+// lands on an empty app and the invariant/isolation tests fail.
 await db.insert(schema.permission).values({
 	id: 'seed-perm-1',
 	userId: demoId,
 	resourceType: 'project',
 	resourceId: pid(1),
+	organizationId: ORG_ID,
 	grantedBy: adminId,
 	createdAt: now
 });

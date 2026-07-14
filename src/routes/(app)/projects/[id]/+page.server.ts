@@ -61,7 +61,7 @@ import {
 	projectOrgId,
 	workspaceOrgId
 } from '$lib/server/permissions';
-import { isOrgAdmin } from '$lib/server/orgs';
+import { alignActiveOrg, isOrgAdmin } from '$lib/server/orgs';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
 import { ICON_NAMES } from '$lib/heroiconNames';
 import { createsCycle } from '$lib/server/graph';
@@ -143,7 +143,7 @@ function parseCoords(
 	return { lat, lng };
 }
 
-export const load: PageServerLoad = async ({ params, locals, cookies }) => {
+export const load: PageServerLoad = async ({ params, locals, cookies, url }) => {
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) error(404, 'Project not found');
 	// ADR-019: inaccessible projects are indistinguishable from missing ones
@@ -152,11 +152,11 @@ export const load: PageServerLoad = async ({ params, locals, cookies }) => {
 	// ADR-062 D4: opening an accessible project auto-aligns the active org to the
 	// project's org (so the bell, ?task= deep links, and mention chips are coherent
 	// with one rule). Not a security concern — the target is already accessible.
+	// alignActiveOrg redirects when it changes the cookie, so the layout + this load
+	// re-run against the aligned org (setting it inline would render the shell on the
+	// stale org for this request).
 	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
-	if (projOrgId && cookies.get('org') !== projOrgId) {
-		cookies.set('org', projOrgId, { path: '/' });
-		cookies.delete('workspace', { path: '/' });
-	}
+	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
 
 	const [
 		tasks,

@@ -1,7 +1,8 @@
 import { and, asc, eq } from 'drizzle-orm';
-import type { Cookies } from '@sveltejs/kit';
+import { redirect, type Cookies } from '@sveltejs/kit';
 import { db, withTransaction } from './db';
 import {
+	integration,
 	invitation,
 	member,
 	notification,
@@ -12,6 +13,37 @@ import {
 } from './db/schema';
 import { isFirstWorkspaceForUser, seedWorkspaceSamples } from './projects';
 import { kickUser } from './realtime/hub';
+
+/**
+ * Options for the `org` (and server-written `workspace`) cookie. It MUST be
+ * readable+writable by client JS: the sidebar org/workspace switchers set these
+ * via `document.cookie`, and SvelteKit's `cookies.set` defaults to
+ * `httpOnly: true` (+ `secure` in prod) — a server-set httpOnly cookie can never
+ * be overridden by the switcher, silently breaking org switching. So mirror the
+ * client-written semantics exactly (ADR-062 review fix).
+ */
+export const ORG_COOKIE_OPTS = {
+	path: '/',
+	maxAge: 60 * 60 * 24 * 365,
+	sameSite: 'lax',
+	httpOnly: false,
+	secure: false
+} as const;
+
+/**
+ * D4 auto-align: when a user opens an accessible project whose org isn't the
+ * active one, switch the `org` cookie to the project's org (dropping the stale
+ * `workspace` cookie) and **redirect** so the NEXT request renders the layout +
+ * page from the aligned cookie — setting it mid-load would leave the shell
+ * (sidebar, switcher, comment-moderation role) resolved against the OLD org for
+ * this request. No-op (and no redirect, so no loop) when already aligned.
+ */
+export function alignActiveOrg(cookies: Cookies, projectOrgId: string | null, redirectTo: string) {
+	if (!projectOrgId || cookies.get('org') === projectOrgId) return;
+	cookies.set('org', projectOrgId, ORG_COOKIE_OPTS);
+	cookies.delete('workspace', { path: '/' });
+	redirect(302, redirectTo);
+}
 
 // Org service module (ADR-062). Primitives for the BetterAuth organization
 // plugin: membership/role reads, active-org resolution (mirrors the `workspace`
@@ -292,6 +324,9 @@ export async function deleteOrganizationGuarded(
 		await tx.delete(member).where(eq(member.organizationId, orgId));
 		await tx.delete(permission).where(eq(permission.organizationId, orgId));
 		await tx.delete(notification).where(eq(notification.organizationId, orgId));
+		// integration rows hold the Slack webhook secret — sweep them too (an org
+		// with 0 workspaces can still hold a configured integration).
+		await tx.delete(integration).where(eq(integration.organizationId, orgId));
 		await tx.delete(organization).where(eq(organization.id, orgId));
 	});
 	return { ok: true, data: { id: orgId } };

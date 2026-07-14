@@ -154,32 +154,34 @@ Create a label group (editable).
 - 201: `{ "group": <labelGroup> }`. `404`/`403` as for workspace edits.
 
 ### GET /api/workspaces/{id}/grants
-List the workspace's permission grants. Managed by ADMINS or the workspace OWNER only.
-- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("workspace"), "resourceId" }...] }`. `404` if inaccessible; `403 "Only admins or the owner can view workspace grants"` for accessible non-managers.
+List the workspace's permission grants. Managed by an org owner/admin (of the workspace's org) or the workspace OWNER only. The grantee must be a member of the workspace's org.
+- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("workspace"), "resourceId" }...] }`. `404` if inaccessible (ADR-019); `403 "Only org admins or the owner can view workspace grants"` for accessible non-managers.
 
 ### POST /api/workspaces/{id}/grants
-Grant a user access to the workspace (admin or owner).
-- Body: `userId` string, required (`400 "Invalid grant"` if missing, `400 "Unknown user"` if no such user). Idempotent (conflicts are ignored).
-- 201: `{ "grants": [...] }` (the updated list). `404`/`403` as above.
+Grant a user access to the workspace (org owner/admin or workspace owner).
+- Body: `userId` string, required (`400 "Invalid grant"` if missing; `400 "Unknown user"` if no such user OR the user is not a member of this org — one generic message, no oracle). Idempotent (conflicts are ignored).
+- 201: `{ "grants": [...] }` (the updated list). `404` if inaccessible; `403 "Only org admins or the owner can grant permissions"` for accessible non-managers.
 
 ### DELETE /api/workspaces/{id}/grants
-Revoke a grant (admin or owner). Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither.
-- 204: empty body. `404`/`403` as above.
+Revoke a grant (org owner/admin or workspace owner). Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither.
+- 204: empty body. `404` if inaccessible; `403 "Only org admins or the owner can revoke permissions"` for accessible non-managers.
 
 ## Project grants
 
+Managed by an org owner/admin of the project's org (ADR-062). Grantees must be members of that org.
+
 ### GET /api/projects/{id}/grants
-List a project's permission grants. ADMIN only.
-- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("project"|"view"), "resourceId" }...] }`. `403 "Only admins can view project grants"` for non-admins; `404 "Project not found"` if missing.
+List a project's permission grants.
+- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("project"|"view"), "resourceId" }...] }`. `404 "Project not found"` if inaccessible (ADR-019 — no existence oracle); `403 "Only org admins can manage project grants"` for accessible non-admins.
 
 ### POST /api/projects/{id}/grants
-Grant a user access to the project (or to a specific view of it). ADMIN only.
-- Body: `userId` string, required. Optional `resourceType` (`"project"` default | `"view"`) and `resourceId` (defaults to `{id}`; a `view` grant's `resourceId` must be a view of this project). Errors: `400 "Invalid grant"`, `400 "Invalid view"`, `400 "Unknown user"`. Idempotent (conflicts ignored).
-- 201: `{ "grants": [...] }` (the updated list). `403 "Only admins can grant permissions"` for non-admins; `404 "Project not found"` if missing.
+Grant a user access to the project (or to a specific view of it).
+- Body: `userId` string, required. Optional `resourceType` (`"project"` default | `"view"`) and `resourceId` (defaults to `{id}`; a `view` grant's `resourceId` must be a view of this project). Errors: `400 "Invalid grant"`, `400 "Invalid view"`, `400 "Unknown user"` (covers both a nonexistent user AND a user who isn't a member of this project's org — no oracle). Idempotent (conflicts ignored).
+- 201: `{ "grants": [...] }` (the updated list). `404 "Project not found"` if inaccessible; `403 "Only org admins can manage project grants"` for accessible non-admins.
 
 ### DELETE /api/projects/{id}/grants
-Revoke a grant. ADMIN only. Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither; `404 "Grant not found"` if the grantId isn't part of this project's grant set.
-- 204: empty body. `403 "Only admins can revoke permissions"` for non-admins; `404 "Project not found"` if missing.
+Revoke a grant. Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither; `404 "Grant not found"` if the grantId isn't part of this project's grant set.
+- 204: empty body. `404 "Project not found"` if inaccessible; `403 "Only org admins can manage project grants"` for accessible non-admins.
 
 ## Statuses
 
@@ -611,20 +613,20 @@ Add a comment.
 - 201: `{ "comment": <comment> }`. `400 "body is required"` if missing/empty, `400 "body too long (max 10000)"` if over 10000; `404` if inaccessible.
 
 ### PATCH /api/comments/{id}
-Edit a comment body (author or admin only).
+Edit a comment body (the author, or an org owner/admin of the project's org).
 - Body (JSON): `{ "body": string }` (non-empty, max 10000).
-- 200: `{ "comment": <comment> }`. `400` if the body is invalid JSON, empty, or over 10000 chars; `403` if not the author/admin, `404` if missing.
+- 200: `{ "comment": <comment> }`. `400` if the body is invalid JSON, empty, or over 10000 chars; `403` if not the author or an org owner/admin of the project's org; `404` if missing.
 
 ### DELETE /api/comments/{id}
-Delete a comment (author or admin only). `403`/`404` as above. 204: empty body.
+Delete a comment (the author, or an org owner/admin of the project's org). `403`/`404` as above. 204: empty body.
 
 ## Notifications
 
-In-app notifications for the current user (assignment + due-date reminders). Due reminders are generated lazily on GET.
+In-app notifications for the current user (assignment + due-date reminders). Due reminders are generated lazily on GET. Notifications are org-scoped (ADR-062): each row carries `organizationId`, and this list returns only rows from organizations the caller is CURRENTLY a member of (rows for a departed org are excluded).
 
 ### GET /api/notifications
 List the current user's notifications + unread count.
-- 200: `{ "notifications": [{ "id", "userId", "type", "body", "projectId", "taskId", "read" (boolean), "createdAt" }...], "unreadCount": number }`. Returns at most the **50 most-recent** notifications (newest first); `unreadCount` counts ALL unread, not just the returned page. `type` ∈ `assigned | due_soon | overdue | ...`.
+- 200: `{ "notifications": [{ "id", "userId", "organizationId", "type", "body", "projectId", "taskId", "read" (boolean), "createdAt" }...], "unreadCount": number }`. Returns at most the **50 most-recent** notifications (newest first, across the caller's member orgs); `unreadCount` counts ALL unread, not just the returned page. `type` ∈ `assigned | due_soon | overdue | ...`.
 
 ### POST /api/notifications/{id}
 (also `PATCH`) Mark one notification read (owner-scoped). 200 on success, `404` if not the user's.

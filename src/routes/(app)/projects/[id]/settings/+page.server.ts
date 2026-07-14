@@ -17,7 +17,8 @@ import {
 	task,
 	taskCustomValue,
 	user,
-	view
+	view,
+	workspace
 } from '$lib/server/db/schema';
 import {
 	accessibleWorkspaceIds,
@@ -29,7 +30,7 @@ import {
 	projectOrgId,
 	workspaceOrgId
 } from '$lib/server/permissions';
-import { isOrgAdmin, listMembers, orgRole } from '$lib/server/orgs';
+import { alignActiveOrg, isOrgAdmin, listMembers, orgRole } from '$lib/server/orgs';
 import { decodeValue } from '$lib/customFields';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
 import { notifyMentions } from '$lib/server/mentions';
@@ -123,13 +124,15 @@ function createsCycle(edges: Map<string, string[]>, from: string, to: string) {
 	return false;
 }
 
-const loadImpl = async ({ params, locals }: Parameters<PageServerLoad>[0]) => {
+const loadImpl = async ({ params, locals, cookies, url }: Parameters<PageServerLoad>[0]) => {
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) error(404, 'Project not found');
 	if (!(await canEditProject(locals.user, params.id)))
 		error(403, 'No edit permission on this project');
 
 	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
+	// ADR-062 D4: keep the active org aligned to the project being edited
+	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
 
 	const [
 		globalStatuses,
@@ -893,7 +896,23 @@ export const actions: Actions = {
 		if (!target || !(await canAccessProject(locals.user, dependsOnId)))
 			return fail(400, { message: 'Unknown project' });
 
-		const all = await db.select().from(projectDependency);
+		// same-org only (ADR-062): a user in both orgs must not wire a cross-tenant edge
+		const [srcOrg, dstOrg] = await Promise.all([
+			projectOrgId(params.id),
+			projectOrgId(dependsOnId)
+		]);
+		if (!srcOrg || srcOrg !== dstOrg) return fail(400, { message: 'Unknown project' });
+
+		// cycle check over THIS org's dependency edges only
+		const all = await db
+			.select({
+				projectId: projectDependency.projectId,
+				dependsOnId: projectDependency.dependsOnId
+			})
+			.from(projectDependency)
+			.innerJoin(project, eq(projectDependency.projectId, project.id))
+			.innerJoin(workspace, eq(project.workspaceId, workspace.id))
+			.where(eq(workspace.organizationId, srcOrg));
 		const edges = new Map<string, string[]>();
 		for (const e of all) edges.set(e.projectId, [...(edges.get(e.projectId) ?? []), e.dependsOnId]);
 		if (createsCycle(edges, params.id, dependsOnId))

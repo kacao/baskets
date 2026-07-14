@@ -145,7 +145,7 @@
 						type="button"
 						class="x-btn"
 						aria-label={$t('Remove member')}
-						onclick={(e) => confirmRemove(e, m.name)}>×</button
+						onclick={(e) => confirmRemove(e, m.name)}><Icon name="xmark" size={14} /></button
 					>
 				</form>
 			{:else}
@@ -217,7 +217,9 @@
 				</button>
 				<form method="POST" action="?/cancelInvite" use:enhance>
 					<input type="hidden" name="invitationId" value={inv.id} />
-					<button class="x-btn" type="submit" aria-label={$t('Cancel invitation')}>×</button>
+					<button class="x-btn" type="submit" aria-label={$t('Cancel invitation')}
+						><Icon name="xmark" size={14} /></button
+					>
 				</form>
 			</div>
 		{:else}

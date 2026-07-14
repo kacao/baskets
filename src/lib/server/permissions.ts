@@ -292,16 +292,18 @@ export async function projectAccessUserIds(
 	workspaceId: string | null
 ): Promise<Set<string>> {
 	const ids = new Set<string>();
+	let orgId: string | null = null;
 
 	const pairs: { type: string; id: string }[] = [{ type: 'project', id: projectId }];
 	if (workspaceId) {
 		const w = await workspaceMeta(workspaceId);
 		if (w?.ownerId) ids.add(w.ownerId);
-		if (w?.orgId) {
+		orgId = w?.orgId ?? null;
+		if (orgId) {
 			const admins = await db
 				.select({ userId: member.userId })
 				.from(member)
-				.where(and(eq(member.organizationId, w.orgId), inArray(member.role, ['owner', 'admin'])));
+				.where(and(eq(member.organizationId, orgId), inArray(member.role, ['owner', 'admin'])));
 			for (const a of admins) ids.add(a.userId);
 		}
 		pairs.push({ type: 'workspace', id: workspaceId });
@@ -317,6 +319,20 @@ export async function projectAccessUserIds(
 			)
 		);
 	for (const g of grants) ids.add(g.uid);
+
+	// Membership prerequisite (ADR-062 D3): the workspace owner and grant holders are
+	// added unconditionally above, but a user who left (or was removed from) the org
+	// keeps a surviving workspace-owner reference / inert grant. Intersect the roster
+	// with CURRENT members so ex-members drop out of assignee pickers, person-cf
+	// validation, mention-notification targets, and export name resolution.
+	if (orgId && ids.size > 0) {
+		const current = await db
+			.select({ userId: member.userId })
+			.from(member)
+			.where(eq(member.organizationId, orgId));
+		const members = new Set(current.map((m) => m.userId));
+		for (const id of ids) if (!members.has(id)) ids.delete(id);
+	}
 	return ids;
 }
 

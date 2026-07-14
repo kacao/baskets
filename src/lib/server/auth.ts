@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { APIError } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { twoFactor, admin, organization } from 'better-auth/plugins';
 import { env } from '$env/dynamic/private';
@@ -77,6 +78,20 @@ export const auth = betterAuth({
 				beforeCreateOrganization: async ({ organization: org }) => {
 					const slug = await uniqueOrgSlug(slugifyOrgName(org.name ?? 'org'));
 					return { data: { ...org, slug } };
+				},
+				// Reject client-driven `slug`/`metadata` changes on the live plugin
+				// update endpoint (ADR-062 review fix). The slug is server-generated and
+				// immutable (D1); `metadata` holds the migration marker — clearing
+				// org-default's {"migrated":true} would re-trigger the boot migration's
+				// full-user membership backfill. The app's own rename path
+				// (updateOrganizationService) writes `name` directly and never hits this
+				// hook, so nothing legitimate is blocked. (The plugin MERGES the returned
+				// data over the body, so stripping-by-omission wouldn't work — reject.)
+				beforeUpdateOrganization: async ({ organization: patch }) => {
+					if ('slug' in patch || 'metadata' in patch)
+						throw new APIError('BAD_REQUEST', {
+							message: 'Organization slug and metadata cannot be changed'
+						});
 				},
 				// Bootstrap the org's default workspace (+ sample content for a first-time
 				// owner). Idempotent and non-throwing: the plugin does NOT wrap create in a

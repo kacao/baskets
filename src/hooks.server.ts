@@ -8,10 +8,27 @@ import type { Handle } from '@sveltejs/kit';
 
 const THEMES = ['light', 'dark'];
 
+// BetterAuth organization plugin endpoints that the app does NOT use client-side
+// and that leak cross-member data (ADR-062 review fix): `list-invitations` +
+// `get-full-organization` hand invitation ids — the accept capability — and full
+// rosters to ANY plain member (gated only on membership), defeating the app's own
+// owner/admin gating and enabling escalation via a leaked admin-role invite;
+// `check-slug` is a cross-tenant org-existence oracle. The app has its own gated
+// equivalents (listMembers, listPendingInvitations, /invite/[id]). Block them.
+const BLOCKED_AUTH_PATHS = new Set([
+	'/api/auth/organization/list-invitations',
+	'/api/auth/organization/get-full-organization',
+	'/api/auth/organization/check-slug'
+]);
+
 export const handle: Handle = async ({ event, resolve }) => {
 	if (!building) {
 		await ensureDefaultStatuses();
 		await ensureDefaultOrganization();
+	}
+
+	if (BLOCKED_AUTH_PATHS.has(event.url.pathname)) {
+		return new Response('Not Found', { status: 404 });
 	}
 
 	// DaisyUI theme + high-contrast accessibility flag: cookie-driven, applied to

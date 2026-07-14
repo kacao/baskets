@@ -16,12 +16,12 @@ import {
 	projectAccessUserIds,
 	workspaceOrgId
 } from '$lib/server/permissions';
-import { isOrgAdmin, listMembers } from '$lib/server/orgs';
+import { alignActiveOrg, isOrgAdmin, listMembers } from '$lib/server/orgs';
 import type { PageServerLoad } from './$types';
 
 export { actions } from '../settings/+page.server';
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals, cookies, url }) => {
 	if (!locals.user) error(401, 'Not signed in');
 
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
@@ -30,6 +30,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	if (!(await canAccessProject(locals.user, params.id))) error(404, 'Project not found');
 
 	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
+	// ADR-062 D4: keep the active org aligned to the project being viewed (redirects if it changes)
+	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
 
 	const [tasks, locations, files, allProjects, members] = await Promise.all([
 		db

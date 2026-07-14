@@ -67,7 +67,21 @@ async function runMigration(): Promise<void> {
 
 	// (no org rows AND ≥1 workspace) OR (org-default exists, unmarked → resume).
 	const shouldRun = (orgs.length === 0 && hasWorkspaces) || orgDefault !== undefined;
-	if (!shouldRun) return;
+	if (!shouldRun) {
+		// Fresh install (no legacy data) or already-consistent: nothing to migrate.
+		// Mark done so this doesn't re-query on every request — no legacy (org-less)
+		// data can appear after boot on a DB that has none (all post-org insert paths
+		// stamp organizationId), and a restore/reseed implies a process restart.
+		migrated = true;
+		return;
+	}
+
+	// NOTE: the marker on org-default gates re-runs. The realistic vector for CLEARING
+	// that marker (an org admin PATCHing organization.metadata) is blocked upstream by
+	// auth.ts's beforeUpdateOrganization hook, so this one-time backfill can't be
+	// weaponised to force-join users. A direct DB edit that cleared the marker would
+	// re-run the (idempotent) backfill — acceptable for a self-hosted operator who
+	// already has full DB access.
 
 	await withTransaction(async (tx) => {
 		const now = new Date();

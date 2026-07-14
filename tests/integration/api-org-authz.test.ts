@@ -152,6 +152,32 @@ describe.skipIf(!RUN_INTEGRATION)('REST cross-org isolation / ADR-062 (live :517
 			expect(res.status).toBe(404);
 		});
 
+		// Every project sub-resource must be equally invisible cross-org — inaccessible
+		// ≡ missing (404), never 403 (no existence oracle). Mirrors api-authz.test.ts's
+		// cross-workspace block, now across the tenant boundary.
+		const CROSS_ORG_SUBPATHS = [
+			'/statuses',
+			'/labels',
+			'/milestones',
+			'/locations',
+			'/views',
+			'/custom-fields',
+			'/dependencies',
+			'/files',
+			'/export',
+			'/templates',
+			'/grants'
+		];
+		for (const sub of CROSS_ORG_SUBPATHS) {
+			it(`GET /api/projects/${SEED_PROJECT}${sub} → 404 (cross-org)`, async () => {
+				if (!serverUp || !owner2Cookie) return;
+				const res = await fetch(url(`/api/projects/${SEED_PROJECT}${sub}`), {
+					headers: { cookie: owner2Cookie }
+				});
+				expect(res.status).toBe(404);
+			});
+		}
+
 		it('GET org-default’s workspace → 404 (cross-org)', async () => {
 			if (!serverUp || !owner2Cookie) return;
 			const res = await fetch(url(`/api/workspaces/${WS_DEFAULT}`), {
@@ -211,23 +237,16 @@ describe.skipIf(!RUN_INTEGRATION)('REST cross-org isolation / ADR-062 (live :517
 			);
 		});
 
-		// FINDING (scripts/seed.ts — OUT OF W5 SCOPE, reported not fixed): the seeded demo
-		// grant row `seed-perm-1` is inserted with organizationId = NULL. `grantedProjectIds`
-		// filters grants by organizationId, so demo's granted project (and thus its
-		// workspace) is INVISIBLE in /api/projects and /api/workspaces — a seeded member
-		// lands on an EMPTY app. (Inconsistently, canAccessProject uses org-agnostic
-		// hasGrant, so demo CAN still deep-link seed-project-1.) This test asserts the
-		// CORRECT post-fix behavior and is expected to FAIL until seed.ts stamps
-		// organizationId: ORG_ID on the demo grant. Remove `.fails` once fixed.
-		it.fails(
-			'demo should see its granted project’s workspace (BLOCKED: seed grant org-null)',
-			async () => {
-				if (!serverUp || !demoCookie) throw new Error('server down — treat as expected-fail');
-				const res = await fetch(url('/api/workspaces'), { headers: { cookie: demoCookie } });
-				const j = (await res.json()) as { workspaces?: Array<{ id: string }> };
-				expect((j.workspaces ?? []).some((w) => w.id === WS_DEFAULT)).toBe(true);
-			}
-		);
+		// The seeded demo grant `seed-perm-1` now carries organizationId = ORG_ID (the
+		// ADR-062 review fix in scripts/seed.ts), so `grantedProjectIds` includes it and
+		// demo sees its granted project's workspace instead of landing on an empty app.
+		// (Requires a DB seeded AFTER the fix — `npm run db:seed` on a fresh DB.)
+		it('demo sees its granted project’s workspace (seed grant carries org)', async () => {
+			if (!serverUp || !demoCookie) return;
+			const res = await fetch(url('/api/workspaces'), { headers: { cookie: demoCookie } });
+			const j = (await res.json()) as { workspaces?: Array<{ id: string }> };
+			expect((j.workspaces ?? []).some((w) => w.id === WS_DEFAULT)).toBe(true);
+		});
 	});
 
 	describe('(C) grant writes: grantee must be a member (out-of-org ≡ nonexistent, no oracle)', () => {

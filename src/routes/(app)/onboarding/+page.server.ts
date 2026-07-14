@@ -1,5 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { createOrganizationForUser, listUserOrgs } from '$lib/server/orgs';
+import { ORG_COOKIE_OPTS, createOrganizationForUser, listUserOrgs } from '$lib/server/orgs';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
@@ -20,8 +20,9 @@ export const actions: Actions = {
 		if (name.length > 120) return fail(400, { message: 'Name too long (max 120)' });
 
 		const orgId = await createOrganizationForUser(locals.user.id, name);
-		// make the new org active (D4) and drop any workspace cookie from a prior org
-		cookies.set('org', orgId, { path: '/', maxAge: 31536000, sameSite: 'lax' });
+		// make the new org active (D4) and drop any workspace cookie from a prior org.
+		// ORG_COOKIE_OPTS keeps the cookie client-writable so the switcher can override it.
+		cookies.set('org', orgId, ORG_COOKIE_OPTS);
 		cookies.delete('workspace', { path: '/' });
 		redirect(303, '/projects');
 	}
