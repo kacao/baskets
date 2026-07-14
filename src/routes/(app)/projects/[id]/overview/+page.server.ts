@@ -21,7 +21,7 @@ import type { PageServerLoad } from './$types';
 
 export { actions } from '../settings/+page.server';
 
-export const load: PageServerLoad = async ({ params, locals, cookies, url }) => {
+export const load: PageServerLoad = async ({ params, locals, cookies }) => {
 	if (!locals.user) error(401, 'Not signed in');
 
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
@@ -31,7 +31,7 @@ export const load: PageServerLoad = async ({ params, locals, cookies, url }) => 
 
 	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
 	// ADR-062 D4: keep the active org aligned to the project being viewed (redirects if it changes)
-	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
+	alignActiveOrg(cookies, projOrgId);
 
 	const [tasks, locations, files, allProjects, members] = await Promise.all([
 		db

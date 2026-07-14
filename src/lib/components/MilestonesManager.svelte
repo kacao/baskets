@@ -479,6 +479,15 @@
 	.pill-ph {
 		color: var(--color-muted);
 	}
+	/* The Depends-on trigger already renders a bordered .pill-val, so the Popover's
+	   wrapping .pill button must not add a second, concentric pill border. Strip its
+	   chrome (border none keeps it inert against the Popover .pill:hover border) so
+	   the edit trigger matches the standalone read-only .pill-val. */
+	.ms-deps :global(.pill) {
+		border: none;
+		background: none;
+		padding: 0;
+	}
 	.opt {
 		display: flex;
 		align-items: center;
