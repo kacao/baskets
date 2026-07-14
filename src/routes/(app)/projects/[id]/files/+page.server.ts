@@ -11,7 +11,7 @@ type FileSource =
 	| { kind: 'task'; taskId: string; taskTitle: string }
 	| { kind: 'field'; fieldName: string; taskId: string | null; taskTitle: string | null };
 
-export const load: PageServerLoad = async ({ params, locals, cookies, url }) => {
+export const load: PageServerLoad = async ({ params, locals, cookies }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 
 	const [proj] = await db
@@ -24,7 +24,7 @@ export const load: PageServerLoad = async ({ params, locals, cookies, url }) => 
 
 	// ADR-062 D4: keep the active org aligned to the project being viewed
 	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
-	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
+	alignActiveOrg(cookies, projOrgId);
 
 	const rows = await db
 		.select({

@@ -143,7 +143,7 @@ function parseCoords(
 	return { lat, lng };
 }
 
-export const load: PageServerLoad = async ({ params, locals, cookies, url }) => {
+export const load: PageServerLoad = async ({ params, locals, cookies }) => {
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) error(404, 'Project not found');
 	// ADR-019: inaccessible projects are indistinguishable from missing ones
@@ -156,7 +156,7 @@ export const load: PageServerLoad = async ({ params, locals, cookies, url }) => 
 	// re-run against the aligned org (setting it inline would render the shell on the
 	// stale org for this request).
 	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
-	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
+	alignActiveOrg(cookies, projOrgId);
 
 	const [
 		tasks,

@@ -124,7 +124,7 @@ function createsCycle(edges: Map<string, string[]>, from: string, to: string) {
 	return false;
 }
 
-const loadImpl = async ({ params, locals, cookies, url }: Parameters<PageServerLoad>[0]) => {
+const loadImpl = async ({ params, locals, cookies }: Parameters<PageServerLoad>[0]) => {
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) error(404, 'Project not found');
 	if (!(await canEditProject(locals.user, params.id)))
@@ -132,7 +132,7 @@ const loadImpl = async ({ params, locals, cookies, url }: Parameters<PageServerL
 
 	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
 	// ADR-062 D4: keep the active org aligned to the project being edited
-	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
+	alignActiveOrg(cookies, projOrgId);
 
 	const [
 		globalStatuses,

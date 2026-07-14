@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm';
-import { redirect, type Cookies } from '@sveltejs/kit';
+import type { Cookies } from '@sveltejs/kit';
 import { db, withTransaction } from './db';
 import {
 	integration,
@@ -33,16 +33,19 @@ export const ORG_COOKIE_OPTS = {
 /**
  * D4 auto-align: when a user opens an accessible project whose org isn't the
  * active one, switch the `org` cookie to the project's org (dropping the stale
- * `workspace` cookie) and **redirect** so the NEXT request renders the layout +
- * page from the aligned cookie — setting it mid-load would leave the shell
- * (sidebar, switcher, comment-moderation role) resolved against the OLD org for
- * this request. No-op (and no redirect, so no loop) when already aligned.
+ * `workspace` cookie). Client-writable cookie (ORG_COOKIE_OPTS) so the switcher
+ * can still override it. NO redirect: redirecting to the SAME url that a load is
+ * already navigating to trips SvelteKit's client-side redirect-loop guard (a hard
+ * 500 on the first project click after login, when no `org` cookie exists yet).
+ * The trade-off is one render of shell staleness (sidebar/switcher resolve the
+ * previous org) ONLY on cross-org navigation — it self-heals on the next request
+ * since the cookie is then correct. Same-org navigation (the common case) never
+ * aligns, so never lags.
  */
-export function alignActiveOrg(cookies: Cookies, projectOrgId: string | null, redirectTo: string) {
+export function alignActiveOrg(cookies: Cookies, projectOrgId: string | null) {
 	if (!projectOrgId || cookies.get('org') === projectOrgId) return;
 	cookies.set('org', projectOrgId, ORG_COOKIE_OPTS);
 	cookies.delete('workspace', { path: '/' });
-	redirect(302, redirectTo);
 }
 
 // Org service module (ADR-062). Primitives for the BetterAuth organization
