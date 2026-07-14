@@ -1,18 +1,19 @@
 # PRD — Baskets
 
-Single-instance project management app: workspaces → projects → tasks → sub-tasks. Deliberately small. This document describes the product as currently built and its near-term direction.
+Multi-tenant project management app: organizations → workspaces → projects → tasks → sub-tasks (ADR-062). Deliberately small. This document describes the product as currently built and its near-term direction.
 
 ## Problem
 
-Small teams need a fast, no-ceremony way to track projects and tasks without the overhead of full PM suites (billing tiers, permission matrices). One self-hosted instance; people organize work into workspaces and share by ownership/grants.
+Small teams need a fast, no-ceremony way to track projects and tasks without the overhead of full PM suites (billing tiers, permission matrices). One self-hosted instance can now host several isolated organizations; within an org, people organize work into workspaces and share by ownership/grants.
 
 ## Users
 
-- **Member** — any signed-in user. Sees the workspaces they own or were granted (plus directly granted projects) and works tasks in any project they can access (create, edit, move, status, labels, dependencies). Can create their own workspaces and projects.
-- **Workspace owner** — owns a workspace; edits its structure (statuses, labels, projects) and grants others access.
-- **Admin** — sees and edits everything; manages users (/admin); the five default statuses are fixed even for admins.
+- **Org member** — belongs to ≥1 organization. Within an org, sees the workspaces they own or were granted (plus directly granted projects) and works tasks in any project they can access (create, edit, move, status, labels, dependencies). Can create workspaces in their org and additional organizations. Membership alone confers no workspace visibility.
+- **Workspace owner** — owns a workspace; edits its structure (statuses, labels, projects) and grants access to other org members.
+- **Org owner/admin** — sees and edits everything in their organization; manages members, invitations (copyable `/invite/<id>` links — no email delivery), integrations, and org settings; org deletion is owner-only and requires zero workspaces.
+- **Instance admin (operator)** — manages the deployment's user accounts (/admin) and instance-global built-in status icons (/settings/statuses); has NO implicit access to any organization's data.
 
-Visibility = access (ADR-019): non-admins see only workspaces they own or hold a grant on, plus projects they were directly granted. Inaccessible projects/tasks return 404. Task editing requires project access; structure edits (workspace/project meta, views, eligible statuses, milestones, labels, grants) require admin, workspace owner, or a grant.
+Visibility = access (ADR-019, org-scoped by ADR-062): org membership is a prerequisite; plain members see only workspaces they own or hold a grant on, plus projects they were directly granted; org owners/admins see their whole org. Inaccessible or cross-org projects/tasks return 404. Task editing requires project access; structure edits (workspace/project meta, views, eligible statuses, milestones, labels, grants) require org owner/admin, workspace owner, or a grant. New users with no org land on onboarding and create their own.
 
 ## Core features (shipped)
 

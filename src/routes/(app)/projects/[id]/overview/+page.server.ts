@@ -7,20 +7,21 @@
 import { error } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { file, project, task, location, user } from '$lib/server/db/schema';
+import { file, project, task, location } from '$lib/server/db/schema';
 import {
 	accessibleWorkspaceIds,
 	canAccessProject,
 	canEditProject,
 	grantedProjectIds,
-	isAdmin,
-	projectAccessUserIds
+	projectAccessUserIds,
+	workspaceOrgId
 } from '$lib/server/permissions';
+import { alignActiveOrg, isOrgAdmin, listMembers } from '$lib/server/orgs';
 import type { PageServerLoad } from './$types';
 
 export { actions } from '../settings/+page.server';
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals, cookies, url }) => {
 	if (!locals.user) error(401, 'Not signed in');
 
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
@@ -28,7 +29,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	// ADR-019: inaccessible projects are indistinguishable from missing ones
 	if (!(await canAccessProject(locals.user, params.id))) error(404, 'Project not found');
 
-	const [tasks, locations, files, allProjects, users] = await Promise.all([
+	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
+	// ADR-062 D4: keep the active org aligned to the project being viewed (redirects if it changes)
+	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
+
+	const [tasks, locations, files, allProjects, members] = await Promise.all([
 		db
 			.select({ id: task.id, title: task.title })
 			.from(task)
@@ -48,28 +53,24 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.select({ id: project.id, name: project.name, workspaceId: project.workspaceId })
 			.from(project)
 			.orderBy(asc(project.name)),
-		db
-			.select({ id: user.id, name: user.name, email: user.email })
-			.from(user)
-			.orderBy(asc(user.name))
+		// roster = org members only (ADR-062), not the full user table
+		projOrgId ? listMembers(projOrgId) : Promise.resolve([])
 	]);
+	const users = members.map((m) => ({ id: m.userId, name: m.name, email: m.email }));
 
-	// ADR-019: the @-project picker offers only accessible projects.
+	// ADR-019/ADR-062: the @-project picker offers only accessible projects in this org.
 	const [wsAccess, projGrants] = await Promise.all([
-		accessibleWorkspaceIds(locals.user),
-		grantedProjectIds(locals.user)
+		accessibleWorkspaceIds(locals.user, projOrgId),
+		grantedProjectIds(locals.user, projOrgId)
 	]);
-	const visibleProjects =
-		wsAccess === 'all'
-			? allProjects
-			: allProjects.filter(
-					(p) => (p.workspaceId && wsAccess.has(p.workspaceId)) || projGrants.has(p.id)
-				);
+	const visibleProjects = allProjects.filter(
+		(p) => (p.workspaceId && wsAccess.has(p.workspaceId)) || projGrants.has(p.id)
+	);
 
-	// ADR-019: people roster is access-scoped — admins get the full roster; everyone
+	// ADR-019: people roster is access-scoped — org admins get the org roster; everyone
 	// else sees users who can access THIS project ∪ those already referenced as task
 	// assignees (so existing values still resolve to a name). Don't leak the org.
-	const admin = isAdmin(locals.user);
+	const admin = projOrgId ? await isOrgAdmin(locals.user.id, projOrgId) : false;
 	let visibleUsers = users;
 	if (!admin) {
 		const ids = await projectAccessUserIds(params.id, proj.workspaceId);

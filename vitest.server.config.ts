@@ -21,6 +21,12 @@ export default defineConfig({
 		include: ['tests/server/**/*.{test,spec}.ts'],
 		globalSetup: ['./tests/server/globalSetup.ts'],
 		setupFiles: ['./tests/server/isolationGuard.ts'],
+		// All files share ONE sqlite file and each does a global `resetTables` in
+		// beforeEach; running files in parallel lets one file's reset wipe another
+		// file's in-flight rows (silent cross-file data loss). Serialize files so the
+		// shared-DB reset semantics stay correct (tests within a file already run in
+		// order). ADR-060 / ADR-062 W5.
+		fileParallelism: false,
 		testTimeout: 20000,
 		hookTimeout: 20000
 	}

@@ -1,10 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { project, projectDependency } from '$lib/server/db/schema';
+import { project, projectDependency, workspace } from '$lib/server/db/schema';
 import { apiError, readJson } from '$lib/server/api';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
-import { canAccessProject, canEditProject } from '$lib/server/permissions';
+import { canAccessProject, canEditProject, projectOrgId } from '$lib/server/permissions';
 import type { RequestHandler } from './$types';
 
 /** DFS: would adding from→to create a cycle in the dependency graph? */
@@ -59,7 +59,19 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	if (!target || !(await canAccessProject(locals.user, dependsOnId)))
 		return apiError(400, 'Unknown project');
 
-	const all = await db.select().from(projectDependency);
+	// Same-org only (ADR-062): a user who belongs to BOTH orgs could otherwise wire a
+	// dependency across the tenant boundary. Same generic message — no cross-org oracle.
+	const [srcOrg, dstOrg] = await Promise.all([projectOrgId(params.id), projectOrgId(dependsOnId)]);
+	if (!srcOrg || srcOrg !== dstOrg) return apiError(400, 'Unknown project');
+
+	// Cycle check over THIS org's dependency edges only (edges are same-org by the
+	// check above; loading every org's graph would be both incorrect and leaky).
+	const all = await db
+		.select({ projectId: projectDependency.projectId, dependsOnId: projectDependency.dependsOnId })
+		.from(projectDependency)
+		.innerJoin(project, eq(projectDependency.projectId, project.id))
+		.innerJoin(workspace, eq(project.workspaceId, workspace.id))
+		.where(eq(workspace.organizationId, srcOrg));
 	const edges = new Map<string, string[]>();
 	for (const e of all) edges.set(e.projectId, [...(edges.get(e.projectId) ?? []), e.dependsOnId]);
 	if (createsCycle(edges, params.id, dependsOnId))

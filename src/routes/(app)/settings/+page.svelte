@@ -118,7 +118,10 @@
 	<p class="u-small">
 		<strong>{$t('Email')}:</strong> <span class="mono">{data.user?.email}</span>
 	</p>
-	<p class="u-small"><strong>{$t('Role')}:</strong> {$t(data.user?.role ?? 'user')}</p>
+	<p class="u-small">
+		<strong>{$t('Role')}:</strong>
+		{data.user?.role === 'admin' ? $t('Instance admin') : $t(data.user?.role ?? 'user')}
+	</p>
 </div>
 
 <div class="card" style="max-width: 560px; margin-bottom: var(--sp-4);">

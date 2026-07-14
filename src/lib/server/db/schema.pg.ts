@@ -49,7 +49,9 @@ export const session = pgTable('session', {
 		.notNull()
 		.references(() => user.id, { onDelete: 'cascade' }),
 	// admin plugin
-	impersonatedBy: text('impersonated_by')
+	impersonatedBy: text('impersonated_by'),
+	// organization plugin
+	activeOrganizationId: text('active_organization_id')
 });
 
 export const account = pgTable('account', {
@@ -90,18 +92,78 @@ export const twoFactor = pgTable('two_factor', {
 });
 
 /* ------------------------------------------------------------------ */
+/* better-auth organization plugin (ADR-062) — the tenant primitive.   */
+/* ------------------------------------------------------------------ */
+
+export const organization = pgTable('organization', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	slug: text('slug').notNull().unique(),
+	logo: text('logo'),
+	metadata: text('metadata'),
+	createdAt: timestamp('created_at', { mode: 'date' }).notNull()
+});
+
+export const member = pgTable(
+	'member',
+	{
+		id: text('id').primaryKey(),
+		organizationId: text('organization_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		role: text('role').notNull().default('member'),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull()
+	},
+	(t) => [
+		unique().on(t.organizationId, t.userId),
+		index('idx_member_org').on(t.organizationId),
+		index('idx_member_user').on(t.userId)
+	]
+);
+
+export const invitation = pgTable(
+	'invitation',
+	{
+		id: text('id').primaryKey(),
+		organizationId: text('organization_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		email: text('email').notNull(),
+		role: text('role'),
+		status: text('status').notNull().default('pending'),
+		expiresAt: timestamp('expires_at', { mode: 'date' }).notNull(),
+		inviterId: text('inviter_id')
+			.notNull()
+			.references(() => user.id),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull()
+	},
+	(t) => [
+		index('idx_invitation_org').on(t.organizationId),
+		index('idx_invitation_email').on(t.email)
+	]
+);
+
+/* ------------------------------------------------------------------ */
 /* App tables                                                          */
 /* ------------------------------------------------------------------ */
 
-export const workspace = pgTable('workspace', {
-	id: text('id').primaryKey(),
-	name: text('name').notNull(),
-	ownerId: text('owner_id')
-		.notNull()
-		.references(() => user.id),
-	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
-	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+export const workspace = pgTable(
+	'workspace',
+	{
+		id: text('id').primaryKey(),
+		name: text('name').notNull(),
+		ownerId: text('owner_id')
+			.notNull()
+			.references(() => user.id),
+		organizationId: text('organization_id').references(() => organization.id),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
+		updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
+	},
+	(t) => [index('idx_workspace_org').on(t.organizationId)]
+);
 
 export const project = pgTable('project', {
 	id: text('id').primaryKey(),
@@ -134,17 +196,22 @@ export const apiKey = pgTable('api_key', {
 	createdAt: timestamp('created_at', { mode: 'date' }).notNull()
 });
 
-export const integration = pgTable('integration', {
-	id: text('id').primaryKey(),
-	type: text('type').notNull().unique(),
-	enabled: boolean('enabled').notNull().default(true),
-	config: text('config').notNull(),
-	createdBy: text('created_by')
-		.notNull()
-		.references(() => user.id),
-	createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
-	updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
-});
+export const integration = pgTable(
+	'integration',
+	{
+		id: text('id').primaryKey(),
+		type: text('type').notNull(),
+		organizationId: text('organization_id').references(() => organization.id),
+		enabled: boolean('enabled').notNull().default(true),
+		config: text('config').notNull(),
+		createdBy: text('created_by')
+			.notNull()
+			.references(() => user.id),
+		createdAt: timestamp('created_at', { mode: 'date' }).notNull(),
+		updatedAt: timestamp('updated_at', { mode: 'date' }).notNull()
+	},
+	(t) => [unique().on(t.organizationId, t.type), index('idx_integration_org').on(t.organizationId)]
+);
 
 export const status = pgTable('status', {
 	id: text('id').primaryKey(),
@@ -200,12 +267,16 @@ export const permission = pgTable(
 			.references(() => user.id, { onDelete: 'cascade' }),
 		resourceType: text('resource_type').notNull(),
 		resourceId: text('resource_id').notNull(),
+		organizationId: text('organization_id').references(() => organization.id),
 		grantedBy: text('granted_by')
 			.notNull()
 			.references(() => user.id),
 		createdAt: timestamp('created_at', { mode: 'date' }).notNull()
 	},
-	(t) => [unique().on(t.userId, t.resourceType, t.resourceId)]
+	(t) => [
+		unique().on(t.userId, t.resourceType, t.resourceId),
+		index('idx_permission_org').on(t.organizationId)
+	]
 );
 
 export const milestone = pgTable(
@@ -480,13 +551,17 @@ export const notification = pgTable(
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		type: text('type').notNull(),
+		organizationId: text('organization_id').references(() => organization.id),
 		projectId: text('project_id').references(() => project.id, { onDelete: 'cascade' }),
 		taskId: text('task_id').references(() => task.id, { onDelete: 'cascade' }),
 		body: text('body').notNull(),
 		read: boolean('read').notNull().default(false),
 		createdAt: timestamp('created_at', { mode: 'date' }).notNull()
 	},
-	(t) => [index('idx_notification_user').on(t.userId)]
+	(t) => [
+		index('idx_notification_user').on(t.userId),
+		index('idx_notification_org').on(t.organizationId)
+	]
 );
 
 export const template = pgTable('template', {

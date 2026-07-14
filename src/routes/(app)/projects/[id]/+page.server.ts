@@ -57,9 +57,11 @@ import {
 	canEditTask,
 	canEditWorkspace,
 	grantedProjectIds,
-	isAdmin,
-	projectAccessUserIds
+	projectAccessUserIds,
+	projectOrgId,
+	workspaceOrgId
 } from '$lib/server/permissions';
+import { alignActiveOrg, isOrgAdmin } from '$lib/server/orgs';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
 import { ICON_NAMES } from '$lib/heroiconNames';
 import { createsCycle } from '$lib/server/graph';
@@ -111,6 +113,15 @@ async function getTask(id: string) {
 	return t ?? null;
 }
 
+/** Comment moderation override (ADR-062): an org owner/admin of the project's org. */
+async function isCommentModerator(
+	user: NonNullable<App.Locals['user']>,
+	projectId: string
+): Promise<boolean> {
+	const orgId = await projectOrgId(projectId);
+	return orgId ? isOrgAdmin(user.id, orgId) : false;
+}
+
 /** Parse the optional latitude/longitude form fields (blank ⇒ null), range-checked. */
 function parseCoords(
 	form: FormData
@@ -132,11 +143,20 @@ function parseCoords(
 	return { lat, lng };
 }
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals, cookies, url }) => {
 	const [proj] = await db.select().from(project).where(eq(project.id, params.id));
 	if (!proj) error(404, 'Project not found');
 	// ADR-019: inaccessible projects are indistinguishable from missing ones
 	if (!(await canAccessProject(locals.user, params.id))) error(404, 'Project not found');
+
+	// ADR-062 D4: opening an accessible project auto-aligns the active org to the
+	// project's org (so the bell, ?task= deep links, and mention chips are coherent
+	// with one rule). Not a security concern — the target is already accessible.
+	// alignActiveOrg redirects when it changes the cookie, so the layout + this load
+	// re-run against the aligned org (setting it inline would render the shell on the
+	// stale org for this request).
+	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
+	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
 
 	const [
 		tasks,
@@ -249,23 +269,20 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 	const templates = await listTemplatesForProject(params.id);
 
-	const admin = isAdmin(locals.user);
+	const admin = projOrgId ? await isOrgAdmin(locals.user!.id, projOrgId) : false;
 	const canEditProj = await canEditProject(locals.user, params.id);
 
-	// ADR-019: dependency picker offers only accessible projects
+	// ADR-019/ADR-062: dependency picker offers only accessible projects in this org
 	const [wsAccess, projGrants] = await Promise.all([
-		accessibleWorkspaceIds(locals.user),
-		grantedProjectIds(locals.user)
+		accessibleWorkspaceIds(locals.user, projOrgId),
+		grantedProjectIds(locals.user, projOrgId)
 	]);
-	const visibleProjects =
-		wsAccess === 'all'
-			? allProjects
-			: allProjects.filter(
-					(p) =>
-						(p.workspaceId && wsAccess.has(p.workspaceId)) ||
-						projGrants.has(p.id) ||
-						projDeps.some((d) => d.dependsOnId === p.id)
-				);
+	const visibleProjects = allProjects.filter(
+		(p) =>
+			(p.workspaceId && wsAccess.has(p.workspaceId)) ||
+			projGrants.has(p.id) ||
+			projDeps.some((d) => d.dependsOnId === p.id)
+	);
 
 	// ADR-019: assignee pickers/groupings expose only users who can ACCESS this
 	// project — plus any user already referenced (assignee or person custom field)
@@ -523,7 +540,7 @@ export const actions: Actions = {
 		const target = await getTask(existing.taskId);
 		if (!target || target.projectId !== params.id)
 			return fail(404, { message: 'Comment not found' });
-		if (existing.authorId !== locals.user.id && !isAdmin(locals.user))
+		if (existing.authorId !== locals.user.id && !(await isCommentModerator(locals.user, params.id)))
 			return fail(403, { message: 'Not your comment' });
 		if (!body) return fail(400, { message: 'Comment cannot be empty' });
 		if (body.length > 10000) return fail(400, { message: 'Comment too long (max 10000)' });
@@ -553,7 +570,7 @@ export const actions: Actions = {
 		const target = await getTask(existing.taskId);
 		if (!target || target.projectId !== params.id)
 			return fail(404, { message: 'Comment not found' });
-		if (existing.authorId !== locals.user.id && !isAdmin(locals.user))
+		if (existing.authorId !== locals.user.id && !(await isCommentModerator(locals.user, params.id)))
 			return fail(403, { message: 'Not your comment' });
 
 		await deleteComment(commentId);
@@ -746,7 +763,7 @@ export const actions: Actions = {
 			(!!tpl.workspaceId && !!proj?.workspaceId && tpl.workspaceId === proj.workspaceId);
 		if (!owned) return fail(403, { message: 'Cannot delete this template' });
 
-		await deleteTemplate(templateId);
+		await deleteTemplate(templateId, params.id);
 		broadcastProjectChange(params.id, locals.user.id);
 		return { success: true };
 	},

@@ -38,7 +38,11 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	if (!name) return apiError(400, 'name cannot be empty');
 	if (name.length > 120) return apiError(400, 'name too long (max 120)');
 
-	const others = await db.select({ id: workspace.id, name: workspace.name }).from(workspace);
+	// per-org name uniqueness (ADR-062)
+	const others = await db
+		.select({ id: workspace.id, name: workspace.name })
+		.from(workspace)
+		.where(ws.organizationId ? eq(workspace.organizationId, ws.organizationId) : undefined);
 	if (others.some((w) => w.id !== params.id && w.name.toLowerCase() === name.toLowerCase()))
 		return apiError(400, 'A workspace with that name already exists');
 
@@ -68,11 +72,11 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 		.where(eq(project.workspaceId, params.id));
 	if (n > 0) return apiError(400, 'Move or delete its projects first');
 
-	const [{ n: total }] = await db.select({ n: count(workspace.id) }).from(workspace);
-	if (total <= 1) return apiError(400, 'At least one workspace must exist');
+	// ADR-062: an empty workspace is deletable even if it's the org's last one
+	// (a 0-workspace org is now legal — required for org deletion).
 
 	// permission.resourceId has no FK — clear workspace grants so a future
-	// workspace reusing this id (e.g. workspace-default) can't inherit them
+	// workspace reusing this id can't inherit them
 	await db
 		.delete(permission)
 		.where(and(eq(permission.resourceType, 'workspace'), eq(permission.resourceId, params.id)));

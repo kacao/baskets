@@ -1,12 +1,22 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { authClient } from '$lib/auth-client';
+	import { safeRedirect } from '$lib/safeRedirect';
 	import { t } from '$lib/i18n';
 
 	let email = $state('');
 	let password = $state('');
 	let error = $state('');
 	let loading = $state(false);
+
+	// same-origin post-auth destination (e.g. /invite/<id>); default /projects
+	const redirectTo = $derived(safeRedirect(page.url.searchParams.get('redirect')) ?? '/projects');
+	const registerHref = $derived(
+		page.url.searchParams.get('redirect')
+			? `/register?redirect=${encodeURIComponent(redirectTo)}`
+			: '/register'
+	);
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
@@ -27,11 +37,11 @@
 
 		// twoFactor plugin: if 2FA is enabled, the response asks for a TOTP code
 		if ((data as { twoFactorRedirect?: boolean })?.twoFactorRedirect) {
-			await goto('/two-factor');
+			await goto(`/two-factor?redirect=${encodeURIComponent(redirectTo)}`);
 			return;
 		}
 
-		await goto('/projects');
+		await goto(redirectTo);
 	}
 </script>
 
@@ -68,7 +78,7 @@
 </form>
 
 <p class="u-small" style="margin-top: var(--sp-3);">
-	{$t('No account?')} <a href="/register">{$t('Register')}</a>
+	{$t('No account?')} <a href={registerHref}>{$t('Register')}</a>
 </p>
 
 <style>

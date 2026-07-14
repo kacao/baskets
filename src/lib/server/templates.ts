@@ -69,6 +69,12 @@ export async function createTemplate(opts: {
 	payload: TemplatePayload;
 	createdBy: string;
 }) {
+	// exactly-one-FK invariant (ADR-062): a scope='workspace' template MUST carry a
+	// workspaceId (else it's an org-unreachable orphan); scope='project' a projectId.
+	if (opts.scope === 'workspace' && !opts.workspaceId)
+		throw new Error('workspace-scoped template requires a workspaceId');
+	if (opts.scope === 'project' && !opts.projectId)
+		throw new Error('project-scoped template requires a projectId');
 	const id = crypto.randomUUID();
 	await db.insert(template).values({
 		id,
@@ -83,8 +89,26 @@ export async function createTemplate(opts: {
 	return id;
 }
 
-export async function deleteTemplate(id: string) {
+/**
+ * Delete a template. When `projectId` is given, the template must be reachable
+ * from that project (its own project OR its workspace, mirroring
+ * updateTemplatePayload) — a defense-in-depth scope check so a raw id from another
+ * project/workspace can't be deleted (ADR-062). Returns whether a row was removed.
+ */
+export async function deleteTemplate(id: string, projectId?: string): Promise<boolean> {
+	if (projectId) {
+		const tpl = await getTemplate(id);
+		if (!tpl) return false;
+		const [proj] = await db
+			.select({ workspaceId: project.workspaceId })
+			.from(project)
+			.where(eq(project.id, projectId));
+		const inScope =
+			tpl.projectId === projectId || (!!tpl.workspaceId && tpl.workspaceId === proj?.workspaceId);
+		if (!inScope) return false;
+	}
 	await db.delete(template).where(eq(template.id, id));
+	return true;
 }
 
 /**

@@ -40,5 +40,8 @@ jobs:
         run: npm run format:check
       - name: Unit + component tests
         run: npm test
+      # Also carries the ADR-062 org-isolation suite. Server-free per ADR-060:
+      # globalSetup provisions its OWN isolated sqlite file (data/test-server.db)
+      # via drizzle-kit push, so no service containers or seeded server are needed.
       - name: Server characterization tests (isolated DB)
         run: npm run test:server

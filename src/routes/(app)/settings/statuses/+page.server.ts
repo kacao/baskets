@@ -2,14 +2,15 @@ import { error, fail } from '@sveltejs/kit';
 import { count, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { task } from '$lib/server/db/schema';
-import { isAdmin } from '$lib/server/permissions';
+import { isInstanceAdmin } from '$lib/server/permissions';
 import { listStatuses, setDefaultStatusIcon } from '$lib/server/statuses';
 import type { Actions, PageServerLoad } from './$types';
 
 // Default statuses are fixed in name/category/delete — custom statuses live on
-// workspaces and projects. Their ICON is editable here (admin-only, app-wide).
+// workspaces and projects. Their ICON is editable here — an INSTANCE-operator
+// surface (ADR-062 D2): app-wide cosmetics, gated on the instance admin role.
 export const load: PageServerLoad = async ({ locals }) => {
-	if (!isAdmin(locals.user)) error(403, 'Admins only');
+	if (!isInstanceAdmin(locals.user)) error(403, 'Admins only');
 
 	const statuses = await listStatuses();
 	const usage = await db

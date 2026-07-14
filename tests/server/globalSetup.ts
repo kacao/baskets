@@ -17,6 +17,7 @@ const DB_PATH = path.resolve(process.cwd(), 'data/test-server.db');
 
 const SENTINEL_USER_ID = '__ISO_SENTINEL_USER__';
 const SENTINEL_WORKSPACE_ID = '__ISO_SENTINEL__';
+const SENTINEL_ORG_ID = '__ISO_SENTINEL_ORG__';
 
 export default async function setup() {
 	// 1. Nuke any previous test DB (+ WAL/SHM sidecars) for a clean slate.
@@ -54,12 +55,18 @@ export default async function setup() {
 			)
 			.run(SENTINEL_USER_ID, 'Isolation Sentinel', 'iso-sentinel@example.invalid', 0, now, now);
 
+		// The fresh test schema gives workspace.organization_id a real FK, so the
+		// sentinel org must exist before the sentinel workspace references it.
+		sqlite
+			.prepare(`INSERT INTO organization (id, name, slug, created_at) VALUES (?, ?, ?, ?)`)
+			.run(SENTINEL_ORG_ID, '__ISO_SENTINEL__', '__iso_sentinel__', now);
+
 		sqlite
 			.prepare(
-				`INSERT INTO workspace (id, name, owner_id, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?)`
+				`INSERT INTO workspace (id, name, owner_id, organization_id, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?)`
 			)
-			.run(SENTINEL_WORKSPACE_ID, '__ISO_SENTINEL__', SENTINEL_USER_ID, now, now);
+			.run(SENTINEL_WORKSPACE_ID, '__ISO_SENTINEL__', SENTINEL_USER_ID, SENTINEL_ORG_ID, now, now);
 	} finally {
 		sqlite.close();
 	}

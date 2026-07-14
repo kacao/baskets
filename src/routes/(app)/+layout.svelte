@@ -13,8 +13,13 @@
 
 	let { data, children } = $props();
 	let menuOpen = $state(false);
+	let orgMenuOpen = $state(false);
 	let wsMenuOpen = $state(false);
 	let apprMenuOpen = $state(false);
+
+	// org owner/admin unlocks org-scoped chrome (Integrations link, org settings);
+	// distinct from data.user.role === 'admin' which is the INSTANCE operator (ADR-062 D3).
+	const isOrgManager = $derived(data.orgRole === 'owner' || data.orgRole === 'admin');
 	// svelte-ignore state_referenced_locally
 	let theme = $state<'light' | 'dark'>(data.theme === 'dark' ? 'dark' : 'light');
 	// svelte-ignore state_referenced_locally
@@ -46,6 +51,25 @@
 		wsMenuOpen = false;
 		// land on Projects (the current project may not belong to the new workspace)
 		goto('/projects', { invalidateAll: true });
+	}
+
+	function switchOrg(id: string) {
+		if (id === data.currentOrg?.id) {
+			orgMenuOpen = false;
+			return;
+		}
+		document.cookie = `org=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
+		// the active workspace belongs to the old org — drop it so the new org
+		// re-resolves its own first workspace (ADR-062 D4)
+		document.cookie = 'workspace=; path=/; max-age=0; samesite=lax';
+		orgMenuOpen = false;
+		goto('/projects', { invalidateAll: true });
+	}
+
+	function newOrganization() {
+		orgMenuOpen = false;
+		menuOpen = false;
+		goto('/onboarding?new=1');
 	}
 
 	async function signOut() {
@@ -93,6 +117,7 @@
 
 <svelte:window
 	onclick={() => {
+		orgMenuOpen = false;
 		wsMenuOpen = false;
 		apprMenuOpen = false;
 	}}
@@ -103,54 +128,122 @@
 	<div class="drawer-backdrop" class:open={menuOpen} onclick={() => (menuOpen = false)}></div>
 	<nav class="sidebar" class:open={menuOpen}>
 		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-		<div class="ws-switch" onclick={(e) => e.stopPropagation()}>
-			<button
-				class="ws-current"
-				aria-expanded={wsMenuOpen}
-				aria-label={$t('Switch workspace')}
-				onclick={() => (wsMenuOpen = !wsMenuOpen)}
-			>
-				<span class="ws-name">{currentWorkspace?.name ?? 'Baskets'}</span>
-				<span class="ws-chevron" class:open={wsMenuOpen} aria-hidden="true"
-					><Icon name="nav-arrow-down" size={12} /></span
-				>
-			</button>
-			{#if wsMenuOpen}
-				<div class="ws-menu" transition:fade={{ duration: 100 }}>
-					{#each data.workspaces as w (w.id)}
-						<div class="ws-row" class:active={w.id === currentWorkspace?.id}>
-							<button class="ws-item" onclick={() => switchWorkspace(w.id)}>
-								{w.name}
-							</button>
+		<div class="side-header" onclick={(e) => e.stopPropagation()}>
+			{#if data.currentOrg}
+				<!-- Organization switcher (primary identity; above the workspace switcher) -->
+				<div class="org-switch">
+					<button
+						class="org-current"
+						aria-expanded={orgMenuOpen}
+						aria-label={$t('Switch organization')}
+						onclick={() => {
+							orgMenuOpen = !orgMenuOpen;
+							wsMenuOpen = false;
+						}}
+					>
+						<span class="org-name">{data.currentOrg.name}</span>
+						<span class="org-chevron" class:open={orgMenuOpen} aria-hidden="true"
+							><Icon name="nav-arrow-down" size={12} /></span
+						>
+					</button>
+					{#if orgMenuOpen}
+						<div class="pop-menu" transition:fade={{ duration: 100 }}>
+							{#each data.orgs as o (o.id)}
+								<button
+									class="pop-item"
+									class:active={o.id === data.currentOrg.id}
+									onclick={() => switchOrg(o.id)}
+								>
+									<span class="pop-label">{o.name}</span>
+									{#if o.id === data.currentOrg.id}
+										<span class="pop-check" aria-hidden="true"><Icon name="check" size={13} /></span
+										>
+									{/if}
+								</button>
+							{/each}
 							<a
-								class="ws-gear"
-								href="/workspaces/{w.id}/settings"
-								aria-label={$t('Workspace settings')}
-								use:tooltip={$t('Workspace settings')}
+								class="pop-item pop-foot"
+								href="/orgs/{data.currentOrg.id}/settings"
 								onclick={() => {
-									wsMenuOpen = false;
+									orgMenuOpen = false;
 									menuOpen = false;
 								}}
 							>
-								<Icon name="settings" size={14} />
+								<Icon name="settings" size={13} />
+								<span class="pop-label">{$t('Organization settings')}</span>
 							</a>
+							<button class="pop-item pop-foot" onclick={newOrganization}>
+								<Icon name="plus" size={13} />
+								<span class="pop-label">{$t('New organization')}</span>
+							</button>
 						</div>
-					{/each}
-					<a
-						class="ws-item ws-manage"
-						href="/workspaces"
-						onclick={() => {
-							wsMenuOpen = false;
-							menuOpen = false;
-						}}
-					>
-						{$t('Manage workspaces')}
-					</a>
+					{/if}
 				</div>
+
+				<!-- Workspace switcher (scoped to the active org) -->
+				{#if data.workspaces.length > 0}
+					<div class="ws-switch">
+						<button
+							class="ws-current"
+							aria-expanded={wsMenuOpen}
+							aria-label={$t('Switch workspace')}
+							onclick={() => {
+								wsMenuOpen = !wsMenuOpen;
+								orgMenuOpen = false;
+							}}
+						>
+							<span class="ws-name">{currentWorkspace?.name ?? $t('Workspaces')}</span>
+							<span class="ws-chevron" class:open={wsMenuOpen} aria-hidden="true"
+								><Icon name="nav-arrow-down" size={12} /></span
+							>
+						</button>
+						{#if wsMenuOpen}
+							<div class="ws-menu" transition:fade={{ duration: 100 }}>
+								{#each data.workspaces as w (w.id)}
+									<div class="ws-row" class:active={w.id === currentWorkspace?.id}>
+										<button class="ws-item" onclick={() => switchWorkspace(w.id)}>
+											{w.name}
+										</button>
+										<a
+											class="ws-gear"
+											href="/workspaces/{w.id}/settings"
+											aria-label={$t('Workspace settings')}
+											use:tooltip={$t('Workspace settings')}
+											onclick={() => {
+												wsMenuOpen = false;
+												menuOpen = false;
+											}}
+										>
+											<Icon name="settings" size={14} />
+										</a>
+									</div>
+								{/each}
+								<a
+									class="ws-item ws-manage"
+									href="/workspaces"
+									onclick={() => {
+										wsMenuOpen = false;
+										menuOpen = false;
+									}}
+								>
+									{$t('Manage workspaces')}
+								</a>
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<!-- empty org: no workspaces yet (e.g. right before deletion) -->
+					<a class="ws-empty" href="/workspaces" onclick={() => (menuOpen = false)}>
+						<Icon name="plus" size={13} />
+						<span>{$t('Create workspace')}</span>
+					</a>
+				{/if}
 			{/if}
 		</div>
-		<div class="nav-section-label">{$t('Projects')}</div>
-		{#if currentProjects.length > 0}
+		{#if data.currentOrg}
+			<div class="nav-section-label">{$t('Projects')}</div>
+		{/if}
+		{#if data.currentOrg && currentProjects.length > 0}
 			<div class="nav-projects">
 				{#each currentProjects as p (p.id)}
 					<div class="proj">
@@ -205,14 +298,16 @@
 		{/if}
 
 		<div class="nav-bottom">
-			<a
-				href="/integrations"
-				class="nav-link"
-				class:active={isActive('/integrations')}
-				onclick={() => (menuOpen = false)}
-			>
-				{$t('Integrations')}
-			</a>
+			{#if isOrgManager}
+				<a
+					href="/integrations"
+					class="nav-link"
+					class:active={isActive('/integrations')}
+					onclick={() => (menuOpen = false)}
+				>
+					{$t('Integrations')}
+				</a>
+			{/if}
 			<a
 				href="/settings"
 				class="nav-link"
@@ -339,12 +434,19 @@
 		background: var(--color-bg);
 	}
 
-	.ws-switch {
+	.side-header {
 		padding: 0 var(--sp-2) var(--sp-2);
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+
+	/* Organization switcher = primary identity (bold heading) */
+	.org-switch {
 		position: relative;
 	}
 
-	.ws-current {
+	.org-current {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -363,7 +465,139 @@
 		transition: background var(--dur-fast) ease;
 	}
 
+	.org-current:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.org-name {
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+
+	.org-chevron {
+		display: inline-flex;
+		flex: 0 0 auto;
+		color: var(--color-muted);
+		transition: transform var(--dur-fast) ease;
+	}
+
+	.org-chevron.open {
+		transform: rotate(180deg);
+	}
+
+	/* shared dropdown menu (org switcher) */
+	.pop-menu {
+		position: absolute;
+		top: calc(100% + 2px);
+		left: 0;
+		right: 0;
+		z-index: 31;
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-bg);
+		box-shadow: var(--shadow);
+		display: flex;
+		flex-direction: column;
+		padding: 2px;
+	}
+
+	.pop-item {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-1);
+		width: 100%;
+		border: none;
+		background: none;
+		font-family: var(--font-body);
+		font-size: 13px;
+		color: var(--color-muted);
+		text-align: left;
+		text-decoration: none;
+		padding: var(--sp-1) var(--sp-2);
+		cursor: pointer;
+		border-radius: var(--radius-field, 0.25rem);
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
+	}
+
+	.pop-item:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
+	}
+
+	.pop-item.active {
+		color: var(--color-fg);
+		font-weight: 600;
+	}
+
+	.pop-label {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+
+	.pop-check {
+		flex: 0 0 auto;
+		display: inline-flex;
+		color: var(--color-fg);
+	}
+
+	.pop-foot {
+		border-top: 1px solid var(--color-border-subtle);
+		margin-top: 2px;
+		padding-top: var(--sp-1);
+		border-radius: 0;
+	}
+
+	/* empty org: single "Create workspace" affordance where the ws switcher sits */
+	.ws-empty {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-1);
+		font-size: 13px;
+		color: var(--color-muted);
+		text-decoration: none;
+		padding: var(--sp-1) var(--sp-2);
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
+	}
+
+	.ws-empty:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
+	}
+
+	/* Workspace switcher = secondary (below the org) */
+	.ws-switch {
+		position: relative;
+	}
+
+	.ws-current {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--sp-1);
+		width: 100%;
+		border: none;
+		background: none;
+		cursor: pointer;
+		font-family: var(--font-body);
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--color-muted);
+		padding: var(--sp-1) var(--sp-2);
+		text-align: left;
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
+	}
+
 	.ws-current:hover {
+		color: var(--color-fg);
 		background: var(--color-surface-muted);
 	}
 
@@ -385,9 +619,9 @@
 
 	.ws-menu {
 		position: absolute;
-		top: calc(100% - var(--sp-2) + 2px);
-		left: var(--sp-2);
-		right: var(--sp-2);
+		top: calc(100% + 2px);
+		left: 0;
+		right: 0;
 		z-index: 30;
 		border: 1px solid var(--color-border-subtle);
 		background: var(--color-bg);

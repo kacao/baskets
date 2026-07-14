@@ -1,6 +1,7 @@
 # Baskets
 
-> Single-tenant project management app (workspaces → projects → tasks → sub-tasks).
+> Multi-tenant project management app: organizations → workspaces → projects → tasks → sub-tasks.
+> Users belong to organizations via memberships; all visibility requires org membership.
 > This file documents the REST API so agents can drive Baskets programmatically.
 > Base URL = this deployment's origin (e.g. http://localhost:5173). All API paths below are relative to it.
 
@@ -31,26 +32,79 @@ Authorization: Bearer bsk_<token>
 ## Session
 
 ### GET /api/me
-Identity of the current session/key holder.
-- 200: `{ "user": { "id": string, "name": string } }`
+Identity of the current session/key holder, plus the caller's org memberships.
+- 200: `{ "user": { "id": string, "name": string }, "orgs": [{ "id", "name", "slug", "role" ("owner"|"admin"|"member") }...] }` (`orgs` oldest-first; empty when the caller belongs to no org).
 - 401 if unauthenticated.
 
 ## Realtime
 
 The web UI receives live updates and presence over a WebSocket at `/ws` (same origin), authenticated by the **browser session cookie** only — it is not part of the bearer-key REST surface. After any mutation through the API or UI, connected viewers of the affected project auto-refresh. Agents using a bearer key don't need to connect; just poll the REST endpoints. Messages are JSON: client→server `{type:'subscribe',projectId}` / `{type:'unsubscribe'}` / `{type:'ping'}`; server→client `{type:'changed',projectId}` (refetch) and `{type:'presence',projectId,users:[{id,name}]}`.
 
+## Organizations
+
+Organizations are the top-level tenant (ADR-062): `organization → workspace → project → task`. A user belongs to ≥0 orgs via memberships; **all visibility requires org membership**. Org roles are `owner`, `admin`, `member` — distinct from the instance-operator `user.role`: `member` = visibility + can be granted individual workspaces/projects; `owner`/`admin` = manage the org (settings, members, invitations) and see/edit everything in it. Collection endpoints (`/api/workspaces`, `/api/projects`) union the caller's per-org ACCESS-FILTERED sets across all their memberships and accept an optional `?org=<id>` filter (an unknown / non-member org id yields `[]` — no oracle). A bearer key carries no active-org, so org context comes only from the addressed resource or an explicit `organizationId` / `?org=`. (BetterAuth's organization plugin also exposes `/api/auth/organization/*` for the browser client; the `/api/orgs` surface below is the bearer-key equivalent.)
+
+### GET /api/orgs
+List the orgs the caller belongs to (never all orgs), each with the caller's role.
+- 200: `{ "orgs": [{ "id", "name", "slug", "logo", "createdAt", "role" ("owner"|"admin"|"member") }...] }` (oldest org first).
+
+### POST /api/orgs
+Create an organization (any signed-in user; they become its `owner`). A default workspace is bootstrapped for it.
+- Body: `name` string, required (trimmed, non-empty, max 120).
+- 201: `{ "org": { "id", "name", "slug", "logo", "createdAt", "role": "owner" } }`. Errors: 400, 401.
+
+### GET /api/orgs/{id}
+Fetch one org + the caller's role. `404` if the caller is not a member (indistinguishable from missing — ADR-019).
+- 200: `{ "org": { "id", "name", "slug", "logo", "createdAt", "role" } }`.
+
+### PATCH /api/orgs/{id}
+Rename an org (owner/admin). Body: `name` (required, else `400 "No fields to update"`; trimmed non-empty, max 120). The slug is left unchanged (v1).
+- 200: `{ "org": { "id", "name", "slug", "logo", "createdAt" } }`. `404` if not a member; `403 "Requires organization admin"` for a plain member.
+
+### DELETE /api/orgs/{id}
+Delete an org — OWNER only, and only when it has **0 workspaces**. Sweeps its invitations, memberships, org-scoped grants + notifications, then the org row.
+- `404` if not a member; `403 "Only the organization owner can delete it"` for a non-owner; `400 "Delete all workspaces before deleting the organization"` if any workspace remains. 204: empty body.
+
+### GET /api/orgs/{id}/members
+List the org roster. ANY member of the org may list it (the roster boundary is the org, D3).
+- 200: `{ "members": [{ "id", "userId", "role", "createdAt", "name", "email" }...] }` (oldest first). `404` if the caller is not a member.
+
+### PATCH /api/orgs/{id}/members/{userId}
+Change a member's role (owner/admin). Only an owner may grant or revoke `owner`; the last owner can't be demoted. Body: `role` (`owner|admin|member`).
+- 200: `{ "member": { "userId", "role" } }`. `404` if the caller isn't a member or the target isn't; `403` for a plain member (or a non-owner touching ownership); `400 "Invalid role"` / `400 "Cannot demote the last owner"`.
+
+### DELETE /api/orgs/{id}/members/{userId}
+Remove a member, OR leave the org when `{userId}` === the caller. Removal is owner/admin (admins can't remove owners; the last owner is irremovable); leaving as the last owner is blocked. The target's grants are purged and their live WS sockets kicked.
+- 204: empty body. `404` if the caller/target isn't a member; `403` per the removal rules; `400 "Cannot remove the last owner"` / `400 "Transfer ownership or delete the organization first"` (self-leave).
+
+### GET /api/orgs/{id}/invites
+List the org's PENDING invitations (owner/admin only).
+- 200: `{ "invitations": [{ "id", "organizationId", "email", "role", "status", "expiresAt", "inviterId", "createdAt" }...] }`. `404` if not a member; `403 "Requires organization admin"` for a plain member.
+
+### POST /api/orgs/{id}/invites
+Invite by email (owner/admin). **No email is sent** — the accept LINK `/invite/<invitationId>` (built from the returned `id`) is the sole capability; deliver it out-of-band. A prior pending invite for the same email is canceled.
+- Body: `email` (required, valid address), `role` (`member` default | `admin`; `400 "Role must be member or admin"` otherwise). `400 "Already a member of this organization"` if the email already belongs to a member.
+- 201: `{ "invitation": { "id", "email", "role", "expiresAt" } }`. `404`/`403` as GET.
+
+### DELETE /api/orgs/{id}/invites/{inviteId}
+Cancel a pending invitation (owner/admin of the invite's own org). `404` if the invite doesn't exist or its org is invisible to the caller; `403` for a plain member; `400 "Invitation is no longer pending"` if it was already accepted/canceled. 204: empty body.
+
+### POST /api/invites/{id}/accept
+Accept an invitation as the signed-in caller. The caller's account email must equal the invited email (case-insensitive — a speed bump; the link is the real capability). Creates the membership (re-accepts are no-ops) and purges any stale same-org grants.
+- 200: `{ "orgId": string }`. `404` if the invite is missing; `400` if it's no longer pending or has expired; `403 "This invitation is for a different email address"` on an email mismatch.
+
 ## Workspaces
 
-Every project belongs to one workspace. A workspace owns its custom statuses and ALL labels/groups, and (per ADR-019) defines visibility. Workspace meta + structure edits need admin, the workspace owner, or a workspace `permission` grant (`canEditWorkspace`); reads need access (`canAccessWorkspace`). Inaccessible workspaces 404, not 403.
+Every project belongs to one workspace, and every workspace belongs to one **organization**. A workspace owns its custom statuses and ALL labels/groups, and (per ADR-019) defines visibility within its org. Workspace meta + structure edits need an org owner/admin, the workspace owner, or a workspace `permission` grant (`canEditWorkspace`); reads need access (`canAccessWorkspace`). Inaccessible workspaces 404, not 403.
 
 ### GET /api/workspaces
-List accessible workspaces (admins see all; others see ones they own / hold a grant on, plus any workspace holding a project they're directly granted).
+List accessible workspaces — the UNION over the caller's org memberships of the workspaces they can access in each org (org owner/admin → all in that org; others → owned + granted, plus any workspace holding a directly-granted project). Optional `?org=<id>` narrows to one org (unknown/non-member → `[]`).
 - 200: `{ "workspaces": [ <workspace>, ... ] }`
 
 ### POST /api/workspaces
-Create a workspace (any signed-in user; they become its owner).
-- Body: `name` string, required (trimmed, non-empty, max 120). `400 "A workspace with that name already exists"` on a case-insensitive name collision.
-- The caller's FIRST workspace is auto-seeded with sample projects/milestones/tasks.
+Create a workspace in an org (caller must be a member; they become its owner).
+- Body: `name` string, required (trimmed, non-empty, max 120; `400 "A workspace with that name already exists"` on a case-insensitive collision **within the org**). `organizationId` string — required when the caller belongs to **more than one** org (else `400`); defaults to the sole membership. An unknown or non-member org id gives one generic `400 "Unknown organization"` (no oracle).
+- The caller's FIRST workspace anywhere is auto-seeded with sample projects/milestones/tasks.
 - 201: `{ "workspace": <workspace> }`. Errors: 400, 401.
 
 ### GET /api/workspaces/{id}
@@ -59,12 +113,12 @@ Fetch one workspace.
 
 ### PATCH /api/workspaces/{id}
 Rename a workspace.
-- Body: `name` string, required (else `400 "No fields to update"`; trimmed non-empty, max 120; `400` on name collision).
+- Body: `name` string, required (else `400 "No fields to update"`; trimmed non-empty, max 120; `400` on a name collision **within the org**).
 - 200: `{ "workspace": <workspace> }`. `404` if missing/inaccessible; `403 "No edit permission on this workspace"` if accessible but not editable.
 
 ### DELETE /api/workspaces/{id}
 Delete an EMPTY workspace.
-- `400 "Move or delete its projects first"` if it still has projects; `400 "At least one workspace must exist"` if it's the only one.
+- `400 "Move or delete its projects first"` if it still has projects. An empty workspace is deletable even when it's the org's LAST one (a 0-workspace org is a legal state — needed for org deletion).
 - `404` if missing/inaccessible; `403` if accessible but not editable. 204: empty body.
 
 ### GET /api/workspaces/{id}/statuses
@@ -100,32 +154,34 @@ Create a label group (editable).
 - 201: `{ "group": <labelGroup> }`. `404`/`403` as for workspace edits.
 
 ### GET /api/workspaces/{id}/grants
-List the workspace's permission grants. Managed by ADMINS or the workspace OWNER only.
-- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("workspace"), "resourceId" }...] }`. `404` if inaccessible; `403 "Only admins or the owner can view workspace grants"` for accessible non-managers.
+List the workspace's permission grants. Managed by an org owner/admin (of the workspace's org) or the workspace OWNER only. The grantee must be a member of the workspace's org.
+- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("workspace"), "resourceId" }...] }`. `404` if inaccessible (ADR-019); `403 "Only org admins or the owner can view workspace grants"` for accessible non-managers.
 
 ### POST /api/workspaces/{id}/grants
-Grant a user access to the workspace (admin or owner).
-- Body: `userId` string, required (`400 "Invalid grant"` if missing, `400 "Unknown user"` if no such user). Idempotent (conflicts are ignored).
-- 201: `{ "grants": [...] }` (the updated list). `404`/`403` as above.
+Grant a user access to the workspace (org owner/admin or workspace owner).
+- Body: `userId` string, required (`400 "Invalid grant"` if missing; `400 "Unknown user"` if no such user OR the user is not a member of this org — one generic message, no oracle). Idempotent (conflicts are ignored).
+- 201: `{ "grants": [...] }` (the updated list). `404` if inaccessible; `403 "Only org admins or the owner can grant permissions"` for accessible non-managers.
 
 ### DELETE /api/workspaces/{id}/grants
-Revoke a grant (admin or owner). Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither.
-- 204: empty body. `404`/`403` as above.
+Revoke a grant (org owner/admin or workspace owner). Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither.
+- 204: empty body. `404` if inaccessible; `403 "Only org admins or the owner can revoke permissions"` for accessible non-managers.
 
 ## Project grants
 
+Managed by an org owner/admin of the project's org (ADR-062). Grantees must be members of that org.
+
 ### GET /api/projects/{id}/grants
-List a project's permission grants. ADMIN only.
-- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("project"|"view"), "resourceId" }...] }`. `403 "Only admins can view project grants"` for non-admins; `404 "Project not found"` if missing.
+List a project's permission grants.
+- 200: `{ "grants": [{ "id", "userId", "userName", "resourceType" ("project"|"view"), "resourceId" }...] }`. `404 "Project not found"` if inaccessible (ADR-019 — no existence oracle); `403 "Only org admins can manage project grants"` for accessible non-admins.
 
 ### POST /api/projects/{id}/grants
-Grant a user access to the project (or to a specific view of it). ADMIN only.
-- Body: `userId` string, required. Optional `resourceType` (`"project"` default | `"view"`) and `resourceId` (defaults to `{id}`; a `view` grant's `resourceId` must be a view of this project). Errors: `400 "Invalid grant"`, `400 "Invalid view"`, `400 "Unknown user"`. Idempotent (conflicts ignored).
-- 201: `{ "grants": [...] }` (the updated list). `403 "Only admins can grant permissions"` for non-admins; `404 "Project not found"` if missing.
+Grant a user access to the project (or to a specific view of it).
+- Body: `userId` string, required. Optional `resourceType` (`"project"` default | `"view"`) and `resourceId` (defaults to `{id}`; a `view` grant's `resourceId` must be a view of this project). Errors: `400 "Invalid grant"`, `400 "Invalid view"`, `400 "Unknown user"` (covers both a nonexistent user AND a user who isn't a member of this project's org — no oracle). Idempotent (conflicts ignored).
+- 201: `{ "grants": [...] }` (the updated list). `404 "Project not found"` if inaccessible; `403 "Only org admins can manage project grants"` for accessible non-admins.
 
 ### DELETE /api/projects/{id}/grants
-Revoke a grant. ADMIN only. Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither; `404 "Grant not found"` if the grantId isn't part of this project's grant set.
-- 204: empty body. `403 "Only admins can revoke permissions"` for non-admins; `404 "Project not found"` if missing.
+Revoke a grant. Identify it by `grantId` OR `userId`, via JSON body or query string (`?grantId=` / `?userId=`); `400 "Provide grantId or userId"` if neither; `404 "Grant not found"` if the grantId isn't part of this project's grant set.
+- 204: empty body. `404 "Project not found"` if inaccessible; `403 "Only org admins can manage project grants"` for accessible non-admins.
 
 ## Statuses
 
@@ -401,7 +457,7 @@ Delete one of the caller's keys. Body: `id` string, required (`400 "Missing key 
 ## Projects
 
 ### GET /api/projects
-List accessible projects, newest first.
+List accessible projects, newest first — the UNION over the caller's org memberships of the projects they can access in each org (via accessible workspaces + directly-granted projects). Optional `?org=<id>` narrows to one org (unknown/non-member → `[]`).
 - 200: `{ "projects": [ <project>, ... ] }`
 
 ### POST /api/projects
@@ -409,9 +465,10 @@ Create a project.
 - Body:
   - `name` string, required. Trimmed, non-empty, max 120.
   - `description` string|null, optional.
-  - `workspaceId` string|null, optional. Must exist if given (`400 "unknown workspaceId"`); if omitted, defaults to the OLDEST workspace (or `400 "no workspace exists yet"` if none exist at all). Requires edit rights on the chosen workspace (`403 "No permission to create projects in this workspace"`).
+  - `workspaceId` string|null, optional. If given, the caller must be able to edit it, else a single generic `400 "Cannot create a project in that workspace"` (this collapses "no such workspace in your orgs" and "no edit permission" so existence isn't probeable).
+  - `organizationId` string|null, optional — used only when `workspaceId` is omitted, to pick the default (oldest ACCESSIBLE) workspace in that org. Required when the caller belongs to more than one org and `workspaceId` is omitted (else `400`); defaults to the sole membership. An unknown/non-member org or no accessible workspace gives one generic `400 "no accessible workspace to create a project in"` (no oracle).
 - 201: `{ "project": <project> }`
-- Errors: 400 (name/description/workspaceId), 401, 403.
+- Errors: 400 (name/description/workspaceId/organizationId), 401.
 
 ### GET /api/projects/{id}
 Fetch one project with nested resources.
@@ -556,20 +613,20 @@ Add a comment.
 - 201: `{ "comment": <comment> }`. `400 "body is required"` if missing/empty, `400 "body too long (max 10000)"` if over 10000; `404` if inaccessible.
 
 ### PATCH /api/comments/{id}
-Edit a comment body (author or admin only).
+Edit a comment body (the author, or an org owner/admin of the project's org).
 - Body (JSON): `{ "body": string }` (non-empty, max 10000).
-- 200: `{ "comment": <comment> }`. `400` if the body is invalid JSON, empty, or over 10000 chars; `403` if not the author/admin, `404` if missing.
+- 200: `{ "comment": <comment> }`. `400` if the body is invalid JSON, empty, or over 10000 chars; `403` if not the author or an org owner/admin of the project's org; `404` if missing.
 
 ### DELETE /api/comments/{id}
-Delete a comment (author or admin only). `403`/`404` as above. 204: empty body.
+Delete a comment (the author, or an org owner/admin of the project's org). `403`/`404` as above. 204: empty body.
 
 ## Notifications
 
-In-app notifications for the current user (assignment + due-date reminders). Due reminders are generated lazily on GET.
+In-app notifications for the current user (assignment + due-date reminders). Due reminders are generated lazily on GET. Notifications are org-scoped (ADR-062): each row carries `organizationId`, and this list returns only rows from organizations the caller is CURRENTLY a member of (rows for a departed org are excluded).
 
 ### GET /api/notifications
 List the current user's notifications + unread count.
-- 200: `{ "notifications": [{ "id", "userId", "type", "body", "projectId", "taskId", "read" (boolean), "createdAt" }...], "unreadCount": number }`. Returns at most the **50 most-recent** notifications (newest first); `unreadCount` counts ALL unread, not just the returned page. `type` ∈ `assigned | due_soon | overdue | ...`.
+- 200: `{ "notifications": [{ "id", "userId", "organizationId", "type", "body", "projectId", "taskId", "read" (boolean), "createdAt" }...], "unreadCount": number }`. Returns at most the **50 most-recent** notifications (newest first, across the caller's member orgs); `unreadCount` counts ALL unread, not just the returned page. `type` ∈ `assigned | due_soon | overdue | ...`.
 
 ### POST /api/notifications/{id}
 (also `PATCH`) Mark one notification read (owner-scoped). 200 on success, `404` if not the user's.
@@ -601,7 +658,10 @@ Download a project. `format=csv` (default) = all tasks as CSV (UTF-8 BOM, CRLF, 
 
 ## Object shapes
 
-- workspace: `id, name, ownerId, createdAt, updatedAt`.
+- workspace: `id, name, ownerId, organizationId, createdAt, updatedAt` (`organizationId` → the owning organization).
+- org (as returned by `/api/orgs`, `/api/orgs/{id}`, and `GET /api/me`'s `orgs[]`): `id, name, slug, logo, createdAt, role` (`role` = the CALLER's role in the org: `owner|admin|member`; `me`'s `orgs[]` entries carry `id, name, slug, role` only). `slug` is server-generated and instance-unique.
+- member (as listed by `GET /api/orgs/{id}/members`): `id, userId, role, createdAt, name, email` (`name`/`email` from the member's user; `role` = their org role).
+- invitation (as listed by `GET /api/orgs/{id}/invites`): `id, organizationId, email, role, status, expiresAt, inviterId, createdAt`. The accept capability is the link `/invite/<id>`.
 - project: `id, name, description, workspaceId, statusId, icon, statusDisplay, pinned, startDate, dueDate, createdBy, createdAt, updatedAt` (`icon` = emoji or `iconoir:<name>` (nullable); `statusDisplay` ∈ `text|icon|text-icon` — the fallback default; per-view overrides live in `view.config.statusDisplay`; `chipFields` = a JSON-array string of project-entity custom-field ids (ordered) shown as header chips, or null = show all with a value; `startDate`/`dueDate` nullable ISO date strings)
 - task: `id, projectId, parentId, title, description, statusId, priority, assigneeId, milestoneId, locationId, location, order, position, startDate, dueDate, recurrence, coverFileId, createdBy, createdAt, updatedAt` (`startDate`/`dueDate` nullable ISO dates; `recurrence` = repeat-rule string|null; `coverFileId` = a task-attachment file id|null), plus `customFields` (a `{ "<fieldId>": decodedValue }` map on API task responses). `locationId` → a saved project `location` (below; settable via POST/PATCH /api/tasks); `location` is the legacy freeform `"lat, lng"` text (still accepted; map views prefer `locationId`).
 - location: `id, projectId, title, address, latitude, longitude, position, createdAt, updatedAt` — project-scoped saved places (`title` required; `address`/`latitude`/`longitude` nullable). Plotted by map views only when both lat+lng are set. Listed under `GET /api/projects/{id}`; reference one from a task via `locationId`. CRUD via the **Locations** endpoints (below).

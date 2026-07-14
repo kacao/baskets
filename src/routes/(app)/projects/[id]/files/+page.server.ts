@@ -2,7 +2,8 @@ import { error } from '@sveltejs/kit';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { customField, file, project, task, user } from '$lib/server/db/schema';
-import { canAccessProject, canEditProject } from '$lib/server/permissions';
+import { canAccessProject, canEditProject, workspaceOrgId } from '$lib/server/permissions';
+import { alignActiveOrg } from '$lib/server/orgs';
 import type { PageServerLoad } from './$types';
 
 type FileSource =
@@ -10,16 +11,20 @@ type FileSource =
 	| { kind: 'task'; taskId: string; taskTitle: string }
 	| { kind: 'field'; fieldName: string; taskId: string | null; taskTitle: string | null };
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals, cookies, url }) => {
 	if (!locals.user) error(401, 'Unauthorized');
 
 	const [proj] = await db
-		.select({ id: project.id, name: project.name })
+		.select({ id: project.id, name: project.name, workspaceId: project.workspaceId })
 		.from(project)
 		.where(eq(project.id, params.id));
 	if (!proj) error(404, 'Project not found');
 	// ADR-019: inaccessible projects are indistinguishable from missing ones
 	if (!(await canAccessProject(locals.user, params.id))) error(404, 'Project not found');
+
+	// ADR-062 D4: keep the active org aligned to the project being viewed
+	const projOrgId = proj.workspaceId ? await workspaceOrgId(proj.workspaceId) : null;
+	alignActiveOrg(cookies, projOrgId, url.pathname + url.search);
 
 	const rows = await db
 		.select({

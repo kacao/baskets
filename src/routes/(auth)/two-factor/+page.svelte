@@ -1,12 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { authClient } from '$lib/auth-client';
+	import { safeRedirect } from '$lib/safeRedirect';
 	import { t } from '$lib/i18n';
 
 	let code = $state('');
 	let useBackup = $state(false);
 	let error = $state('');
 	let loading = $state(false);
+
+	const redirectTo = $derived(safeRedirect(page.url.searchParams.get('redirect')) ?? '/projects');
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
@@ -24,7 +28,7 @@
 			return;
 		}
 
-		await goto('/projects');
+		await goto(redirectTo);
 	}
 </script>
 

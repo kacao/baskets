@@ -1,6 +1,6 @@
-import { and, desc, eq, isNotNull, lte, gte } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, lte, gte } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { notification, task, status } from '$lib/server/db/schema';
+import { member, notification, project, status, task, workspace } from '$lib/server/db/schema';
 
 export type NotificationRow = typeof notification.$inferSelect;
 
@@ -12,12 +12,37 @@ export type CreateNotificationInput = {
 	taskId?: string | null;
 };
 
+/** The org a project belongs to (via its workspace); null when unresolvable. */
+async function orgForProject(projectId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ orgId: workspace.organizationId })
+		.from(project)
+		.leftJoin(workspace, eq(project.workspaceId, workspace.id))
+		.where(eq(project.id, projectId));
+	return row?.orgId ?? null;
+}
+
+/** Org ids the user is currently a member of (bell/reminder scoping, ADR-062 D7). */
+async function memberOrgIds(userId: string): Promise<string[]> {
+	const rows = await db
+		.select({ orgId: member.organizationId })
+		.from(member)
+		.where(eq(member.userId, userId));
+	return rows.map((r) => r.orgId);
+}
+
 /**
  * Insert a single notification. Returns the created row, or null on failure.
- * Safe to fire-and-forget (`void create(...)`): never rejects.
+ * Safe to fire-and-forget (`void create(...)`): never rejects. The org is derived
+ * from the projectId and REQUIRED (ADR-062 D7) — a row whose org can't be resolved
+ * (no/orphan project) is skipped rather than stored org-less (it would never be
+ * shown or cleaned up).
  */
 export async function create(input: CreateNotificationInput): Promise<NotificationRow | null> {
 	try {
+		const projectId = input.projectId ?? null;
+		const organizationId = projectId ? await orgForProject(projectId) : null;
+		if (!organizationId) return null;
 		const [row] = await db
 			.insert(notification)
 			.values({
@@ -25,7 +50,8 @@ export async function create(input: CreateNotificationInput): Promise<Notificati
 				userId: input.userId,
 				type: input.type,
 				body: input.body,
-				projectId: input.projectId ?? null,
+				organizationId,
+				projectId,
 				taskId: input.taskId ?? null,
 				read: false,
 				createdAt: new Date()
@@ -38,22 +64,32 @@ export async function create(input: CreateNotificationInput): Promise<Notificati
 	}
 }
 
-/** Most-recent-first notifications for a user. */
+/** Most-recent-first notifications for a user, scoped to orgs they still belong to. */
 export async function listForUser(userId: string, limit = 50): Promise<NotificationRow[]> {
+	const orgIds = await memberOrgIds(userId);
+	if (orgIds.length === 0) return [];
 	return db
 		.select()
 		.from(notification)
-		.where(eq(notification.userId, userId))
+		.where(and(eq(notification.userId, userId), inArray(notification.organizationId, orgIds)))
 		.orderBy(desc(notification.createdAt))
 		.limit(limit);
 }
 
-/** Count of unread notifications for a user. */
+/** Count of unread notifications for a user, scoped to orgs they still belong to. */
 export async function unreadCount(userId: string): Promise<number> {
+	const orgIds = await memberOrgIds(userId);
+	if (orgIds.length === 0) return 0;
 	const rows = await db
 		.select({ id: notification.id })
 		.from(notification)
-		.where(and(eq(notification.userId, userId), eq(notification.read, false)));
+		.where(
+			and(
+				eq(notification.userId, userId),
+				eq(notification.read, false),
+				inArray(notification.organizationId, orgIds)
+			)
+		);
 	return rows.length;
 }
 
@@ -89,9 +125,13 @@ function startOfDay(d: Date): Date {
  * Scan the user's assigned, not-completed tasks with a dueDate and insert
  * due_soon (within 24h, future) / overdue (past) notifications. Idempotent per
  * day: a (task, type) reminder is only created once within any given calendar
- * day, so calling this repeatedly (e.g. on bell mount) won't spam.
+ * day, so calling this repeatedly (e.g. on bell mount) won't spam. Only emits for
+ * orgs the assignee is currently a member of (ADR-062 D7).
  */
 export async function generateDueReminders(userId: string): Promise<NotificationRow[]> {
+	const orgIds = await memberOrgIds(userId);
+	if (orgIds.length === 0) return [];
+
 	const now = new Date();
 	const soon = new Date(now.getTime() + DAY_MS);
 
@@ -105,7 +145,16 @@ export async function generateDueReminders(userId: string): Promise<Notification
 		})
 		.from(task)
 		.innerJoin(status, eq(task.statusId, status.id))
-		.where(and(eq(task.assigneeId, userId), isNotNull(task.dueDate), lte(task.dueDate, soon)));
+		.innerJoin(project, eq(task.projectId, project.id))
+		.innerJoin(workspace, eq(project.workspaceId, workspace.id))
+		.where(
+			and(
+				eq(task.assigneeId, userId),
+				inArray(workspace.organizationId, orgIds),
+				isNotNull(task.dueDate),
+				lte(task.dueDate, soon)
+			)
+		);
 
 	const dayStart = startOfDay(now);
 	const created: NotificationRow[] = [];

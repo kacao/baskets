@@ -6,7 +6,7 @@
 import { eq } from 'drizzle-orm';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { twoFactor, admin } from 'better-auth/plugins';
+import { twoFactor, admin, organization } from 'better-auth/plugins';
 import * as schema from '../src/lib/server/db/schema.ts';
 import { DIALECT } from '../src/lib/server/db/dialect.ts';
 
@@ -16,6 +16,9 @@ const ADMIN_EMAIL = 'admin@baskets.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'admin-baskets-2026';
 const DEMO_EMAIL = 'demo@baskets.local';
 const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD ?? 'demo-baskets-2026';
+// owner2 owns a SECOND org (org-two) for cross-org isolation tests (ADR-062).
+const OWNER2_EMAIL = 'owner2@baskets.local';
+const OWNER2_PASSWORD = process.env.SEED_OWNER2_PASSWORD ?? 'owner2-baskets-2026';
 
 // Dialect-aware client (ADR-050) — mirrors src/lib/server/db/index.ts. Drivers
 // are dynamically imported so only the selected one loads.
@@ -49,11 +52,14 @@ const auth = betterAuth({
 			session: schema.session,
 			account: schema.account,
 			verification: schema.verification,
-			twoFactor: schema.twoFactor
+			twoFactor: schema.twoFactor,
+			organization: schema.organization,
+			member: schema.member,
+			invitation: schema.invitation
 		}
 	}),
 	emailAndPassword: { enabled: true, minPasswordLength: 12 },
-	plugins: [twoFactor({ issuer: 'Baskets' }), admin()]
+	plugins: [twoFactor({ issuer: 'Baskets' }), admin(), organization()]
 });
 
 const existing = await db.select().from(schema.user).where(eq(schema.user.email, ADMIN_EMAIL));
@@ -69,15 +75,20 @@ const adminRes = await auth.api.signUpEmail({
 const demoRes = await auth.api.signUpEmail({
 	body: { name: 'Demo Dana', email: DEMO_EMAIL, password: DEMO_PASSWORD }
 });
+const owner2Res = await auth.api.signUpEmail({
+	body: { name: 'Olivia Owner', email: OWNER2_EMAIL, password: OWNER2_PASSWORD }
+});
 
 const adminId = adminRes.user.id;
 const demoId = demoRes.user.id;
+const owner2Id = owner2Res.user.id;
 
 await db
 	.update(schema.user)
 	.set({ role: 'admin', emailVerified: true })
 	.where(eq(schema.user.id, adminId));
 await db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.id, demoId));
+await db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.id, owner2Id));
 
 console.log('Creating default statuses…');
 const now = new Date();
@@ -123,6 +134,53 @@ await db
 	.values(statuses.map((s, i) => ({ ...s, position: i * 10, builtIn: true, createdAt: now })))
 	.onConflictDoNothing();
 
+console.log('Creating organizations + memberships…');
+const ORG_ID = 'org-default';
+const ORG_TWO_ID = 'org-two';
+await db
+	.insert(schema.organization)
+	.values([
+		{
+			id: ORG_ID,
+			name: 'Default',
+			slug: 'default',
+			// migration marker: a booted seed DB skips ensureDefaultOrganization
+			metadata: JSON.stringify({ migrated: true }),
+			createdAt: now
+		},
+		{ id: ORG_TWO_ID, name: 'Org Two', slug: 'org-two', createdAt: now }
+	])
+	.onConflictDoNothing();
+
+// admin owns org-default; demo is a plain member (keeps its existing project grant);
+// owner2 owns org-two (isolated). Deterministic member ids (mirror the migration).
+await db
+	.insert(schema.member)
+	.values([
+		{
+			id: `member-org-default-${adminId}`,
+			organizationId: ORG_ID,
+			userId: adminId,
+			role: 'owner',
+			createdAt: now
+		},
+		{
+			id: `member-org-default-${demoId}`,
+			organizationId: ORG_ID,
+			userId: demoId,
+			role: 'member',
+			createdAt: now
+		},
+		{
+			id: `member-org-two-${owner2Id}`,
+			organizationId: ORG_TWO_ID,
+			userId: owner2Id,
+			role: 'owner',
+			createdAt: now
+		}
+	])
+	.onConflictDoNothing();
+
 console.log('Creating default workspace…');
 const WORKSPACE_ID = 'workspace-default';
 await db
@@ -131,6 +189,7 @@ await db
 		id: WORKSPACE_ID,
 		name: 'Default',
 		ownerId: adminId,
+		organizationId: ORG_ID,
 		createdAt: now,
 		updatedAt: now
 	})
@@ -227,12 +286,15 @@ await db.insert(schema.label).values([
 	}
 ]);
 
-// Demo user can edit project 1 (admins implicitly edit everything)
+// Demo user (a plain org-default member) is granted edit on project 1. The grant
+// MUST carry organizationId (ADR-062: grant org == resource org) or the demo user
+// lands on an empty app and the invariant/isolation tests fail.
 await db.insert(schema.permission).values({
 	id: 'seed-perm-1',
 	userId: demoId,
 	resourceType: 'project',
 	resourceId: pid(1),
+	organizationId: ORG_ID,
 	grantedBy: adminId,
 	createdAt: now
 });
@@ -347,7 +409,8 @@ await db.insert(schema.taskCustomValue).values([
 
 console.log(`
 Seed complete.
-  Admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}
-  Demo:  ${DEMO_EMAIL} / ${DEMO_PASSWORD}
+  Admin:  ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}   (org-default owner)
+  Demo:   ${DEMO_EMAIL} / ${DEMO_PASSWORD}   (org-default member)
+  Owner2: ${OWNER2_EMAIL} / ${OWNER2_PASSWORD}   (org-two owner)
 `);
 process.exit(0);
