@@ -400,7 +400,7 @@ export type UpdateTaskOptions = {
 	completeCascade?: boolean;
 	/** Fire the per-field `logActivity` rows (form action). Default false. */
 	logActivity?: boolean;
-	/** Fire `notifyMentions` on a description change (form action). Default false. */
+	/** Fire `notifyMentions` on a description change (form action + REST PATCH). Default false. */
 	notifyMentionsOnDescription?: boolean;
 	/** Notify a newly-assigned user (REST PATCH). Default false. */
 	notifyAssignee?: boolean;
