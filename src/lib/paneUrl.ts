@@ -6,22 +6,33 @@ import { page } from '$app/state';
 // Uses SvelteKit shallow routing, so load() does NOT re-run (no refetch/flash).
 //
 // `changes` maps param → value; a null/'' value deletes the param.
-// `push` adds a history entry (browser Back closes the pane); the default replaces.
+//
+// History semantics (unless overridden by `push`): OPENING a pane (a param going
+// absent → present) PUSHES one entry, so browser Back closes the pane and restores
+// the pre-open URL — including the active `?view=` tab, which a replace would
+// overwrite (Back then skipped to the previously-viewed tab). Changing a present
+// param's value (in-pane task→task nav) and clearing it (close) REPLACE, so
+// drilling around inside a pane doesn't fill history.
 //
 // The base is `window.location.href`, NOT `page.url`: SvelteKit's shallow
 // replaceState/pushState update the address bar but do NOT refresh `$app/state`'s
 // `page.url` synchronously, so building on `page.url` reads a stale URL and a
 // second update (e.g. close after open) would dedup against the wrong base and
 // no-op. `window.location` always reflects the live URL.
-export function setPaneUrl(changes: Record<string, string | null>, push = false): void {
+export function setPaneUrl(changes: Record<string, string | null>, push?: boolean): void {
 	if (typeof window === 'undefined') return;
 	const url = new URL(window.location.href);
+	let opensPane = false;
 	for (const [key, value] of Object.entries(changes)) {
-		if (value == null || value === '') url.searchParams.delete(key);
-		else url.searchParams.set(key, value);
+		if (value == null || value === '') {
+			url.searchParams.delete(key);
+		} else {
+			if (url.searchParams.get(key) == null) opensPane = true;
+			url.searchParams.set(key, value);
+		}
 	}
 	if (url.href === window.location.href) return;
-	(push ? pushState : replaceState)(url, page.state);
+	((push ?? opensPane) ? pushState : replaceState)(url, page.state);
 }
 
 // Read a pane URL param (e.g. 'task', 'pane') for a view's read-effect. Touches
