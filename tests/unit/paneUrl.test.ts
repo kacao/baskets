@@ -52,20 +52,32 @@ describe('readPaneParam', () => {
 });
 
 describe('setPaneUrl', () => {
-	it('adds a param via replaceState, based on the live URL (not page.url)', () => {
+	it('OPENING a pane (param absent → present) pushes a history entry, based on the live URL', () => {
 		setLocation('/projects/p1?view=v1');
 		setPaneUrl({ task: 't-9' });
-		expect(replaceState).toHaveBeenCalledTimes(1);
-		const [url] = vi.mocked(replaceState).mock.calls[0];
+		expect(pushState).toHaveBeenCalledTimes(1);
+		expect(replaceState).not.toHaveBeenCalled();
+		const [url] = vi.mocked(pushState).mock.calls[0];
 		expect(String(url)).toContain('/projects/p1');
 		expect((url as URL).searchParams.get('task')).toBe('t-9');
-		// pre-existing params are preserved
+		// pre-existing params are preserved — Back restores this view tab, not an older one
 		expect((url as URL).searchParams.get('view')).toBe('v1');
 	});
 
-	it('deletes the param when the value is null or empty', () => {
+	it('changing a present param (in-pane task→task nav) replaces, not pushes', () => {
+		setLocation('/projects/p1?view=v1&task=t-1');
+		setPaneUrl({ task: 't-2' });
+		expect(replaceState).toHaveBeenCalledTimes(1);
+		expect(pushState).not.toHaveBeenCalled();
+		const [url] = vi.mocked(replaceState).mock.calls[0];
+		expect((url as URL).searchParams.get('task')).toBe('t-2');
+	});
+
+	it('deletes the param via replaceState when the value is null or empty (close)', () => {
 		setLocation('/projects/p1?view=v1&task=t-9');
 		setPaneUrl({ task: null });
+		expect(replaceState).toHaveBeenCalledTimes(1);
+		expect(pushState).not.toHaveBeenCalled();
 		const [url] = vi.mocked(replaceState).mock.calls[0];
 		expect((url as URL).searchParams.has('task')).toBe(false);
 		expect((url as URL).searchParams.get('view')).toBe('v1');
@@ -78,15 +90,22 @@ describe('setPaneUrl', () => {
 		expect(pushState).not.toHaveBeenCalled();
 	});
 
-	it('uses pushState (a history entry) when push=true', () => {
-		setLocation('/projects/p1');
-		setPaneUrl({ task: 't-1' }, true);
+	it('an explicit push=true forces a push even for a value change', () => {
+		setLocation('/projects/p1?task=t-1');
+		setPaneUrl({ task: 't-2' }, true);
 		expect(pushState).toHaveBeenCalledTimes(1);
 		expect(replaceState).not.toHaveBeenCalled();
 	});
 
-	it('passes the current page.state snapshot through to the history call', () => {
+	it('an explicit push=false forces a replace even when opening', () => {
 		setLocation('/projects/p1');
+		setPaneUrl({ task: 't-1' }, false);
+		expect(replaceState).toHaveBeenCalledTimes(1);
+		expect(pushState).not.toHaveBeenCalled();
+	});
+
+	it('passes the current page.state snapshot through to the history call', () => {
+		setLocation('/projects/p1?task=t-1');
 		setPaneUrl({ task: 't-2' });
 		const [, state] = vi.mocked(replaceState).mock.calls[0];
 		expect(state).toEqual({ snap: 1 });
