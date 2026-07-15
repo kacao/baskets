@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetTables } from './isolationGuard';
 import { seedProjectFixture } from './helpers/testDb';
-import { bulkUpdateTasks, createTaskService, setTaskStatusService } from '$lib/server/tasks';
+import {
+	bulkUpdateTasks,
+	createTaskService,
+	moveTaskService,
+	setTaskStatusService
+} from '$lib/server/tasks';
 
 beforeEach(resetTables);
 
@@ -136,5 +141,88 @@ describe('sub-task milestone inheritance (characterization)', () => {
 		expect(subRes.ok).toBe(true);
 		if (!subRes.ok) return;
 		expect(subRes.data.milestoneId).toBe(milestoneId);
+	});
+});
+
+describe('moveTaskService board ordering (characterization)', () => {
+	it('places a task before another, and at the end when beforeId is null', async () => {
+		const { owner, proj, statuses } = await seedProjectFixture();
+
+		const aRes = await createTaskService({ projectId: proj.id, title: 'A' }, owner);
+		const bRes = await createTaskService({ projectId: proj.id, title: 'B' }, owner);
+		expect(aRes.ok && bRes.ok).toBe(true);
+		if (!aRes.ok || !bRes.ok) return;
+
+		const { db } = await import('$lib/server/db');
+		const { task } = await import('$lib/server/db/schema.sqlite');
+		const { eq } = await import('drizzle-orm');
+		const positions = async () => {
+			const [a] = await db.select().from(task).where(eq(task.id, aRes.data.id));
+			const [b] = await db.select().from(task).where(eq(task.id, bRes.data.id));
+			return { a, b };
+		};
+
+		const before = await moveTaskService(
+			bRes.data.id,
+			proj.id,
+			statuses.backlog.id,
+			aRes.data.id,
+			owner
+		);
+		expect(before.ok).toBe(true);
+		let rows = await positions();
+		expect(rows.b.position).toBeLessThan(rows.a.position);
+
+		const toEnd = await moveTaskService(bRes.data.id, proj.id, statuses.backlog.id, null, owner);
+		expect(toEnd.ok).toBe(true);
+		rows = await positions();
+		expect(rows.b.position).toBeGreaterThan(rows.a.position);
+	});
+
+	it('moving a parent into a completed column cascades the status to its sub-tasks', async () => {
+		const { owner, proj, statuses } = await seedProjectFixture();
+
+		const parentRes = await createTaskService({ projectId: proj.id, title: 'Parent' }, owner);
+		expect(parentRes.ok).toBe(true);
+		if (!parentRes.ok) return;
+		const subRes = await createTaskService(
+			{ projectId: proj.id, title: 'Sub', parentId: parentRes.data.id },
+			owner
+		);
+		expect(subRes.ok).toBe(true);
+		if (!subRes.ok) return;
+
+		const res = await moveTaskService(
+			parentRes.data.id,
+			proj.id,
+			statuses.completed.id,
+			null,
+			owner
+		);
+		expect(res.ok).toBe(true);
+
+		const { db } = await import('$lib/server/db');
+		const { task } = await import('$lib/server/db/schema.sqlite');
+		const { eq } = await import('drizzle-orm');
+		const [sub] = await db.select().from(task).where(eq(task.id, subRes.data.id));
+		expect(sub.statusId).toBe(statuses.completed.id);
+	});
+
+	it('rejects moving a sub-task (sub-tasks have no board order)', async () => {
+		const { owner, proj, statuses } = await seedProjectFixture();
+
+		const parentRes = await createTaskService({ projectId: proj.id, title: 'Parent' }, owner);
+		expect(parentRes.ok).toBe(true);
+		if (!parentRes.ok) return;
+		const subRes = await createTaskService(
+			{ projectId: proj.id, title: 'Sub', parentId: parentRes.data.id },
+			owner
+		);
+		expect(subRes.ok).toBe(true);
+		if (!subRes.ok) return;
+
+		const res = await moveTaskService(subRes.data.id, proj.id, statuses.backlog.id, null, owner);
+		expect(res.ok).toBe(false);
+		if (!res.ok) expect(res.status).toBe(400);
 	});
 });

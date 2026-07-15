@@ -426,7 +426,7 @@ Operate on a SELECTION of tasks (`ids`), which must all belong to ONE project (`
 
 ### PATCH /api/tasks/bulk
 Set fields on every editable selected task.
-- Body: `ids` (non-empty string array) + `set` (object). `set` may include: `statusId` or `status` (name; must be eligible in the project), `assigneeId` (string|null; validated user), `milestoneId` (string|null; same project), `priority` (priority enum), `parentId` (string|null — re-parent under a top-level task; `""`/null promotes to top-level; `400` if it targets a selected id, a non-top-level task, or a task with sub-tasks), `addLabelIds` / `removeLabelIds` (string arrays — labels are multi-value, so these ADD / REMOVE the given labels across the whole selection; every id must be a label available to the project [its workspace's labels OR a project-scoped label], else `400`). At least one effective field (else `400 "No fields to update"`).
+- Body: `ids` (non-empty string array) + `set` (object). `set` may include: `statusId` or `status` (name; must be eligible in the project), `assigneeId` (string|null; validated user), `milestoneId` (string|null; same project), `priority` (priority enum), `parentId` (string|null — re-parent under a top-level task; `""`/null promotes to top-level; `400` if the target is a selected id or a non-top-level task, or if any SELECTED task has sub-tasks of its own — moved tasks must be childless, one nesting level. Unlike the single-task PATCH, bulk re-parenting does NOT change the moved tasks' `milestoneId`), `addLabelIds` / `removeLabelIds` (string arrays — labels are multi-value, so these ADD / REMOVE the given labels across the whole selection; every id must be a label available to the project [its workspace's labels OR a project-scoped label], else `400`). At least one effective field (else `400 "No fields to update"`).
 - Setting a `completed`-category status cascades to the selected tasks' sub-tasks.
 - 200: `{ "success": true, "updated": number }`.
 
@@ -479,7 +479,7 @@ Fetch one project with nested resources.
 Update project metadata. At least one field required (else `400 "No fields to update"`).
 - Body (any of):
   - `name` string, trimmed non-empty, max 120.
-  - `description` string|null.
+  - `description` string|null — new `@[…](person:<id>)` mention tokens notify the newly-mentioned users (see Notifications).
   - `pinned` boolean (`400` if not a boolean) — sidebar pin / sort-first.
   - `icon` string|null — an emoji / glyph (≤8 chars; longer is truncated) or `iconoir:<name>` (a Heroicon name; see Conventions → Icon values; `400 "Unknown icon"` if unknown). `null`/`""` clears it.
   - `statusId` string|null — the project's own status (validated against the built-in defaults + this project's workspace statuses; `400 "Status not available to this project"` otherwise; no FK). `null`/`""` clears.
@@ -513,7 +513,7 @@ Create a task or sub-task.
     If neither is given, defaults to the first `backlog`-category status.
   - `description` string|null, optional.
   - `assigneeId` string|null, optional — must reference a valid user.
-  - `milestoneId` string|null, optional — must reference a milestone of the same project.
+  - `milestoneId` string|null, optional — must reference a milestone of the same project. Ignored when `parentId` is set — a sub-task always inherits its parent's milestone.
   - `locationId` string|null, optional — must reference a saved location of the same project.
   - `dueDate` string|null, optional — `YYYY-MM-DD` (treated as midnight) or full ISO datetime.
   - `location` string|null, optional — free text `"lat, lng"` (plotted by map views).
@@ -524,16 +524,25 @@ Create a task or sub-task.
 
 ### GET /api/tasks/{id}
 Fetch one task and its sub-tasks.
-- 200: `{ "task": <task>, "subTasks": [<task>...] }` (the task includes its decoded `customFields` map).
+- 200: `{ "task": <task>, "subTasks": [<task>...] }` (the task AND each `subTasks` entry include their decoded `customFields` maps).
 - `404` if missing or its project is inaccessible.
 
 ### PATCH /api/tasks/{id}
 Update a task. At least one field (else `400 "No fields to update"`).
 - Body: any of `title` (non-empty, max 240), `statusId` or `status` (name), `priority`, `description`, `assigneeId` (string|null), `milestoneId` (string|null, same project), `locationId` (string|null, same project), `location` (string|null, legacy text), `order` (integer|null), `dueDate` (string|null), `startDate` (string|null — `YYYY-MM-DD` or full ISO), `recurrence` (string|null — a repeat-rule string, validated; `400 "Invalid recurrence rule"` if malformed; `null`/`""` clears), `coverFileId` (string|null — must reference an IMAGE file attached to THIS task, else `400`; `null`/`""` clears), `parentId` (string|null — re-parent this task), `customFields` (`{ "<fieldId>": value }` map; see Custom fields — an empty/null value clears the field).
-- `parentId`: move the task under another top-level task of the SAME project (makes it a sub-task), or `null`/`""` to detach it back to top-level. Rejected (`400`) if the target is itself a sub-task (only one nesting level), if it's the task itself, or if this task already has sub-tasks of its own.
+- `parentId`: move the task under another top-level task of the SAME project (makes it a sub-task), or `null`/`""` to detach it back to top-level. Rejected (`400`) if the target is itself a sub-task (only one nesting level), if it's the task itself, or if this task already has sub-tasks of its own. Nesting under a parent ALSO sets this task's `milestoneId` to the parent's (sub-tasks follow their parent's milestone), overriding any `milestoneId` sent in the same request; detaching to top-level leaves the milestone unchanged.
 - Done-cascade: setting a parent to a `completed`-category status cascades that status to all its sub-tasks. If the task has a `recurrence` rule, completing it ALSO spawns the next occurrence (a fresh backlog-status copy with the next due date).
+- Notifications: assigning via `assigneeId` notifies the new assignee; new `@[…](person:<id>)` mention tokens in `description` notify the newly-mentioned users (see Notifications).
 - 200: `{ "task": <task> }`
 - `404` if missing or its project is inaccessible; `403 "No edit permission on this task"` if accessible but the caller can't edit it.
+
+### POST /api/tasks/{id}/move
+Reposition a top-level task on the board: place it in a status column, ordered before another task. This writes the task's `position` — the canonical order task lists are returned in (the separate `order` field settable via PATCH is only the user-facing list-view rank).
+- Body: `statusId` (string, optional — an eligible status id; defaults to the task's CURRENT status, i.e. reorder within its column) + `beforeId` (string|null, optional — the id of a task in the target column to insert before; `null`/absent/unknown = end of the column).
+- Same side effects as a status change: moving into a `completed`-category status cascades to sub-tasks and, with a `recurrence` rule, spawns the next occurrence.
+- `400 "Invalid task"` for a sub-task (only top-level tasks have board order); `400 "Status not eligible for this project"` for an ineligible `statusId`.
+- 200: `{ "task": <task> }` (the moved task, incl. its decoded `customFields` map).
+- `404` if missing or inaccessible; `403 "No edit permission on this task"` if accessible but not editable.
 
 ### DELETE /api/tasks/{id}
 Delete a task and its sub-tasks.
@@ -622,11 +631,11 @@ Delete a comment (the author, or an org owner/admin of the project's org). `403`
 
 ## Notifications
 
-In-app notifications for the current user (assignment + due-date reminders). Due reminders are generated lazily on GET. Notifications are org-scoped (ADR-062): each row carries `organizationId`, and this list returns only rows from organizations the caller is CURRENTLY a member of (rows for a departed org are excluded).
+In-app notifications for the current user (assignment, @-mention + due-date reminders). `@[label](person:<userId>)` mention tokens newly added to a task description, a project description, or a comment notify the mentioned users (only NEWLY-mentioned, project-accessible users; never the author). Due reminders are generated lazily on GET. Notifications are org-scoped (ADR-062): each row carries `organizationId`, and this list returns only rows from organizations the caller is CURRENTLY a member of (rows for a departed org are excluded).
 
 ### GET /api/notifications
 List the current user's notifications + unread count.
-- 200: `{ "notifications": [{ "id", "userId", "organizationId", "type", "body", "projectId", "taskId", "read" (boolean), "createdAt" }...], "unreadCount": number }`. Returns at most the **50 most-recent** notifications (newest first, across the caller's member orgs); `unreadCount` counts ALL unread, not just the returned page. `type` ∈ `assigned | due_soon | overdue | ...`.
+- 200: `{ "notifications": [{ "id", "userId", "organizationId", "type", "body", "projectId", "taskId", "read" (boolean), "createdAt" }...], "unreadCount": number }`. Returns at most the **50 most-recent** notifications (newest first, across the caller's member orgs); `unreadCount` counts ALL unread, not just the returned page. `type` ∈ `assigned | mention | due_soon | overdue | ...`.
 
 ### POST /api/notifications/{id}
 (also `PATCH`) Mark one notification read (owner-scoped). 200 on success, `404` if not the user's.
@@ -647,6 +656,12 @@ Create a template, OR instantiate one into the project (the body shape selects t
 - **Create** body: `{ "name": string (trimmed, non-empty, max 120), "payload": { "task": { "title": string (required), "description"?: string|null, "priority"?, "recurrence"?: string|null, "fields"?: { "<fieldId>": string|null } }, "subtasks"?: [ <same task shape> ] }, "scope"?: "project" (default) | "workspace" }` → `201 { "id": string }`. Needs project structure-edit rights; a `scope:"workspace"` template ALSO needs workspace-edit rights — otherwise `404`. `400` on `name` missing/too long or `payload.task.title` missing.
 - **Instantiate** body: `{ "templateId": string }` (or `{ "instantiate": true, "templateId": ... }`) → `201 { "taskId": string }` (the new top-level task id); creates the task + its sub-tasks + custom values. Only needs project access. `400` if `templateId` is missing or the template can't be instantiated.
 - `400` on invalid JSON body; `401` if unauthenticated; `404` if the project is inaccessible.
+
+### PATCH /api/templates/{id}
+Overwrite a template's contents in place (same id — the UI's "save task as template → update existing" path).
+- Body: `payload` (required — same shape/validation as create: `payload.task.title` required) and/or `name` (string, optional — rename; trimmed, non-empty, max 120).
+- Permissions mirror DELETE: a PROJECT-scoped template needs project-edit rights; a WORKSPACE-scoped template needs workspace-edit rights. `404` if missing or inaccessible (incl. orphaned); `403 "No edit permission on this template"` if accessible but not editable.
+- 200: `{ "template": { "id", "name", "scope", "projectId", "workspaceId", "payload" (JSON string), "createdBy", "createdAt" } }`.
 
 ### DELETE /api/templates/{id}
 Delete a template. A PROJECT-scoped template needs project-edit rights; a WORKSPACE-scoped template needs workspace-edit rights. `404` if missing or inaccessible (incl. an orphaned template with neither scope); `403 "No edit permission on this template"` if accessible but not editable. 204: empty body.

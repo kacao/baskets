@@ -112,27 +112,31 @@ export async function deleteTemplate(id: string, projectId?: string): Promise<bo
 }
 
 /**
- * Overwrite an existing template's payload (and optionally name) from a task.
- * Scope-checked: the template must be reachable from `projectId` (same project
- * or its workspace, mirroring listTemplatesForProject) — returns the updated
- * row's scope/workspaceId for the caller to gate workspace edits, or null if
- * the template is unknown or out of scope.
+ * Overwrite an existing template's payload (and optionally name).
+ * When `projectId` is given, the template must be reachable from that project
+ * (same project or its workspace, mirroring listTemplatesForProject) — the form
+ * action's defense-in-depth scope check. `null` skips it (the REST adapter
+ * authorizes against the template's OWN scope first, mirroring deleteTemplate).
+ * Returns the updated row's scope/workspaceId for the caller to gate workspace
+ * edits, or null if the template is unknown or out of scope.
  */
 export async function updateTemplatePayload(
 	id: string,
-	projectId: string,
+	projectId: string | null,
 	payload: TemplatePayload,
 	name?: string
 ): Promise<{ scope: string; workspaceId: string | null } | null> {
 	const tpl = await getTemplate(id);
 	if (!tpl) return null;
-	const [proj] = await db
-		.select({ workspaceId: project.workspaceId })
-		.from(project)
-		.where(eq(project.id, projectId));
-	const inScope =
-		tpl.projectId === projectId || (!!tpl.workspaceId && tpl.workspaceId === proj?.workspaceId);
-	if (!inScope) return null;
+	if (projectId) {
+		const [proj] = await db
+			.select({ workspaceId: project.workspaceId })
+			.from(project)
+			.where(eq(project.id, projectId));
+		const inScope =
+			tpl.projectId === projectId || (!!tpl.workspaceId && tpl.workspaceId === proj?.workspaceId);
+		if (!inScope) return null;
+	}
 	const set: { payload: string; name?: string } = { payload: JSON.stringify(payload) };
 	if (name && name.trim()) set.name = name.trim().slice(0, 120);
 	await db.update(template).set(set).where(eq(template.id, id));

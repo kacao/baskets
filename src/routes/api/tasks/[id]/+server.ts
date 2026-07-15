@@ -31,8 +31,14 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		.where(eq(task.parentId, params.id))
 		.orderBy(asc(task.position), asc(task.createdAt));
 
-	const values = await customValuesByTask(found.projectId, [found.id]);
-	return json({ task: { ...found, customFields: values[found.id] ?? {} }, subTasks });
+	const values = await customValuesByTask(found.projectId, [
+		found.id,
+		...subTasks.map((s) => s.id)
+	]);
+	return json({
+		task: { ...found, customFields: values[found.id] ?? {} },
+		subTasks: subTasks.map((s) => ({ ...s, customFields: values[s.id] ?? {} }))
+	});
 };
 
 export const PATCH: RequestHandler = async ({ request, params, locals }) => {
@@ -208,6 +214,7 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	const res = await updateTaskService(params.id, existing.projectId, input, locals.user, {
 		has: (key) => (key === 'cf' ? !!cfMap : has.has(key)),
 		completeCascade: true,
+		notifyMentionsOnDescription: true,
 		notifyAssignee: true
 	});
 	if (!res.ok) {

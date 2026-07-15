@@ -12,6 +12,7 @@ import {
 } from '$lib/server/db/schema';
 import { apiError, readJson, optionalString, ApiValidationError } from '$lib/server/api';
 import { broadcastProjectChange } from '$lib/server/realtime/hub';
+import { notifyMentions } from '$lib/server/mentions';
 import { canAccessProject, canEditProject } from '$lib/server/permissions';
 import { deleteFilesForProject } from '$lib/server/uploads';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
@@ -210,6 +211,17 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		.where(eq(project.id, params.id))
 		.returning();
 
+	// mention notifications on a description change (mirrors the updateProject form action)
+	if (updates.description !== undefined) {
+		void notifyMentions({
+			text: updates.description,
+			prevText: proj.description,
+			actorId: locals.user.id,
+			actorName: locals.user.name,
+			projectId: params.id,
+			contextLabel: `the project "${updated.name}"`
+		});
+	}
 	broadcastProjectChange(params.id, locals.user.id);
 	return json({ project: updated });
 };
