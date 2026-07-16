@@ -6,6 +6,7 @@
 	import { authClient } from '$lib/auth-client';
 	import { browser } from '$app/environment';
 	import { t } from '$lib/i18n';
+	import { setSoundEnabled, soundOn } from '$lib/sound.svelte';
 
 	let { data, form } = $props();
 
@@ -18,6 +19,12 @@
 		document.cookie = highContrast
 			? 'contrast=high; path=/; max-age=31536000; samesite=lax'
 			: 'contrast=; path=/; max-age=0; samesite=lax';
+	}
+
+	// Interaction sounds (ADR-063) — shared reactive preference (sound.svelte.ts),
+	// also toggleable from the topbar Appearance menu; both stay in sync.
+	function toggleSound() {
+		setSoundEnabled(!soundOn());
 	}
 
 	let keyLoading = $state(false);
@@ -132,6 +139,18 @@
 			<span style="font-weight: 500;">{$t('High contrast')}</span>
 			<span class="u-tiny u-muted" style="display: block;"
 				>{$t('Black text and borders on a white background.')}</span
+			>
+		</span>
+	</label>
+	<label
+		class="u-flex"
+		style="gap: var(--sp-2); cursor: pointer; align-items: flex-start; margin-top: var(--sp-2);"
+	>
+		<input type="checkbox" class="checkbox" checked={soundOn()} onchange={toggleSound} />
+		<span>
+			<span style="font-weight: 500;">{$t('Interface sounds')}</span>
+			<span class="u-tiny u-muted" style="display: block;"
+				>{$t('Subtle audio cues for key actions, like completing a task.')}</span
 			>
 		</span>
 	</label>

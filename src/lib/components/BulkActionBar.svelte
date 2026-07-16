@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { t as i18n } from '$lib/i18n';
+	import { fly } from 'svelte/transition';
 	import Icon from '$lib/components/Icon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { confirmDialog } from '$lib/confirm.svelte';
+	import { playSound } from '$lib/sound.svelte';
 
-	type Status = { id: string; name: string; color?: string | null };
+	type Status = { id: string; name: string; category?: string; color?: string | null };
 	type Named = { id: string; name: string };
 	type Label = { id: string; name: string; color?: string | null; icon?: string | null };
 
@@ -69,7 +71,12 @@
 </script>
 
 {#if count > 0}
-	<div class="bulk-bar" role="toolbar" aria-label={$i18n('Bulk actions')}>
+	<div
+		class="bulk-bar"
+		role="toolbar"
+		aria-label={$i18n('Bulk actions')}
+		transition:fly|global={{ y: 12, duration: 150 }}
+	>
 		<span class="bulk-count">
 			{$i18n('{n} selected').replace('{n}', String(count))}
 		</span>
@@ -86,7 +93,11 @@
 								<button
 									class="bulk-opt"
 									disabled={busy}
-									onclick={() => run(() => onSetStatus(s.id), close)}
+									onclick={() =>
+										run(async () => {
+											await onSetStatus(s.id);
+											if (s.category === 'completed') playSound('success');
+										}, close)}
 								>
 									<span
 										class="dot"
