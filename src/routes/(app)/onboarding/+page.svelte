@@ -73,6 +73,18 @@
 		box-shadow:
 			0 1px 2px color-mix(in srgb, var(--color-base-content) 6%, transparent),
 			0 8px 24px color-mix(in srgb, var(--color-base-content) 8%, transparent);
+		animation: drop-in 0.18s ease-out;
+	}
+
+	@keyframes drop-in {
+		from {
+			transform: translateY(-12px);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
 	}
 
 	.onboard-title {

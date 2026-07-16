@@ -36,6 +36,8 @@
 	--dur-fast: 100ms;
 	--dur: 150ms;
 	--dur-slow: 200ms;
+	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+	--ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
 	/* type */
 	--font-headline: 'Inter', system-ui, sans-serif;
@@ -240,14 +242,18 @@ code,
 	visibility: hidden;
 	transform: translateY(2px);
 	transition:
-		opacity var(--dur-fast, 0.12s) ease,
-		transform var(--dur-fast, 0.12s) ease;
+		opacity var(--dur-fast, 0.12s) var(--ease-out),
+		transform var(--dur-fast, 0.12s) var(--ease-out);
 }
 
 .app-tooltip--visible {
 	opacity: 1;
 	visibility: visible;
 	transform: translateY(0);
+}
+
+.app-tooltip--instant {
+	transition: none;
 }
 
 /* Pointer-based reorder (src/lib/sortable.ts): mouse + touch drag-to-reorder. */
@@ -298,7 +304,7 @@ code,
 	}
 }
 .stagger-in > * {
-	animation: staggerIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+	animation: staggerIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @supports (animation-delay: calc(sibling-index() * 1ms)) {
 	.stagger-in > * {
@@ -307,13 +313,13 @@ code,
 	}
 }
 
-/* Reduced motion: kill transitions */
+/* Reduced motion: drop movement, keep opacity/color feedback */
 @media (prefers-reduced-motion: reduce) {
 	*,
 	*::before,
 	*::after {
 		animation-duration: 0.01ms !important;
-		transition-duration: 0.01ms !important;
+		transition-property: opacity, color, background-color, border-color, box-shadow !important;
 	}
 }
 

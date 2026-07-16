@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { popover } from '$lib/transitions';
 	import { t } from '$lib/i18n';
 	import Icon from '$lib/components/Icon.svelte';
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
+	import { playSound } from '$lib/sound.svelte';
 
 	type Status = {
 		id: string;
@@ -61,7 +61,7 @@
 			{@render pill(current)}
 		</button>
 		{#if open}
-			<div class="status-pop" role="listbox" transition:popover>
+			<div class="status-pop" role="listbox">
 				{#each statuses as s (s.id)}
 					<form
 						method="POST"
@@ -73,7 +73,14 @@
 					>
 						<input type="hidden" name="id" value={taskId} />
 						<input type="hidden" name="statusId" value={s.id} />
-						<button class="status-opt" class:active={s.id === statusId} style="--c: {colorOf(s)}">
+						<button
+							class="status-opt"
+							class:active={s.id === statusId}
+							style="--c: {colorOf(s)}"
+							onclick={() => {
+								if (s.id !== statusId && s.category === 'completed') playSound('success');
+							}}
+						>
 							{#if s.icon}<EntityIcon value={s.icon} size={14} />{:else}<span
 									class="dot"
 									aria-hidden="true"
@@ -117,12 +124,17 @@
 		white-space: nowrap;
 		transition:
 			background var(--dur) ease,
-			border-color var(--dur) ease;
+			border-color var(--dur) ease,
+			transform 160ms var(--ease-out);
 	}
 
 	.status-pill:hover {
 		background: color-mix(in oklab, var(--c) 20%, transparent);
 		border-color: color-mix(in oklab, var(--c) 55%, transparent);
+	}
+
+	.status-pill:active:not(.readonly) {
+		transform: scale(0.97);
 	}
 
 	.status-pill.readonly {

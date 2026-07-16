@@ -203,6 +203,7 @@
 			0 1px 2px rgba(0, 0, 0, 0.06),
 			0 8px 24px rgba(0, 0, 0, 0.14);
 		overflow: hidden;
+		transform-origin: top right;
 	}
 	.bell-head {
 		display: flex;

@@ -11,7 +11,10 @@ export default [
 			'static/heroicons.svg',
 			'data/',
 			'tests/webwright/',
-			'coverage/'
+			'coverage/',
+			// vendored third-party dist JS (each .js has an adjacent .d.ts, so the TS
+			// project service excludes the .js from the program and can't lint it)
+			'src/lib/vendor/'
 		]
 	},
 	js.configs.recommended,

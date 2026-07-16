@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fade, scale } from 'svelte/transition';
+	import { DUR } from '$lib/transitions';
 	import { confirmState, answerConfirm } from '$lib/confirm.svelte';
 	import { t } from '$lib/i18n';
 
@@ -36,7 +37,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 		<div
 			class="cm-backdrop"
-			transition:fade={{ duration: 120 }}
+			transition:fade={{ duration: DUR }}
 			onclick={() => answerConfirm(false)}
 		>
 			<div
@@ -44,7 +45,7 @@
 				role="dialog"
 				aria-modal="true"
 				tabindex="-1"
-				transition:scale={{ duration: 120, start: 0.96 }}
+				transition:scale={{ duration: DUR, start: 0.96 }}
 				onclick={(e) => e.stopPropagation()}
 			>
 				<p class="cm-msg">{req.message}</p>

@@ -5,6 +5,8 @@
 	import { createPaneNav } from '$lib/paneNav.svelte';
 	import { tick } from 'svelte';
 	import { flip } from 'svelte/animate';
+	import { DUR_SLOW } from '$lib/transitions';
+	import { playSound } from '$lib/sound.svelte';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
@@ -153,6 +155,9 @@
 
 	let dragId = $state<string | null>(null);
 	let over = $state<{ lane: string; statusId: string; index: number } | null>(null);
+	let pendingMove = $state<{ id: string; lane: string; statusId: string; index: number } | null>(
+		null
+	);
 	let addingTo = $state<string | null>(null);
 	let collapsedLanes = $state<Record<string, boolean>>({}); // lane.key → collapsed
 	let addInput = $state<HTMLInputElement | null>(null);
@@ -174,8 +179,26 @@
 			.slice()
 			.sort((a, b) => a.position - b.position)
 	);
-	const cellTasks = (laneKey: string, statusId: string) =>
-		topTasks.filter((t) => t.statusId === statusId && inLane(t, laneKey));
+	const cellTasks = (laneKey: string, statusId: string) => {
+		let cell = topTasks.filter((t) => t.statusId === statusId && inLane(t, laneKey));
+		const pending = pendingMove;
+		if (pending) {
+			const moved = topTasks.find((t) => t.id === pending.id);
+			cell = cell.filter((t) => t.id !== pending.id);
+			// label lanes are multi-value and a cross-label-lane drag only changes
+			// status/position server-side, so the optimistic card stays in every lane it
+			// actually belongs to — keying on the drop lane would promise a move that reverts
+			const inThisLane =
+				groupBy === 'label' ? !!moved && inLane(moved, laneKey) : pending.lane === laneKey;
+			if (moved && inThisLane && pending.statusId === statusId)
+				cell.splice(Math.min(pending.index, cell.length), 0, moved);
+		}
+		return cell;
+	};
+	$effect(() => {
+		tasks;
+		pendingMove = null;
+	});
 	const laneTasks = (laneKey: string) => topTasks.filter((t) => inLane(t, laneKey));
 	const laneCount = (laneKey: string) => laneTasks(laneKey).length;
 	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
@@ -379,7 +402,11 @@
 		let idx = over.index;
 		const dragIdx = cell.findIndex((t) => t.id === id);
 		if (dragIdx !== -1 && dragIdx < idx) idx -= 1;
-		const before = without[idx]?.id ?? '';
+		let before = without[idx]?.id ?? '';
+		// an in-flight optimistic card isn't in its server column yet, so it can't be
+		// a beforeId anchor (the server would fall back to end-of-column) — anchor on
+		// the next settled card instead
+		if (pendingMove && before === pendingMove.id) before = without[idx + 1]?.id ?? '';
 
 		// no-op: same lane + same status + same slot
 		if (!laneChanged && !statusChanged) {
@@ -390,23 +417,33 @@
 			}
 		}
 
+		const move = { id, lane: over.lane, statusId: over.statusId, index: idx };
+		pendingMove = move;
+		if (statusChanged && statuses.find((s) => s.id === move.statusId)?.category === 'completed')
+			playSound('success');
 		reset();
 		// reassign the swimlane field first (milestone/assignee), then move/reorder.
 		// label lanes are multi-value — dragging across them changes status/position
 		// only (labels are toggled in the task pane), so skip the field patch.
-		if (laneChanged && (groupBy === 'milestone' || groupBy === 'assignee')) {
-			const field = groupBy === 'milestone' ? 'milestoneId' : 'assigneeId';
+		try {
+			if (laneChanged && (groupBy === 'milestone' || groupBy === 'assignee')) {
+				const field = groupBy === 'milestone' ? 'milestoneId' : 'assigneeId';
+				const fd = new FormData();
+				fd.set('id', id);
+				fd.set(field, move.lane === '_none' ? '' : move.lane);
+				await fetch(`${page.url.pathname}?/patchTask`, { method: 'POST', body: fd });
+			}
 			const fd = new FormData();
 			fd.set('id', id);
-			fd.set(field, over.lane === '_none' ? '' : over.lane);
-			await fetch(`${page.url.pathname}?/patchTask`, { method: 'POST', body: fd });
+			fd.set('statusId', move.statusId);
+			fd.set('beforeId', before);
+			await fetch(`${page.url.pathname}?/moveTask`, { method: 'POST', body: fd });
+			await invalidateAll();
+		} finally {
+			// clear only OUR move — a rapid re-drag of the same card replaces pendingMove
+			// with a new object, and the first drop's cleanup must not wipe it
+			if (pendingMove === move) pendingMove = null;
 		}
-		const fd = new FormData();
-		fd.set('id', id);
-		fd.set('statusId', over.statusId);
-		fd.set('beforeId', before);
-		await fetch(`${page.url.pathname}?/moveTask`, { method: 'POST', body: fd });
-		await invalidateAll();
 	}
 
 	function reset() {
@@ -432,12 +469,13 @@
 			<div class="lane-head">
 				<button
 					class="lane-toggle"
+					class:open={!collapsedLanes[lane.key]}
 					type="button"
 					aria-expanded={!collapsedLanes[lane.key]}
 					aria-label={$t('Toggle group')}
 					onclick={() => (collapsedLanes[lane.key] = !collapsedLanes[lane.key])}
 				>
-					<Icon name={collapsedLanes[lane.key] ? 'nav-arrow-right' : 'nav-arrow-down'} size={14} />
+					<Icon name="nav-arrow-right" size={14} />
 				</button>
 				<span class="lane-name">{lane.name}</span>
 				<span class="lane-count">{laneCount(lane.key)}</span>
@@ -485,7 +523,7 @@
 						<div class="col-body">
 							{#each col as t, i (t.id)}
 								{@const editable = canEditTask(t)}
-								<div class="bcard-slot" data-index={i} animate:flip={{ duration: 220 }}>
+								<div class="bcard-slot" data-index={i} animate:flip={{ duration: DUR_SLOW }}>
 									{#if over?.lane === lane.key && over?.statusId === s.id && over.index === i && dragId !== t.id}
 										<div class="drop-line"></div>
 									{/if}
@@ -715,7 +753,12 @@
 		border-radius: var(--radius-field, 0.25rem);
 		transition:
 			color var(--dur-fast) ease,
-			background var(--dur-fast) ease;
+			background var(--dur-fast) ease,
+			transform var(--dur-fast) var(--ease-out);
+	}
+
+	.lane-toggle.open {
+		transform: rotate(90deg);
 	}
 
 	.lane-toggle:hover {

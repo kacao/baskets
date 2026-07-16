@@ -47,6 +47,40 @@ close the test blind spot, index the hot columns, fix the board-drag recurrence 
 bulk N+1, and shut the two cross-origin/cross-project security gaps. Add **004** in the same pass
 for the CI gate (it depends on 001).
 
+## Animation plans (021-031, from the improve-animations audit @ e3e25a4)
+
+| #   | Plan                                                                                   | Severity | Status |
+| --- | -------------------------------------------------------------------------------------- | -------- | ------ |
+| 021 | [Easing tokens + motion hygiene](021-motion-foundation-tokens.md)                      | MEDIUM   | DONE   |
+| 022 | [Remove constant-frequency animations](022-frequency-discipline-deletions.md)          | HIGH     | DONE   |
+| 023 | [Menu entrance cohesion](023-menu-entrance-cohesion.md)                                | MEDIUM   | DONE   |
+| 024 | [Popover scale-from-trigger](024-popover-scale-from-trigger.md)                        | LOW      | DONE   |
+| 025 | [Board drag release settle](025-board-drag-release-settle.md)                          | MEDIUM   | DONE   |
+| 026 | [sortable.ts indicator skip](026-sortable-indicator-skip.md)                           | LOW      | DONE   |
+| 027 | [Tooltip warm window](027-tooltip-warm-window.md)                                      | MEDIUM   | DONE   |
+| 028 | [Progress fills → scaleX](028-progress-fills-scalex.md)                                | LOW      | DONE   |
+| 029 | [Toaster bidirectional transition](029-toaster-bidirectional.md)                       | LOW      | DONE   |
+| 030 | [Chevron rotate](030-chevron-rotate.md)                                                | LOW      | DONE   |
+| 031 | [Additive polish (bulk bar / onboarding / done-color / press)](031-additive-polish.md) | LOW      | DONE   |
+
+**Execution order**: 021 → 022 → 023 → 024, then 025-031 in any order (run sequentially — several
+share files). Hard deps: 023/024/030/031 reference the `--ease-*` tokens and `DUR_*` constants 021
+introduces (each has a stated fallback if run standalone); 024 assumes 022 already stripped the
+Popover/StatusSelect transitions; 023 step 5's import cleanup assumes 022 ran first.
+Rejected during planning (do not re-audit): sortable release snap-back settle (manual DOM
+reordering inside Svelte-keyed lists — fragile; documented in 026); ConfirmModal "asymmetric press
+timing" (code already matches the catalog's press target); popover flip-direction fix (moot once
+022 removes the only flipping surface's transition); pageFade re-litigating (documented deliberate).
+All 11 executed + review-fixed on 2026-07-15. Post-execution review fixes folded in: tooltip
+click-cool (pointerdown resets the warm window), BoardView pendingMove label-lane correctness +
+object-identity clear, mobile `.filter-pop` transform-origin flip, TableView sub-row chevron
+rotate, BulkActionBar `fly|global` (Svelte 5 transitions are local by default and the page mounts
+the component conditionally). **Follow-up (not planned)**: the task-pane collapsible chevrons still
+glyph-swap (TaskPanel.svelte Description/Sub-tasks/cf-task heads, CustomFieldValue.svelte
+multi-field head) — their toggles contain text labels, so the rotate needs an icon-scoped wrapper,
+unlike the icon-only view toggles. Also noted during execution (fixed): a pre-existing BoardView
+bug — `onDrop` read `over` after `reset()` nulled it, so board drops never fired `?/moveTask`.
+
 ## Dependency notes
 
 - **004 → 001** (hard): CI must not run the integration suite while it still passes green with no

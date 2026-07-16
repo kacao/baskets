@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { fade, slide } from 'svelte/transition';
+	import { popover } from '$lib/transitions';
 	import { authClient } from '$lib/auth-client';
 	import Toaster from '$lib/components/Toaster.svelte';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
@@ -10,6 +10,7 @@
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
 	import { t } from '$lib/i18n';
 	import { tooltip } from '$lib/tooltip';
+	import { initSound, setSoundEnabled, soundOn } from '$lib/sound.svelte';
 
 	let { data, children } = $props();
 	let menuOpen = $state(false);
@@ -24,6 +25,8 @@
 	let theme = $state<'light' | 'dark'>(data.theme === 'dark' ? 'dark' : 'light');
 	// svelte-ignore state_referenced_locally
 	let highContrast = $state(data.contrast === 'high');
+	// svelte-ignore state_referenced_locally
+	initSound(data.sound === true);
 
 	function toggleTheme() {
 		theme = theme === 'dark' ? 'light' : 'dark';
@@ -37,6 +40,10 @@
 		document.cookie = highContrast
 			? 'contrast=high; path=/; max-age=31536000; samesite=lax'
 			: 'contrast=; path=/; max-age=0; samesite=lax';
+	}
+
+	function toggleSound() {
+		setSoundEnabled(!soundOn());
 	}
 
 	const currentWorkspace = $derived(
@@ -147,7 +154,7 @@
 						>
 					</button>
 					{#if orgMenuOpen}
-						<div class="pop-menu" transition:fade={{ duration: 100 }}>
+						<div class="pop-menu" transition:popover>
 							{#each data.orgs as o (o.id)}
 								<button
 									class="pop-item"
@@ -198,7 +205,7 @@
 							>
 						</button>
 						{#if wsMenuOpen}
-							<div class="ws-menu" transition:fade={{ duration: 100 }}>
+							<div class="ws-menu" transition:popover>
 								{#each data.workspaces as w (w.id)}
 									<div class="ws-row" class:active={w.id === currentWorkspace?.id}>
 										<button class="ws-item" onclick={() => switchWorkspace(w.id)}>
@@ -266,7 +273,7 @@
 							</a>
 						</div>
 						{#if expanded[p.id]}
-							<div class="proj-sub" transition:slide={{ duration: 150 }}>
+							<div class="proj-sub">
 								{#each projectNav as item (item.label)}
 									{@const href = item.to(p.id)}
 									<a
@@ -365,7 +372,7 @@
 						<Icon name="half-moon" size={16} />
 					</button>
 					{#if apprMenuOpen}
-						<div class="appr-menu" role="menu" transition:slide={{ duration: 120 }}>
+						<div class="appr-menu" role="menu" transition:popover>
 							<button
 								class="appr-item"
 								role="menuitemcheckbox"
@@ -389,6 +396,18 @@
 								>
 								<Icon name="color-filter" size={14} />
 								<span class="appr-label">{$t('High contrast')}</span>
+							</button>
+							<button
+								class="appr-item"
+								role="menuitemcheckbox"
+								aria-checked={soundOn()}
+								onclick={toggleSound}
+							>
+								<span class="appr-check"
+									>{#if soundOn()}<Icon name="check" size={14} />{/if}</span
+								>
+								<Icon name="speaker-wave" size={14} />
+								<span class="appr-label">{$t('Interface sounds')}</span>
 							</button>
 						</div>
 					{/if}
@@ -499,6 +518,7 @@
 		display: flex;
 		flex-direction: column;
 		padding: 2px;
+		transform-origin: top left;
 	}
 
 	.pop-item {
@@ -628,6 +648,7 @@
 		box-shadow: var(--shadow);
 		display: flex;
 		flex-direction: column;
+		transform-origin: top left;
 	}
 
 	.ws-item {
@@ -670,6 +691,7 @@
 		display: flex;
 		flex-direction: column;
 		padding: 4px;
+		transform-origin: top right;
 	}
 
 	.appr-item {

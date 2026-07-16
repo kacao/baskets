@@ -381,10 +381,12 @@
 	}
 
 	/* the filter popover is left-anchored under a right-side icon button —
-	   flip it to the right edge and cap its width so it stays on-screen. */
+	   flip it to the right edge (and its scale origin with it) and cap its width
+	   so it stays on-screen. */
 	.filter-pop {
 		left: auto;
 		right: 0;
+		transform-origin: top right;
 		max-width: calc(100vw - 24px);
 	}
 

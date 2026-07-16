@@ -10,8 +10,7 @@
 			class="toast"
 			type="button"
 			animate:flip={{ duration: 150 }}
-			in:fly={{ y: 12, duration: 150 }}
-			out:fly={{ y: 12, duration: 150 }}
+			transition:fly={{ y: 12, duration: 150 }}
 			onclick={() => dismiss(t.id)}
 		>
 			{t.message}
