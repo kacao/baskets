@@ -2286,6 +2286,7 @@
 		cursor: pointer;
 		padding: 0;
 		overflow-wrap: anywhere;
+		transition: color var(--dur) ease;
 	}
 
 	.sub-title-btn:hover {

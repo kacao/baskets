@@ -939,7 +939,7 @@
 					+
 				</button>
 				{#if addingView}
-					<div class="add-view-menu" transition:slide={{ duration: 150 }}>
+					<div class="add-view-menu" transition:popover>
 						{#each VIEW_TYPES as vt (vt)}
 							<form
 								method="POST"
@@ -2119,6 +2119,7 @@
 			0 1px 2px rgba(0, 0, 0, 0.04),
 			0 8px 24px rgba(0, 0, 0, 0.12);
 		min-width: 160px;
+		transform-origin: top left;
 	}
 
 	.add-view-item {

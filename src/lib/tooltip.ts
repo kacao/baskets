@@ -10,6 +10,8 @@ type TooltipOptions = string | { text: string; placement?: Placement; delay?: nu
 
 let tipEl: HTMLDivElement | null = null;
 let showTimer: ReturnType<typeof setTimeout> | null = null;
+let lastHiddenAt = 0;
+const WARM_WINDOW = 300;
 
 function ensureEl(): HTMLDivElement {
 	if (tipEl) return tipEl;
@@ -45,7 +47,9 @@ function position(node: HTMLElement, placement: Placement) {
 function hideTip() {
 	if (showTimer) clearTimeout(showTimer);
 	showTimer = null;
+	if (tipEl?.classList.contains('app-tooltip--visible')) lastHiddenAt = Date.now();
 	tipEl?.classList.remove('app-tooltip--visible');
+	tipEl?.classList.remove('app-tooltip--instant');
 	window.removeEventListener('scroll', hideTip, true);
 }
 
@@ -65,13 +69,17 @@ export function tooltip(node: HTMLElement, options: TooltipOptions | null | unde
 	const show = () => {
 		if (!opts.text) return;
 		if (showTimer) clearTimeout(showTimer);
-		showTimer = setTimeout(() => {
+		const warm = Date.now() - lastHiddenAt < WARM_WINDOW;
+		const reveal = () => {
 			const el = ensureEl();
 			el.textContent = opts.text;
 			position(node, opts.placement);
+			el.classList.toggle('app-tooltip--instant', warm);
 			el.classList.add('app-tooltip--visible');
 			window.addEventListener('scroll', hideTip, true);
-		}, opts.delay);
+		};
+		if (warm) reveal();
+		else showTimer = setTimeout(reveal, opts.delay);
 	};
 
 	const onEnter = (e: PointerEvent) => {
@@ -82,10 +90,16 @@ export function tooltip(node: HTMLElement, options: TooltipOptions | null | unde
 	const onKey = (e: KeyboardEvent) => {
 		if (e.key === 'Escape') hideTip();
 	};
+	// a click is intent to act, not hover — cool the warm window so the focus event
+	// the browser fires right after mousedown can't instantly re-summon the tooltip
+	const onDown = () => {
+		hideTip();
+		lastHiddenAt = 0;
+	};
 
 	node.addEventListener('pointerenter', onEnter);
 	node.addEventListener('pointerleave', hideTip);
-	node.addEventListener('pointerdown', hideTip);
+	node.addEventListener('pointerdown', onDown);
 	node.addEventListener('focus', onFocus);
 	node.addEventListener('blur', hideTip);
 	node.addEventListener('keydown', onKey);
@@ -102,7 +116,7 @@ export function tooltip(node: HTMLElement, options: TooltipOptions | null | unde
 		destroy() {
 			node.removeEventListener('pointerenter', onEnter);
 			node.removeEventListener('pointerleave', hideTip);
-			node.removeEventListener('pointerdown', hideTip);
+			node.removeEventListener('pointerdown', onDown);
 			node.removeEventListener('focus', onFocus);
 			node.removeEventListener('blur', hideTip);
 			node.removeEventListener('keydown', onKey);

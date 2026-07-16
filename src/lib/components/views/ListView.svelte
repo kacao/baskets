@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { createPaneNav } from '$lib/paneNav.svelte';
-	import { slide } from 'svelte/transition';
 	import StatusSelect from '$lib/components/StatusSelect.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
@@ -169,12 +168,13 @@
 			<div class="list-group-head">
 				<button
 					class="chev"
+					class:open={!collapsed[grp.key]}
 					type="button"
 					aria-expanded={!collapsed[grp.key]}
 					aria-label={$i18n('Toggle group')}
 					onclick={() => (collapsed[grp.key] = !collapsed[grp.key])}
 				>
-					<Icon name={collapsed[grp.key] ? 'nav-arrow-right' : 'nav-arrow-down'} size={14} />
+					<Icon name="nav-arrow-right" size={14} />
 				</button>
 				<span class="group-title">{grp.title}</span>
 				<span class="group-count">{grp.tasks.length}</span>
@@ -242,15 +242,12 @@
 			{#if subs.length > 0}
 				<button
 					class="chev"
+					class:open={expanded[t.id] ?? false}
 					aria-expanded={expanded[t.id] ?? false}
 					aria-label={$i18n('Toggle sub-tasks')}
 					onclick={() => (expanded[t.id] = !expanded[t.id])}
 				>
-					{#if expanded[t.id]}
-						<Icon name="nav-arrow-down" size={12} />
-					{:else}
-						<Icon name="nav-arrow-right" size={12} />
-					{/if}
+					<Icon name="nav-arrow-right" size={12} />
 				</button>
 			{/if}
 			{#if t.order !== null}
@@ -293,7 +290,7 @@
 		</div>
 
 		{#if expanded[t.id] && subs.length > 0}
-			<ul class="subs" transition:slide={{ duration: 120 }}>
+			<ul class="subs">
 				{#each subs as s (s.id)}
 					<li class="row sub" class:is-done={cat(s.statusId) === 'completed'}>
 						<span class="chev chev--blank"></span>
@@ -382,6 +379,10 @@
 		background: var(--color-surface-muted);
 	}
 
+	.title-text {
+		transition: color var(--dur) ease;
+	}
+
 	.row.is-done .title-text {
 		color: var(--color-muted);
 	}
@@ -409,7 +410,13 @@
 		cursor: pointer;
 		padding: 0;
 		text-align: center;
-		transition: color var(--dur-fast) ease;
+		transition:
+			color var(--dur-fast) ease,
+			transform var(--dur-fast) var(--ease-out);
+	}
+
+	.chev.open {
+		transform: rotate(90deg);
 	}
 
 	.chev:not(.chev--blank)::before {

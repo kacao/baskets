@@ -124,7 +124,11 @@
 
 			<div class="ms-progress" use:tooltip={`${p.done}/${p.total} ${$t('done')}`}>
 				<div class="ms-bar">
-					<div class="ms-bar-fill" class:full={p.pct === 100} style={`width:${p.pct}%`}></div>
+					<div
+						class="ms-bar-fill"
+						class:full={p.pct === 100}
+						style={`transform: scaleX(${p.pct / 100})`}
+					></div>
 				</div>
 				<span class="ms-prog-text">{p.done}/{p.total}</span>
 			</div>
@@ -403,8 +407,10 @@
 	}
 	.ms-bar-fill {
 		height: 100%;
+		width: 100%;
+		transform-origin: left;
 		background: var(--color-primary, var(--color-base-content));
-		transition: width var(--dur) ease;
+		transition: transform var(--dur) ease;
 	}
 	.ms-bar-fill.full {
 		background: var(--color-success, #16a34a);

@@ -65,7 +65,7 @@
 			<div class="bar">
 				<div
 					class="bar-fill"
-					style="width: {top.length > 0 ? (row.count / top.length) * 100 : 0}%"
+					style="transform: scaleX({top.length > 0 ? row.count / top.length : 0})"
 				></div>
 			</div>
 			<span class="bar-count mono">{row.count}</span>
@@ -86,7 +86,7 @@
 			<div class="bar">
 				<div
 					class="bar-fill"
-					style="width: {row.total > 0 ? (row.done / row.total) * 100 : 0}%"
+					style="transform: scaleX({row.total > 0 ? row.done / row.total : 0})"
 				></div>
 			</div>
 			<span class="bar-count mono">{row.done}/{row.total}</span>
@@ -150,12 +150,15 @@
 		flex: 1;
 		height: 4px;
 		background: var(--color-surface-muted);
+		overflow: hidden;
 	}
 
 	.bar-fill {
 		height: 100%;
+		width: 100%;
+		transform-origin: left;
 		background: var(--color-fg);
-		transition: width 0.2s ease;
+		transition: transform var(--dur-slow) ease;
 	}
 
 	.bar-count {

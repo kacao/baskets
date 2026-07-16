@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { popover } from '$lib/transitions';
 
 	// A pill button that opens a floating popover panel on click. Closes on
 	// outside-click (and re-click). The `panel` snippet receives a `close()` so
@@ -101,7 +100,6 @@
 			role="dialog"
 			bind:this={popEl}
 			use:floating
-			transition:popover
 		>
 			{@render panel(close)}
 		</div>
@@ -131,12 +129,17 @@
 		white-space: nowrap;
 		transition:
 			border-color var(--dur-fast) ease,
-			background var(--dur-fast) ease;
+			background var(--dur-fast) ease,
+			transform 160ms var(--ease-out);
 	}
 
 	.pill:hover {
 		border-color: var(--color-fg);
 		background: var(--color-surface-muted);
+	}
+
+	.pill:active {
+		transform: scale(0.97);
 	}
 
 	/* portaled to <body> + positioned by the `floating` action (top/left set inline) */

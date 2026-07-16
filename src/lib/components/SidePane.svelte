@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { onMount, onDestroy } from 'svelte';
-	import { fly } from 'svelte/transition';
 	import { openPane, closePane } from '$lib/sidePaneRegistry';
 	import { confirmState } from '$lib/confirm.svelte';
 	import { portal } from '$lib/portal';
@@ -117,7 +116,6 @@
 	class:dragging
 	style="--pane-w: {w}px"
 	use:portal
-	transition:fly={{ x: 16, duration: 150 }}
 	aria-label={ariaLabel ?? title}
 >
 	<!-- svelte-ignore a11y_no_static_element_interactions -->

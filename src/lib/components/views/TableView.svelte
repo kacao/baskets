@@ -505,15 +505,13 @@
 								<td class="col-select">
 									<button
 										class="group-toggle"
+										class:open={!collapsed[g.key]}
 										type="button"
 										aria-expanded={!collapsed[g.key]}
 										aria-label={$i18n('Toggle group')}
 										onclick={() => (collapsed[g.key] = !collapsed[g.key])}
 									>
-										<Icon
-											name={collapsed[g.key] ? 'nav-arrow-right' : 'nav-arrow-down'}
-											size={14}
-										/>
+										<Icon name="nav-arrow-right" size={14} />
 									</button>
 								</td>
 								<td colspan={colCount - 1}>
@@ -587,14 +585,12 @@
 						{#if subs.length > 0}
 							<button
 								class="chev"
+								class:open={expanded[t.id] ?? false}
 								onclick={() => (expanded[t.id] = !expanded[t.id])}
 								aria-expanded={expanded[t.id] ?? false}
 								aria-label={$i18n('Toggle sub-tasks')}
 							>
-								{#if expanded[t.id]}<Icon name="nav-arrow-down" size={12} />{:else}<Icon
-										name="nav-arrow-right"
-										size={12}
-									/>{/if}
+								<Icon name="nav-arrow-right" size={12} />
 							</button>
 						{:else}
 							<span class="chev-spacer" aria-hidden="true"></span>
@@ -888,7 +884,12 @@
 		border-radius: var(--radius-field, 0.25rem);
 		transition:
 			color var(--dur-fast) ease,
-			background var(--dur-fast) ease;
+			background var(--dur-fast) ease,
+			transform var(--dur-fast) var(--ease-out);
+	}
+
+	.group-toggle.open {
+		transform: rotate(90deg);
 	}
 
 	.group-toggle:hover {
@@ -1134,6 +1135,9 @@
 	}
 
 	.chev {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		border: none;
 		background: none;
 		color: var(--color-muted);
@@ -1142,6 +1146,11 @@
 		cursor: pointer;
 		padding: 2px;
 		flex: 0 0 auto;
+		transition: transform var(--dur-fast) var(--ease-out);
+	}
+
+	.chev.open {
+		transform: rotate(90deg);
 	}
 
 	.chev:hover {

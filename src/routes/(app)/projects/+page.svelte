@@ -85,7 +85,7 @@
 				</div>
 				{#if p.taskCount > 0}
 					<div class="progress" aria-hidden="true">
-						<div class="progress-fill" style="width: {(p.doneCount / p.taskCount) * 100}%"></div>
+						<div class="progress-fill" style="transform: scaleX({p.doneCount / p.taskCount})"></div>
 					</div>
 				{/if}
 			</a>
@@ -140,12 +140,15 @@
 		margin-top: var(--sp-2);
 		height: 4px;
 		background: var(--color-surface-muted);
+		overflow: hidden;
 	}
 
 	.progress-fill {
 		height: 100%;
+		width: 100%;
+		transform-origin: left;
 		background: var(--color-fg);
-		transition: width var(--dur-slow) ease;
+		transition: transform var(--dur-slow) ease;
 	}
 
 	.create-btn {
