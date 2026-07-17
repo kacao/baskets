@@ -1,12 +1,13 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { deserialize, enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { createPaneNav } from '$lib/paneNav.svelte';
 	import { tick } from 'svelte';
 	import { flip } from 'svelte/animate';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { DUR_SLOW } from '$lib/transitions';
-	import { playSound } from '$lib/sound.svelte';
+	import { playSound, shouldChimeCompletion } from '$lib/sound.svelte';
 	import PriorityIcon from '$lib/components/PriorityIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import TaskPanel from '$lib/components/TaskPanel.svelte';
@@ -153,11 +154,13 @@
 					? !laneField(t)
 					: laneField(t) === laneKey;
 
+	type PendingMove = { id: string; lane: string; statusId: string; index: number };
+
 	let dragId = $state<string | null>(null);
 	let over = $state<{ lane: string; statusId: string; index: number } | null>(null);
-	let pendingMove = $state<{ id: string; lane: string; statusId: string; index: number } | null>(
-		null
-	);
+	// keyed by task id so concurrent in-flight drags don't clobber each other's
+	// optimistic placement; each entry is removed by its own request's finally
+	const pendingMoves = new SvelteMap<string, PendingMove>();
 	let addingTo = $state<string | null>(null);
 	let collapsedLanes = $state<Record<string, boolean>>({}); // lane.key → collapsed
 	let addInput = $state<HTMLInputElement | null>(null);
@@ -181,8 +184,7 @@
 	);
 	const cellTasks = (laneKey: string, statusId: string) => {
 		let cell = topTasks.filter((t) => t.statusId === statusId && inLane(t, laneKey));
-		const pending = pendingMove;
-		if (pending) {
+		for (const pending of pendingMoves.values()) {
 			const moved = topTasks.find((t) => t.id === pending.id);
 			cell = cell.filter((t) => t.id !== pending.id);
 			// label lanes are multi-value and a cross-label-lane drag only changes
@@ -195,10 +197,6 @@
 		}
 		return cell;
 	};
-	$effect(() => {
-		tasks;
-		pendingMove = null;
-	});
 	const laneTasks = (laneKey: string) => topTasks.filter((t) => inLane(t, laneKey));
 	const laneCount = (laneKey: string) => laneTasks(laneKey).length;
 	// Aggregations (config.aggregations): number field ids summed per group, shown as "(x)".
@@ -402,11 +400,12 @@
 		let idx = over.index;
 		const dragIdx = cell.findIndex((t) => t.id === id);
 		if (dragIdx !== -1 && dragIdx < idx) idx -= 1;
-		let before = without[idx]?.id ?? '';
+		let bi = idx;
+		let before = without[bi]?.id ?? '';
 		// an in-flight optimistic card isn't in its server column yet, so it can't be
 		// a beforeId anchor (the server would fall back to end-of-column) — anchor on
 		// the next settled card instead
-		if (pendingMove && before === pendingMove.id) before = without[idx + 1]?.id ?? '';
+		while (before && pendingMoves.has(before)) before = without[++bi]?.id ?? '';
 
 		// no-op: same lane + same status + same slot
 		if (!laneChanged && !statusChanged) {
@@ -417,10 +416,14 @@
 			}
 		}
 
-		const move = { id, lane: over.lane, statusId: over.statusId, index: idx };
-		pendingMove = move;
-		if (statusChanged && statuses.find((s) => s.id === move.statusId)?.category === 'completed')
-			playSound('success');
+		const move: PendingMove = { id, lane: over.lane, statusId: over.statusId, index: idx };
+		pendingMoves.set(id, move);
+		const chime =
+			statusChanged &&
+			shouldChimeCompletion(
+				statuses.find((s) => s.id === dragged.statusId),
+				statuses.find((s) => s.id === move.statusId)
+			);
 		reset();
 		// reassign the swimlane field first (milestone/assignee), then move/reorder.
 		// label lanes are multi-value — dragging across them changes status/position
@@ -437,12 +440,16 @@
 			fd.set('id', id);
 			fd.set('statusId', move.statusId);
 			fd.set('beforeId', before);
-			await fetch(`${page.url.pathname}?/moveTask`, { method: 'POST', body: fd });
+			const res = await fetch(`${page.url.pathname}?/moveTask`, { method: 'POST', body: fd });
+			// the cue only plays once the server confirms the status change — fail()
+			// comes back as HTTP 200 + {type:'failure'}, so res.ok alone can't tell
+			const result = deserialize(await res.text());
+			if (chime && result.type === 'success') playSound('success');
 			await invalidateAll();
 		} finally {
-			// clear only OUR move — a rapid re-drag of the same card replaces pendingMove
+			// clear only OUR move — a rapid re-drag of the same card replaces the entry
 			// with a new object, and the first drop's cleanup must not wipe it
-			if (pendingMove === move) pendingMove = null;
+			if (pendingMoves.get(id) === move) pendingMoves.delete(id);
 		}
 	}
 

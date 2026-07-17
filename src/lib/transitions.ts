@@ -1,7 +1,6 @@
 import { cubicOut } from 'svelte/easing';
 import type { TransitionConfig } from 'svelte/transition';
 
-export const DUR_FAST = 100;
 export const DUR = 150;
 export const DUR_SLOW = 200;
 

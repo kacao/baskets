@@ -5,7 +5,7 @@
 	import Popover from '$lib/components/Popover.svelte';
 	import LabelChip from '$lib/components/LabelChip.svelte';
 	import { confirmDialog } from '$lib/confirm.svelte';
-	import { playSound } from '$lib/sound.svelte';
+	import { playSound, shouldChimeCompletion } from '$lib/sound.svelte';
 
 	type Status = { id: string; name: string; category?: string; color?: string | null };
 	type Named = { id: string; name: string };
@@ -18,6 +18,7 @@
 		milestones = [],
 		labels = [],
 		canEdit = true,
+		selectedStatusIds,
 		onSetStatus,
 		onSetAssignee,
 		onSetMilestone,
@@ -33,15 +34,18 @@
 		milestones?: Named[];
 		labels?: Label[];
 		canEdit?: boolean;
-		onSetStatus: (statusId: string) => void | Promise<void>;
-		onSetAssignee: (assigneeId: string | null) => void | Promise<void>;
-		onSetMilestone: (milestoneId: string | null) => void | Promise<void>;
-		onSetPriority: (priority: string) => void | Promise<void>;
+		/** current statusIds of the selected tasks — gates the completion cue */
+		selectedStatusIds?: string[];
+		/** action callbacks may return false to signal failure (suppresses the completion cue) */
+		onSetStatus: (statusId: string) => void | boolean | Promise<void | boolean>;
+		onSetAssignee: (assigneeId: string | null) => void | boolean | Promise<void | boolean>;
+		onSetMilestone: (milestoneId: string | null) => void | boolean | Promise<void | boolean>;
+		onSetPriority: (priority: string) => void | boolean | Promise<void | boolean>;
 		/** true when ALL selected tasks already carry this label */
 		labelOn?: (labelId: string) => boolean;
 		/** add/remove a label across the whole selection (multi-value toggle) */
-		onToggleLabel?: (labelId: string, add: boolean) => void | Promise<void>;
-		onDelete: () => void | Promise<void>;
+		onToggleLabel?: (labelId: string, add: boolean) => void | boolean | Promise<void | boolean>;
+		onDelete: () => void | boolean | Promise<void | boolean>;
 		onClear: () => void;
 	} = $props();
 
@@ -49,7 +53,7 @@
 
 	let busy = $state(false);
 
-	async function run(fn: () => void | Promise<void>, close?: () => void) {
+	async function run(fn: () => void | boolean | Promise<void | boolean>, close?: () => void) {
 		if (busy) return;
 		busy = true;
 		try {
@@ -95,8 +99,17 @@
 									disabled={busy}
 									onclick={() =>
 										run(async () => {
-											await onSetStatus(s.id);
-											if (s.category === 'completed') playSound('success');
+											// unknown selection state (prop omitted) = chime on any done pick
+											const chime = selectedStatusIds
+												? selectedStatusIds.some((sid) =>
+														shouldChimeCompletion(
+															statuses.find((x) => x.id === sid),
+															s
+														)
+													)
+												: shouldChimeCompletion(undefined, s);
+											const ok = await onSetStatus(s.id);
+											if (chime && ok !== false) playSound('success');
 										}, close)}
 								>
 									<span

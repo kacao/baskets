@@ -3,7 +3,7 @@
 	import { t } from '$lib/i18n';
 	import Icon from '$lib/components/Icon.svelte';
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
-	import { playSound } from '$lib/sound.svelte';
+	import { playSound, shouldChimeCompletion } from '$lib/sound.svelte';
 
 	type Status = {
 		id: string;
@@ -68,19 +68,17 @@
 						action="?/setStatus"
 						use:enhance={() => {
 							open = false;
-							return async ({ update }) => update();
+							// evaluated pre-submit; the cue only plays once the server confirms
+							const chime = shouldChimeCompletion(current, s);
+							return async ({ result, update }) => {
+								await update();
+								if (chime && result.type === 'success') playSound('success');
+							};
 						}}
 					>
 						<input type="hidden" name="id" value={taskId} />
 						<input type="hidden" name="statusId" value={s.id} />
-						<button
-							class="status-opt"
-							class:active={s.id === statusId}
-							style="--c: {colorOf(s)}"
-							onclick={() => {
-								if (s.id !== statusId && s.category === 'completed') playSound('success');
-							}}
-						>
+						<button class="status-opt" class:active={s.id === statusId} style="--c: {colorOf(s)}">
 							{#if s.icon}<EntityIcon value={s.icon} size={14} />{:else}<span
 									class="dot"
 									aria-hidden="true"
