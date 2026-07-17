@@ -8,5 +8,5 @@ Interaction sounds synthesized via the Web Audio API. MIT © Daniel Belyi.
   install scripts, zero dependencies). Vendored instead of npm-installed because the
   package was younger than the local `min-release-age=7` npm supply-chain policy (ADR-063).
 - To switch to the npm dependency later: `npm install cuelume`, change the import in
-  `src/lib/sound.ts` from `$lib/vendor/cuelume/index.js` to `cuelume`, delete this folder.
+  `src/lib/sound.svelte.ts` from `$lib/vendor/cuelume/index.js` to `cuelume`, delete this folder.
 - Do not edit these files by hand — replace wholesale from a newer audited tarball.

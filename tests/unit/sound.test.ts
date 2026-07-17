@@ -6,7 +6,13 @@ vi.mock('$lib/vendor/cuelume/index.js', () => ({
 }));
 
 import { play, setEnabled } from '$lib/vendor/cuelume/index.js';
-import { initSound, playSound, setSoundEnabled, soundOn } from '$lib/sound.svelte';
+import {
+	initSound,
+	playSound,
+	setSoundEnabled,
+	shouldChimeCompletion,
+	soundOn
+} from '$lib/sound.svelte';
 
 beforeEach(() => {
 	vi.mocked(play).mockClear();
@@ -45,5 +51,33 @@ describe('sound preference wrapper', () => {
 	it('playSound forwards to the engine (which gates on enabled itself)', () => {
 		playSound('success');
 		expect(play).toHaveBeenCalledWith('success');
+	});
+});
+
+describe('shouldChimeCompletion', () => {
+	const done = { category: 'completed' };
+	const doneAlt = { category: 'completed' };
+	const open = { category: 'in-progress' };
+
+	it('chimes when a not-done status lands in the done bucket', () => {
+		expect(shouldChimeCompletion(open, done)).toBe(true);
+	});
+
+	it('chimes when the previous status is unknown', () => {
+		expect(shouldChimeCompletion(undefined, done)).toBe(true);
+		expect(shouldChimeCompletion(null, done)).toBe(true);
+	});
+
+	it('stays silent when the target status is not in the done bucket', () => {
+		expect(shouldChimeCompletion(open, { category: 'planned' })).toBe(false);
+		expect(shouldChimeCompletion(open, undefined)).toBe(false);
+	});
+
+	it('stays silent re-picking the same done status', () => {
+		expect(shouldChimeCompletion(done, done)).toBe(false);
+	});
+
+	it('stays silent moving between two done-category statuses', () => {
+		expect(shouldChimeCompletion(done, doneAlt)).toBe(false);
 	});
 });

@@ -181,10 +181,11 @@
 		const result = deserialize(await res.text());
 		if (result.type === 'failure') {
 			toast($t(String(result.data?.message ?? 'Bulk action failed')));
-			return;
+			return false;
 		}
 		await applyAction(result);
 		await invalidateAll();
+		return true;
 	}
 
 	// Template picker (BASDEV-8)
@@ -1650,6 +1651,7 @@
 			milestones={data.milestones}
 			labels={projectLabels}
 			canEdit={canEditActiveView}
+			selectedStatusIds={data.tasks.filter((t) => selection.has(t.id)).map((t) => t.statusId)}
 			onSetStatus={(statusId) => bulkSubmit('bulkPatchTasks', { statusId })}
 			onSetAssignee={(assigneeId) => bulkSubmit('bulkPatchTasks', { assigneeId: assigneeId ?? '' })}
 			onSetMilestone={(milestoneId) =>

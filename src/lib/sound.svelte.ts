@@ -9,8 +9,21 @@
 // reactive state backs BOTH toggle surfaces so neither ever shows a stale value.
 import { play, setEnabled } from '$lib/vendor/cuelume/index.js';
 import type { SoundName } from '$lib/vendor/cuelume/index.js';
+import { DONE_CATEGORY } from '$lib/statuses';
 
 export type { SoundName };
+
+/** True only for a genuine completion transition: the task landed in the done
+ *  bucket FROM a not-done status. Same-status clicks and completed→completed
+ *  moves (multiple statuses can share the category) stay silent. The one
+ *  predicate behind every `success` cue (StatusSelect, BoardView drag,
+ *  BulkActionBar) so the semantics can't drift between call sites. */
+export function shouldChimeCompletion(
+	prev: { category?: string | null } | null | undefined,
+	next: { category?: string | null } | null | undefined
+): boolean {
+	return !!next && next.category === DONE_CATEGORY && prev?.category !== DONE_CATEGORY;
+}
 
 // browser-only writes: a module-level $state is shared across SSR requests,
 // so the server must never stamp one user's preference into it
