@@ -38,7 +38,8 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url }) => {
 				name: project.name,
 				icon: project.icon,
 				workspaceId: project.workspaceId,
-				pinned: project.pinned
+				pinned: project.pinned,
+				sidebarItems: project.sidebarItems
 			})
 			.from(project)
 			.innerJoin(workspace, eq(project.workspaceId, workspace.id))

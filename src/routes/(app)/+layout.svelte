@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { popover } from '$lib/transitions';
 	import { authClient } from '$lib/auth-client';
 	import Toaster from '$lib/components/Toaster.svelte';
@@ -8,9 +8,18 @@
 	import EntityIcon from '$lib/components/EntityIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
+	import Popover from '$lib/components/Popover.svelte';
 	import { t } from '$lib/i18n';
+	import { toast } from '$lib/toast.svelte';
 	import { tooltip } from '$lib/tooltip';
 	import { initSound, setSoundEnabled, soundOn } from '$lib/sound.svelte';
+	import {
+		PROJECT_NAV_ITEMS,
+		PROJECT_NAV_KEYS,
+		parseSidebarItems,
+		projectNavHref,
+		type ProjectNavKey
+	} from '$lib/projectNav';
 
 	let { data, children } = $props();
 	let menuOpen = $state(false);
@@ -89,25 +98,43 @@
 	}
 
 	// Per-project collapsible menu → tasks view + project-settings sections.
-	const projectNav = [
-		{ label: 'Overview', icon: 'text-box', to: (id: string) => `/projects/${id}/overview` },
-		{ label: 'Tasks', icon: 'task-list', to: (id: string) => `/projects/${id}` },
-		{
-			label: 'Milestones',
-			icon: 'triangle-flag',
-			to: (id: string) => `/projects/${id}/milestones`
-		},
-		{ label: 'Statuses', icon: 'circle', to: (id: string) => `/projects/${id}/statuses` },
-		{ label: 'Labels', icon: 'label', to: (id: string) => `/projects/${id}/labels` },
-		{
-			label: 'Custom fields',
-			icon: 'input-field',
-			to: (id: string) => `/projects/${id}/custom-fields`
-		},
-		{ label: 'Locations', icon: 'map-pin', to: (id: string) => `/projects/${id}/locations` },
-		{ label: 'Files', icon: 'multiple-pages', to: (id: string) => `/projects/${id}/files` },
-		{ label: 'Settings', icon: 'settings', to: (id: string) => `/projects/${id}/settings` }
-	];
+	// Which sub-items render is a per-project setting (project.sidebarItems,
+	// ADR-064; default Tasks + Milestones) — the trailing "…" popover toggles
+	// them via PATCH /api/projects/{id}, optimistic while the write is in flight.
+	type NavProject = { id: string; sidebarItems: string | null };
+	// $state.raw + whole-record reassignment: a deep $state proxy would wrap the
+	// stored array on read, so the `=== next` cleanup guards below could never match
+	let sidebarOverride = $state.raw<Record<string, ProjectNavKey[]>>({});
+	function shownNavKeys(p: NavProject): ProjectNavKey[] {
+		return sidebarOverride[p.id] ?? parseSidebarItems(p.sidebarItems);
+	}
+	async function toggleNavItem(p: NavProject, key: ProjectNavKey) {
+		const cur = shownNavKeys(p);
+		const next = cur.includes(key)
+			? cur.filter((k) => k !== key)
+			: PROJECT_NAV_KEYS.filter((k) => cur.includes(k) || k === key);
+		sidebarOverride = { ...sidebarOverride, [p.id]: next };
+		// drop OUR override unless a later toggle already replaced it
+		const dropMine = () => {
+			if (sidebarOverride[p.id] !== next) return;
+			const rest = { ...sidebarOverride };
+			delete rest[p.id];
+			sidebarOverride = rest;
+		};
+		const res = await fetch(`/api/projects/${p.id}`, {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ sidebarItems: next })
+		});
+		if (!res.ok) {
+			dropMine();
+			toast($t('Could not update menu items'));
+			return;
+		}
+		await invalidateAll();
+		// fresh data carries the new value — the override has served its purpose
+		dropMine();
+	}
 
 	let expanded = $state<Record<string, boolean>>({});
 	const activeProjectId = $derived(page.url.pathname.match(/^\/projects\/([^/]+)/)?.[1] ?? null);
@@ -274,19 +301,55 @@
 						</div>
 						{#if expanded[p.id]}
 							<div class="proj-sub">
-								{#each projectNav as item (item.label)}
-									{@const href = item.to(p.id)}
-									<a
-										class="proj-subitem"
-										class:active={subActive(href)}
-										{href}
-										onclick={() => (menuOpen = false)}
-									>
-										<span class="sub-ic" aria-hidden="true"
-											><Icon name={item.icon} size={13} /></span
-										>{$t(item.label)}
-									</a>
+								{#each PROJECT_NAV_ITEMS as item (item.key)}
+									{@const href = projectNavHref(p.id, item)}
+									<!-- hidden items still render while active so a deep link stays oriented -->
+									{#if shownNavKeys(p).includes(item.key) || subActive(href)}
+										<a
+											class="proj-subitem"
+											class:active={subActive(href)}
+											{href}
+											onclick={() => (menuOpen = false)}
+										>
+											<span class="sub-ic" aria-hidden="true"
+												><Icon name={item.icon} size={13} /></span
+											>{$t(item.label)}
+										</a>
+									{/if}
 								{/each}
+								<div class="sub-more">
+									<Popover ariaLabel={$t('Show / hide menu items')}>
+										{#snippet trigger()}
+											<span class="sub-more-row" use:tooltip={$t('Show / hide menu items')}>
+												<span class="sub-ic" aria-hidden="true"
+													><Icon name="more-horiz" size={13} /></span
+												>
+											</span>
+										{/snippet}
+										{#snippet panel()}
+											<div class="sub-menu-pop" role="menu">
+												{#each PROJECT_NAV_ITEMS as item (item.key)}
+													{@const on = shownNavKeys(p).includes(item.key)}
+													<button
+														class="sub-menu-opt"
+														class:on
+														role="menuitemcheckbox"
+														aria-checked={on}
+														onclick={() => toggleNavItem(p, item.key)}
+													>
+														<span class="sub-ic" aria-hidden="true"
+															><Icon name={item.icon} size={13} /></span
+														>
+														<span class="sub-menu-label">{$t(item.label)}</span>
+														{#if on}<span class="sub-menu-check" aria-hidden="true"
+																><Icon name="check" size={13} /></span
+															>{/if}
+													</button>
+												{/each}
+											</div>
+										{/snippet}
+									</Popover>
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -1037,6 +1100,84 @@
 	.proj-subitem:hover .sub-ic,
 	.proj-subitem.active .sub-ic {
 		color: inherit;
+	}
+
+	/* trailing "…" row — Popover's pill chrome flattened to match a sub-item */
+	.sub-more {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.sub-more :global(.pill) {
+		width: 100%;
+		border: none;
+		background: none;
+		border-radius: 0;
+		padding: 0;
+	}
+
+	.sub-more :global(.pill:active) {
+		transform: none;
+	}
+
+	.sub-more-row {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-1);
+		width: 100%;
+		color: var(--color-muted);
+		padding: 3px var(--sp-3) 3px calc(var(--sp-3) + 22px);
+		transition:
+			background var(--dur-fast) ease,
+			color var(--dur-fast) ease;
+	}
+
+	.sub-more-row:hover {
+		color: var(--color-fg);
+		background: var(--color-surface-muted);
+	}
+
+	.sub-more-row:hover .sub-ic {
+		color: inherit;
+	}
+
+	.sub-menu-pop {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+
+	.sub-menu-opt {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
+		width: 100%;
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		font-size: 13px;
+		text-align: left;
+		padding: 6px 8px;
+		border-radius: var(--radius-field, 0.25rem);
+		cursor: pointer;
+		transition: background var(--dur-fast) ease;
+	}
+
+	.sub-menu-opt.on {
+		color: var(--color-fg);
+	}
+
+	.sub-menu-opt:hover {
+		background: var(--color-surface-muted);
+	}
+
+	.sub-menu-label {
+		flex: 1;
+	}
+
+	.sub-menu-check {
+		display: inline-flex;
+		color: var(--color-muted);
 	}
 
 	.content {

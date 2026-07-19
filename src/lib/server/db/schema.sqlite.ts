@@ -181,6 +181,9 @@ export const project = sqliteTable('project', {
 	// ordered JSON array of project-entity custom-field ids to show as header chips;
 	// null = unset (show all project fields with a value); '[]' = show none
 	chipFields: text('chip_fields'),
+	// JSON array of sidebar sub-item keys shown for this project (ADR-064);
+	// null = default (tasks + milestones); '[]' = show none
+	sidebarItems: text('sidebar_items'),
 	pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
 	startDate: integer('start_date', { mode: 'timestamp' }),
 	dueDate: integer('due_date', { mode: 'timestamp' }),

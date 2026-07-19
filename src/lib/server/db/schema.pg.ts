@@ -174,6 +174,7 @@ export const project = pgTable('project', {
 	icon: text('icon'),
 	statusDisplay: text('status_display').notNull().default('text'),
 	chipFields: text('chip_fields'),
+	sidebarItems: text('sidebar_items'),
 	pinned: boolean('pinned').notNull().default(false),
 	startDate: timestamp('start_date', { mode: 'date' }),
 	dueDate: timestamp('due_date', { mode: 'date' }),
