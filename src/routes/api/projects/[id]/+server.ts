@@ -17,6 +17,7 @@ import { canAccessProject, canEditProject } from '$lib/server/permissions';
 import { deleteFilesForProject } from '$lib/server/uploads';
 import { listProjectStatuses, listStatuses, listWorkspaceStatuses } from '$lib/server/statuses';
 import { ICON_NAMES } from '$lib/heroiconNames';
+import { PROJECT_NAV_KEYS } from '$lib/projectNav';
 import {
 	customValuesByTask,
 	listCustomFieldOptions,
@@ -176,6 +177,22 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 			);
 			const clean = [...new Set(body.chipFields as string[])].filter((id) => projFieldIds.has(id));
 			updates.chipFields = JSON.stringify(clean);
+		}
+	}
+
+	// Sidebar sub-items shown for this project (ADR-064). null clears back to the
+	// default (Tasks + Milestones); unknown keys are dropped, canonical order kept.
+	if (body.sidebarItems !== undefined) {
+		if (body.sidebarItems === null) {
+			updates.sidebarItems = null;
+		} else if (
+			!Array.isArray(body.sidebarItems) ||
+			body.sidebarItems.some((x) => typeof x !== 'string')
+		) {
+			return apiError(400, 'sidebarItems must be an array of item keys or null');
+		} else {
+			const shown = new Set(body.sidebarItems as string[]);
+			updates.sidebarItems = JSON.stringify(PROJECT_NAV_KEYS.filter((k) => shown.has(k)));
 		}
 	}
 
